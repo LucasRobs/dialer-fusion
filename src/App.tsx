@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // Pages
 import Index from "./pages/Index";
@@ -21,6 +21,17 @@ import NotFound from "./pages/NotFound";
 const App = () => {
   // Create a client instance that persists across renders
   const [queryClient] = useState(() => new QueryClient());
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // This helps ensure that the app is fully loaded before rendering
+    // which can help prevent some mobile-specific timing issues
+    setIsReady(true);
+  }, []);
+
+  if (!isReady) {
+    return null;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
