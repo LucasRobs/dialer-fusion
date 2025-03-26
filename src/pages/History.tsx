@@ -1,17 +1,17 @@
 
 import React from 'react';
 import Navbar from '@/components/Navbar';
-import Hero from '@/components/Hero';
+import ContactHistory from '@/components/ContactHistory';
 
-const Index = () => {
+const HistoryPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-20">
-        <Hero />
+      <div className="pt-28 pb-16">
+        <ContactHistory />
       </div>
     </div>
   );
 };
 
-export default Index;
+export default HistoryPage;

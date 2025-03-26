@@ -1,17 +1,17 @@
 
 import React from 'react';
 import Navbar from '@/components/Navbar';
-import Hero from '@/components/Hero';
+import Analytics from '@/components/Analytics';
 
-const Index = () => {
+const AnalyticsPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-20">
-        <Hero />
+      <div className="pt-28 pb-16">
+        <Analytics />
       </div>
     </div>
   );
 };
 
-export default Index;
+export default AnalyticsPage;
