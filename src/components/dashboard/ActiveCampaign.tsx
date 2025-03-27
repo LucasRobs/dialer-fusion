@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { webhookService } from '@/services/webhookService';
 
 interface CampaignStatus {
   id: number;
@@ -32,6 +33,17 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
 
     try {
+      // Enviar dados para webhook
+      await webhookService.triggerCallWebhook({
+        action: 'stop_campaign',
+        campaign_id: campaign.id,
+        additional_data: {
+          campaign_name: campaign.name,
+          progress: campaign.progress,
+          completed_calls: campaign.callsMade
+        }
+      });
+      
       if (onCampaignStopped) {
         onCampaignStopped();
       }

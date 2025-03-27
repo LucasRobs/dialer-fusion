@@ -1,375 +1,429 @@
-
-import React, { useState } from 'react';
-import { 
-  Pencil, 
-  Trash2, 
-  Download, 
-  Upload, 
-  Search, 
-  Plus,
-  Phone,
-  Loader2
-} from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect } from 'react';
 import { 
   Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
   TableHeader, 
-  TableRow 
+  TableRow, 
+  TableHead, 
+  TableBody, 
+  TableCell 
 } from '@/components/ui/table';
 import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
-import { Client, clientService } from '@/services/clientService';
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { 
+  MoreHorizontal, 
+  Search, 
+  Plus, 
+  Pencil, 
+  Trash2, 
+  Phone,
+  Check, 
+  X 
+} from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { clientService } from '@/services/clientService';
+import { webhookService } from '@/services/webhookService';
+import { supabase } from '@/lib/supabase';
 
-const ClientList = () => {
+export default function ClientList() {
+  const [showNewClientDialog, setShowNewClientDialog] = useState(false);
+  const [showEditClientDialog, setShowEditClientDialog] = useState(false);
+  const [showDeleteClientDialog, setShowDeleteClientDialog] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [newClient, setNewClient] = useState<Partial<Client>>({ name: '', phone: '', email: '', status: 'Active' });
-  const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState('Active');
   
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Buscar clientes
-  const { data: clients = [], isLoading, error } = useQuery({
+  const { 
+    data: clients, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useQuery({
     queryKey: ['clients'],
-    queryFn: clientService.getClients
+    queryFn: () => clientService.getClients(),
   });
   
-  // Mutação para adicionar cliente
-  const addClientMutation = useMutation({
-    mutationFn: clientService.addClient,
+  const addClientMutation = useMutation(clientService.addClient, {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
-      queryClient.invalidateQueries({ queryKey: ['clientStats'] });
-      toast.success('Cliente adicionado com sucesso');
-      resetForm();
-      setDialogOpen(false);
-    },
-    onError: (error: any) => {
-      console.error('Erro ao adicionar cliente:', error);
-      toast.error(`Erro ao adicionar cliente: ${error.message}`);
-    }
-  });
-  
-  // Mutação para atualizar cliente
-  const updateClientMutation = useMutation({
-    mutationFn: ({ id, client }: { id: number, client: Partial<Client> }) => 
-      clientService.updateClient(id, client),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      queryClient.invalidateQueries({ queryKey: ['clientStats'] });
-      toast.success('Cliente atualizado com sucesso');
-      resetForm();
-      setDialogOpen(false);
-    },
-    onError: (error: any) => {
-      console.error('Erro ao atualizar cliente:', error);
-      toast.error(`Erro ao atualizar cliente: ${error.message}`);
-    }
-  });
-  
-  // Mutação para excluir cliente
-  const deleteClientMutation = useMutation({
-    mutationFn: clientService.deleteClient,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      queryClient.invalidateQueries({ queryKey: ['clientStats'] });
-      toast.success('Cliente removido com sucesso');
-    },
-    onError: (error: any) => {
-      console.error('Erro ao excluir cliente:', error);
-      toast.error(`Erro ao excluir cliente: ${error.message}`);
-    }
-  });
-
-  const filteredClients = clients.filter(client => 
-    client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.phone?.includes(searchTerm) ||
-    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleEdit = (client: Client) => {
-    setEditingClient(client);
-    setIsEditing(true);
-    setDialogOpen(true);
-  };
-
-  const handleDelete = (id: number) => {
-    if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
-      deleteClientMutation.mutate(id);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (isEditing && editingClient) {
-      // Remover campos que não devem ser alterados
-      const { id, name, phone, email, status } = editingClient;
-      updateClientMutation.mutate({ 
-        id, 
-        client: { name, phone, email, status } 
+      toast({
+        title: "Cliente adicionado",
+        description: "Cliente adicionado com sucesso.",
       });
-    } else {
-      // Validação básica
-      if (!newClient.name || !newClient.phone) {
-        toast.error('Nome e telefone são obrigatórios');
-        return;
-      }
+      setShowNewClientDialog(false);
+      clearForm();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao adicionar cliente",
+        description: error.message || "Ocorreu um erro ao adicionar o cliente.",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const updateClientMutation = useMutation(clientService.updateClient, {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      toast({
+        title: "Cliente atualizado",
+        description: "Cliente atualizado com sucesso.",
+      });
+      setShowEditClientDialog(false);
+      clearForm();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao atualizar cliente",
+        description: error.message || "Ocorreu um erro ao atualizar o cliente.",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const deleteClientMutation = useMutation(clientService.deleteClient, {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      toast({
+        title: "Cliente excluído",
+        description: "Cliente excluído com sucesso.",
+      });
+      setShowDeleteClientDialog(false);
+      clearForm();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao excluir cliente",
+        description: error.message || "Ocorreu um erro ao excluir o cliente.",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const filteredClients = clients?.filter(client =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.phone.includes(searchTerm) ||
+    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
+  
+  const handleNew = () => {
+    setShowNewClientDialog(true);
+  };
+  
+  const handleEdit = (client: any) => {
+    setSelectedClient(client);
+    setName(client.name);
+    setPhone(client.phone);
+    setEmail(client.email);
+    setStatus(client.status);
+    setShowEditClientDialog(true);
+  };
+  
+  const handleDelete = (client: any) => {
+    setSelectedClient(client);
+    setShowDeleteClientDialog(true);
+  };
+  
+  const handleSubmitNew = async (e: React.FormEvent) => {
+    e.preventDefault();
+    addClientMutation.mutate({ name, phone, email, status });
+  };
+  
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedClient) {
+      updateClientMutation.mutate({ id: selectedClient.id, name, phone, email, status });
+    }
+  };
+  
+  const confirmDelete = async () => {
+    if (selectedClient) {
+      deleteClientMutation.mutate(selectedClient.id);
+    }
+  };
+  
+  const clearForm = () => {
+    setName('');
+    setPhone('');
+    setEmail('');
+    setStatus('Active');
+    setSelectedClient(null);
+  };
+
+  // Adicionar função para iniciar chamada para um cliente
+  const handleCall = async (client: any) => {
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
       
-      addClientMutation.mutate(newClient as Omit<Client, 'id' | 'created_at' | 'updated_at'>);
+      const result = await webhookService.triggerCallWebhook({
+        action: 'start_call',
+        client_id: client.id,
+        client_name: client.name,
+        client_phone: client.phone,
+        user_id: userId,
+        additional_data: {
+          source: 'client_list',
+          client_email: client.email,
+          client_status: client.status,
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
+        }
+      });
+      
+      if (result.success) {
+        toast({
+          title: "Ligação iniciada",
+          description: `Iniciando ligação para ${client.name} (${client.phone})`,
+        });
+      } else {
+        toast({
+          title: "Erro ao iniciar ligação", 
+          description: "Não foi possível iniciar a ligação. Tente novamente.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar ligação:', error);
+      toast({
+        title: "Erro", 
+        description: "Ocorreu um erro ao tentar iniciar a ligação.",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleExport = () => {
-    toast.info('Exportação em desenvolvimento');
-  };
-
-  const handleImport = () => {
-    toast.info('Importação em desenvolvimento');
-  };
-
-  const resetForm = () => {
-    setNewClient({ name: '', phone: '', email: '', status: 'Active' });
-    setEditingClient(null);
-    setIsEditing(false);
-  };
-
-  const openAddDialog = () => {
-    resetForm();
-    setIsEditing(false);
-    setDialogOpen(true);
-  };
-
-  if (error) {
-    console.error("Erro ao carregar clientes:", error);
-    return (
-      <div className="container mx-auto p-4 max-w-7xl">
-        <div className="flex justify-center items-center h-40">
-          <div className="text-center">
-            <p className="text-red-500 mb-2">Erro ao carregar clientes</p>
-            <Button 
-              onClick={() => queryClient.invalidateQueries({ queryKey: ['clients'] })}
-              variant="outline"
-            >
-              Tentar novamente
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // Modificar a renderização da tabela para incluir botão de ligação
   return (
-    <div className="container mx-auto p-4 max-w-7xl">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-3xl font-bold mb-4 md:mb-0">Base de Clientes</h1>
-        
-        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar clientes..."
-              className="pl-8 w-full"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} className="whitespace-nowrap">
-              <Download className="mr-2 h-4 w-4" />
-              Exportar
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleImport} className="whitespace-nowrap">
-              <Upload className="mr-2 h-4 w-4" />
-              Importar
-            </Button>
-            <Button size="sm" onClick={openAddDialog} className="whitespace-nowrap">
-              <Plus className="mr-2 h-4 w-4" />
-              Adicionar Cliente
-            </Button>
-          </div>
-        </div>
+    <div className="container mx-auto p-4 max-w-6xl">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Clientes</h1>
+        <Button onClick={() => setShowNewClientDialog(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar Cliente
+        </Button>
       </div>
       
-      <div className="border rounded-lg overflow-hidden glass">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]">#</TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead className="hidden md:table-cell">Email</TableHead>
-              <TableHead className="hidden md:table-cell">Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+        <Input 
+          placeholder="Buscar clientes..." 
+          className="pl-10" 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+      
+      {isLoading ? (
+        <div className="flex justify-center p-8">
+          <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div>
+        </div>
+      ) : error ? (
+        <div className="p-8 text-center">
+          <p className="text-red-500">Erro ao carregar clientes: {error instanceof Error ? error.message : 'Erro desconhecido'}</p>
+          <Button onClick={() => refetch()} variant="outline" className="mt-4">
+            Tentar novamente
+          </Button>
+        </div>
+      ) : clients.length === 0 ? (
+        <div className="text-center p-8 border rounded-lg">
+          <p className="text-lg text-muted-foreground mb-4">Nenhum cliente encontrado</p>
+          <Button onClick={() => setShowNewClientDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar seu primeiro cliente
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-md border overflow-hidden">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  <div className="flex justify-center items-center">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
-                    <span>Carregando clientes...</span>
-                  </div>
-                </TableCell>
+                <TableHead>Nome</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
-            ) : filteredClients.length > 0 ? (
-              filteredClients.map((client) => (
+            </TableHeader>
+            <TableBody>
+              {filteredClients.map((client) => (
                 <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.id}</TableCell>
-                  <TableCell>{client.name}</TableCell>
+                  <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>{client.phone}</TableCell>
-                  <TableCell className="hidden md:table-cell">{client.email}</TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      client.status === 'Active' 
-                        ? 'bg-secondary/20 text-secondary' 
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
+                  <TableCell>{client.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={client.status === 'Active' ? 'default' : 'secondary'}>
                       {client.status}
-                    </span>
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(client)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
                       <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleDelete(client.id)}
-                        disabled={deleteClientMutation.isPending}
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleCall(client)}
+                        title="Ligar para cliente"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon">
                         <Phone className="h-4 w-4" />
                       </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEdit(client)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDelete(client)}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Nenhum cliente encontrado. Ajuste sua busca ou adicione novos clientes.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       
-      {/* Add/Edit Client Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={showNewClientDialog} onOpenChange={setShowNewClientDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
+            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
           </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo</Label>
-                <Input
-                  id="name"
-                  placeholder="João Silva"
-                  value={isEditing ? editingClient?.name || '' : newClient.name}
-                  onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient!, name: e.target.value})
-                    : setNewClient({...newClient, name: e.target.value})
-                  }
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="phone">Número de Telefone</Label>
-                <Input
-                  id="phone"
-                  placeholder="(11) 99999-9999"
-                  value={isEditing ? editingClient?.phone || '' : newClient.phone}
-                  onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient!, phone: e.target.value})
-                    : setNewClient({...newClient, phone: e.target.value})
-                  }
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="email">Endereço de E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="joao.silva@exemplo.com"
-                  value={isEditing ? editingClient?.email || '' : newClient.email}
-                  onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient!, email: e.target.value})
-                    : setNewClient({...newClient, email: e.target.value})
-                  }
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <select
-                  id="status"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={isEditing ? editingClient?.status || 'Active' : newClient.status}
-                  onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient!, status: e.target.value})
-                    : setNewClient({...newClient, status: e.target.value})
-                  }
-                >
-                  <option value="Active">Ativo</option>
-                  <option value="Inactive">Inativo</option>
-                </select>
-              </div>
+          <form onSubmit={handleSubmitNew} className="space-y-4">
+            <div>
+              <Input 
+                placeholder="Nome" 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                required 
+              />
             </div>
-            
-            <DialogFooter className="pt-4">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => {
-                  resetForm();
-                  setDialogOpen(false);
-                }}
-                disabled={addClientMutation.isPending || updateClientMutation.isPending}
+            <div>
+              <Input 
+                placeholder="Telefone" 
+                value={phone} 
+                onChange={(e) => setPhone(e.target.value)} 
+                required 
+              />
+            </div>
+            <div>
+              <Input 
+                placeholder="Email" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+              />
+            </div>
+            <div>
+              <select 
+                className="w-full border rounded-md py-2 px-3"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
               >
-                Cancelar
-              </Button>
-              <Button 
-                type="submit"
-                disabled={addClientMutation.isPending || updateClientMutation.isPending}
-              >
-                {(addClientMutation.isPending || updateClientMutation.isPending) && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {isEditing ? 'Salvar Alterações' : 'Adicionar Cliente'}
+                <option value="Active">Ativo</option>
+                <option value="Inactive">Inativo</option>
+              </select>
+            </div>
+            <DialogFooter>
+              <Button type="submit">
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+      
+      <Dialog open={showEditClientDialog} onOpenChange={setShowEditClientDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Cliente</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitEdit} className="space-y-4">
+            <div>
+              <Input 
+                placeholder="Nome" 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                required 
+              />
+            </div>
+            <div>
+              <Input 
+                placeholder="Telefone" 
+                value={phone} 
+                onChange={(e) => setPhone(e.target.value)} 
+                required 
+              />
+            </div>
+            <div>
+              <Input 
+                placeholder="Email" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+              />
+            </div>
+            <div>
+              <select 
+                className="w-full border rounded-md py-2 px-3"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="Active">Ativo</option>
+                <option value="Inactive">Inativo</option>
+              </select>
+            </div>
+            <DialogFooter>
+              <Button type="submit">
+                <Pencil className="h-4 w-4 mr-2" />
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={showDeleteClientDialog} onOpenChange={setShowDeleteClientDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir Cliente</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p>Tem certeza de que deseja excluir este cliente?</p>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setShowDeleteClientDialog(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-};
-
-export default ClientList;
+}
