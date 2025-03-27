@@ -3,9 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 // URL do webhook para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook-test/collowop';
 
-// Configure here your Vapi API credentials
-const VAPI_API_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Vapi caller ID
-const VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Vapi Assistant ID
+// Fixed Vapi API credentials - cannot be modified by users
+const VAPI_API_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Fixed Vapi caller ID
+const VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Fixed Vapi Assistant ID
 
 // Interface para os dados do webhook
 export interface WebhookData {
@@ -46,7 +46,8 @@ export const webhookService = {
       webhookData.additional_data = {};
     }
     
-    // Certifica que o assistant ID está configurado
+    // Always ensure fixed IDs are used, regardless of what was passed
+    webhookData.additional_data.vapi_caller_id = VAPI_API_CALLER_ID;
     webhookData.additional_data.vapi_assistant_id = VAPI_ASSISTANT_ID;
     
     try {
@@ -177,6 +178,7 @@ export const webhookService = {
         client_name: client.clients?.name,
         client_phone: client.clients?.phone,
         additional_data: {
+          // Always use fixed IDs
           vapi_caller_id: VAPI_API_CALLER_ID,
           vapi_assistant_id: VAPI_ASSISTANT_ID,
           call_type: 'bulk_campaign'

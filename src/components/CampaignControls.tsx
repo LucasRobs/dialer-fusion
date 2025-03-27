@@ -10,6 +10,7 @@ import {
   Calendar,
   ArrowRight,
   Phone as PhoneIcon,
+  Trash,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -31,14 +32,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
 import { useQuery } from '@tanstack/react-query';
 
+const FIXED_VAPI_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a";
+const FIXED_VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c";
+
 const CampaignControls = () => {
   const [campaigns, setCampaigns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [campaignToDelete, setCampaignToDelete] = useState(null);
   
   const [newCampaign, setNewCampaign] = useState({
     name: '',
@@ -133,7 +149,7 @@ const CampaignControls = () => {
             campaign_name: campaign.name,
             client_count: campaign.clientCount,
             ai_profile: campaign.aiProfile,
-            vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
+            vapi_caller_id: FIXED_VAPI_CALLER_ID
           }
         });
         
@@ -226,6 +242,32 @@ const CampaignControls = () => {
     }
   };
   
+  const handleDeleteCampaign = async (id: number) => {
+    try {
+      const campaign = campaigns.find(c => c.id === id);
+      if (campaign && campaign.status === 'active') {
+        await handleStopCampaign(id);
+      }
+      
+      await campaignService.deleteCampaign(id);
+      
+      toast({
+        title: "Campanha Excluída",
+        description: "A campanha foi excluída com sucesso.",
+      });
+      
+      refetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao excluir campanha:', error);
+      
+      toast({
+        title: "Erro ao Excluir Campanha",
+        description: "Houve um problema ao excluir a campanha. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+    }
+  };
+  
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -262,7 +304,7 @@ const CampaignControls = () => {
           client_count: clientCount,
           ai_profile: aiProfileName,
           client_group: selectedGroup?.name,
-          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
+          vapi_caller_id: FIXED_VAPI_CALLER_ID
         }
       });
       
@@ -402,6 +444,31 @@ const CampaignControls = () => {
                         <BarChart3 className="h-4 w-4 mr-2" />
                         Details
                       </Button>
+                      
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="flex-1">
+                            <Trash className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this campaign? This action cannot be undone.
+                              {campaign.status === 'active' && 
+                                " This campaign is currently active and will be stopped before deletion."}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteCampaign(campaign.id)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </CardFooter>
                 </Card>
@@ -463,25 +530,15 @@ const CampaignControls = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="aiProfile">Select AI Profile</Label>
-                  <Select
-                    value={newCampaign.aiProfile}
-                    onValueChange={(value) => setNewCampaign({...newCampaign, aiProfile: value})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an AI profile" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {aiProfiles.map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id.toString()}>
-                          {profile.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="aiProfile">AI Profile (Read Only)</Label>
+                  <Input
+                    id="aiProfile"
+                    value="Default Assistant (97141b30-c5bc-4234-babb-d38b79452e2a)"
+                    readOnly
+                    className="bg-muted cursor-not-allowed"
+                  />
                   <p className="text-xs text-muted-foreground mt-1">
-                    {newCampaign.aiProfile && 
-                      aiProfiles.find(p => p.id.toString() === newCampaign.aiProfile)?.description}
+                    This profile is configured by the administrator and cannot be changed.
                   </p>
                 </div>
                 
