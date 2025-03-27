@@ -10,6 +10,7 @@ import {
   Calendar,
   ArrowRight,
   Phone as PhoneIcon,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -154,6 +155,31 @@ const CampaignControls = () => {
           variant: "destructive"
         });
       }
+    }
+  };
+  
+  const handleDeleteCampaign = async (id: number) => {
+    try {
+      setCampaigns(campaigns.filter(campaign => campaign.id !== id));
+      
+      await campaignService.deleteCampaign(id);
+      
+      toast({
+        title: "Campanha Excluída",
+        description: "A campanha foi excluída com sucesso.",
+      });
+      
+      refetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao excluir campanha:', error);
+      
+      toast({
+        title: "Erro ao Excluir",
+        description: "Houve um problema ao excluir a campanha. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+      
+      refetchCampaigns();
     }
   };
   
@@ -391,17 +417,18 @@ const CampaignControls = () => {
                             Stop
                           </Button>
                         </>
-                      ) : campaign.status === 'ready' ? (
-                        <Button className="flex-1" onClick={() => handleStartCampaign(campaign.id)}>
-                          <Play className="h-4 w-4 mr-2" />
-                          Start Campaign
-                        </Button>
-                      ) : null}
-                      
-                      <Button variant="outline" size="sm" className="flex-1">
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Details
-                      </Button>
+                      ) : (
+                        <>
+                          <Button className="flex-1" variant="outline" size="sm" onClick={() => handleStartCampaign(campaign.id)}>
+                            <Play className="h-4 w-4 mr-2" />
+                            Start Campaign
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDeleteCampaign(campaign.id)}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </CardFooter>
                 </Card>

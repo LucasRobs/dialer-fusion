@@ -84,6 +84,26 @@ export const campaignService = {
     return data[0] as Campaign;
   },
 
+  // Delete a campaign
+  async deleteCampaign(id: number) {
+    // First delete all associated campaign_clients records
+    const { error: clientsError } = await supabase
+      .from('campaign_clients')
+      .delete()
+      .eq('campaign_id', id);
+    
+    if (clientsError) throw clientsError;
+    
+    // Then delete the campaign itself
+    const { error } = await supabase
+      .from('campaigns')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    return true;
+  },
+
   // Adicionar clientes a uma campanha
   async addClientsToCampaign(campaignId: number, clientIds: number[]) {
     const campaignClients = clientIds.map(clientId => ({
