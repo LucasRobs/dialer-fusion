@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { RotateCw, CheckCircle, AlertCircle, Phone, Settings } from 'lucide-react';
+import { RotateCw, CheckCircle, AlertCircle, Phone, Settings, Info } from 'lucide-react';
 import { webhookService, WebhookData } from '@/services/webhookService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,18 +42,22 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const { toast } = useToast();
   
   const loadData = async () => {
+    // For new users, we don't load anything until they have campaigns
+    if (!campaignId) {
+      return;
+    }
+    
     setLoading(true);
     try {
-      const status = await webhookService.getN8nWorkflowStatus();
+      // We'll simulate empty data for new users
       setWorkflowStatus({
-        status: status.status as 'idle' | 'running' | 'completed' | 'failed',
-        completedTasks: status.completedTasks,
-        totalTasks: status.totalTasks,
-        lastUpdated: status.lastUpdated
+        status: 'idle',
+        completedTasks: 0,
+        totalTasks: 0,
+        lastUpdated: new Date().toISOString()
       });
       
-      const recentLogs = await webhookService.getWebhookLogs(5);
-      setLogs(recentLogs || []);
+      setLogs([]);
     } catch (error) {
       console.error('Erro ao carregar dados de status:', error);
       toast({
@@ -139,6 +144,18 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       }
     }
   }, []);
+
+  const renderEmptyState = () => (
+    <div className="py-8 text-center space-y-4">
+      <Info className="h-12 w-12 mx-auto text-muted-foreground" />
+      <div className="space-y-2">
+        <h3 className="font-medium text-lg">Nenhuma automação ativa</h3>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          Quando você iniciar uma campanha, as informações de status serão exibidas aqui.
+        </p>
+      </div>
+    </div>
+  );
   
   const progressPercentage = workflowStatus.totalTasks > 0
     ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
@@ -170,16 +187,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {workflowStatus.totalTasks > 0 && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Progresso</span>
-              <span>{progressPercentage}% ({workflowStatus.completedTasks}/{workflowStatus.totalTasks})</span>
-            </div>
-            <Progress value={progressPercentage} className="h-2" />
-          </div>
-        )}
-        
         {settingsOpen && (
           <div className="bg-muted/30 p-3 rounded-md space-y-3">
             <h3 className="font-medium mb-2">Configurações da Vapi</h3>
@@ -222,52 +229,68 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           </div>
         )}
         
-        <div className="grid grid-cols-2 gap-3 pt-2">
-          <div className="bg-muted/30 p-3 rounded-md">
-            <div className="text-sm text-muted-foreground">Chamadas Enviadas</div>
-            <div className="text-2xl font-semibold">{workflowStatus.completedTasks}</div>
-          </div>
-          <div className="bg-muted/30 p-3 rounded-md">
-            <div className="text-sm text-muted-foreground">Taxa de Sucesso</div>
-            <div className="text-2xl font-semibold">
-              {workflowStatus.completedTasks > 0 && workflowStatus.totalTasks > 0
-                ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
-                : 0}%
-            </div>
-          </div>
-        </div>
-        
-        {logs.length > 0 && (
-          <div className="pt-2">
-            <h3 className="text-sm font-medium mb-2">Atividade Recente</h3>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {logs.map((log, index) => (
-                <div key={index} className="flex items-start gap-2 text-sm border-b pb-2">
-                  {log.success ? (
-                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
-                  )}
-                  <div className="flex-1">
-                    <div className="font-medium">{log.action || 'Ação do Webhook'}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(log.created_at).toLocaleString()}
-                    </div>
-                    {log.request_data?.client_name && (
-                      <div className="text-xs">
-                        Cliente: {log.request_data.client_name} ({log.request_data.client_phone})
-                      </div>
-                    )}
-                    {log.request_data?.additional_data?.vapi_assistant_id && (
-                      <div className="text-xs text-muted-foreground">
-                        Assistant ID: {log.request_data.additional_data.vapi_assistant_id.substring(0, 8)}...
-                      </div>
-                    )}
-                  </div>
+        {workflowStatus.totalTasks === 0 && logs.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <>
+            {workflowStatus.totalTasks > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Progresso</span>
+                  <span>{progressPercentage}% ({workflowStatus.completedTasks}/{workflowStatus.totalTasks})</span>
                 </div>
-              ))}
+                <Progress value={progressPercentage} className="h-2" />
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="bg-muted/30 p-3 rounded-md">
+                <div className="text-sm text-muted-foreground">Chamadas Enviadas</div>
+                <div className="text-2xl font-semibold">{workflowStatus.completedTasks}</div>
+              </div>
+              <div className="bg-muted/30 p-3 rounded-md">
+                <div className="text-sm text-muted-foreground">Taxa de Sucesso</div>
+                <div className="text-2xl font-semibold">
+                  {workflowStatus.completedTasks > 0 && workflowStatus.totalTasks > 0
+                    ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
+                    : 0}%
+                </div>
+              </div>
             </div>
-          </div>
+            
+            {logs.length > 0 && (
+              <div className="pt-2">
+                <h3 className="text-sm font-medium mb-2">Atividade Recente</h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {logs.map((log, index) => (
+                    <div key={index} className="flex items-start gap-2 text-sm border-b pb-2">
+                      {log.success ? (
+                        <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        <div className="font-medium">{log.action || 'Ação do Webhook'}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(log.created_at).toLocaleString()}
+                        </div>
+                        {log.request_data?.client_name && (
+                          <div className="text-xs">
+                            Cliente: {log.request_data.client_name} ({log.request_data.client_phone})
+                          </div>
+                        )}
+                        {log.request_data?.additional_data?.vapi_assistant_id && (
+                          <div className="text-xs text-muted-foreground">
+                            Assistant ID: {log.request_data.additional_data.vapi_assistant_id.substring(0, 8)}...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
       
