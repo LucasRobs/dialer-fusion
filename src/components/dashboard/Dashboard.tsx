@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Phone, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,13 +19,21 @@ const Dashboard = () => {
     completionRate: '87%',
   };
 
-  const campaignStatus = {
+  const [campaignStatus, setCampaignStatus] = useState({
     active: true,
     name: "Summer Promotion 2023",
     progress: 60,
     startTime: "09:30 AM",
     callsMade: 342,
     callsRemaining: 228,
+    id: 1 // Added ID field for campaign identification
+  });
+
+  const handleCampaignStopped = () => {
+    setCampaignStatus(prev => ({
+      ...prev,
+      active: false
+    }));
   };
 
   return (
@@ -34,7 +42,10 @@ const Dashboard = () => {
       
       {/* Active Campaign Section */}
       {campaignStatus.active && (
-        <ActiveCampaign campaign={campaignStatus} />
+        <ActiveCampaign 
+          campaign={campaignStatus} 
+          onCampaignStopped={handleCampaignStopped}
+        />
       )}
 
       {/* Stats Grid */}

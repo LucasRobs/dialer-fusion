@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { PhoneOff, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
+import { webhookService } from '@/services/webhookService';
 
 interface CampaignStatus {
   name: string;
@@ -11,13 +13,56 @@ interface CampaignStatus {
   startTime: string;
   callsMade: number;
   callsRemaining: number;
+  id?: number;
 }
 
 interface ActiveCampaignProps {
   campaign: CampaignStatus;
+  onCampaignStopped?: () => void;
 }
 
-const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign }) => {
+const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignStopped }) => {
+  const { toast } = useToast();
+
+  const handleStopCampaign = async () => {
+    if (!campaign.id) {
+      toast({
+        title: "Error",
+        description: "Campaign ID is missing. Cannot stop campaign.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await webhookService.triggerCallWebhook({
+        action: 'stop_campaign',
+        campaign_id: campaign.id,
+        additional_data: {
+          campaign_name: campaign.name,
+          progress: campaign.progress,
+          completed_calls: campaign.callsMade
+        }
+      });
+      
+      toast({
+        title: "Campaign Stopped",
+        description: "Your campaign has been successfully stopped.",
+      });
+      
+      if (onCampaignStopped) {
+        onCampaignStopped();
+      }
+    } catch (error) {
+      console.error('Error stopping campaign:', error);
+      toast({
+        title: "Error",
+        description: "Failed to stop the campaign. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Card className="mb-8 border-l-4 border-l-secondary">
       <CardHeader className="pb-2">
@@ -30,7 +75,12 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign }) => {
             <p className="text-sm text-foreground/70">Started at {campaign.startTime}</p>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex items-center gap-1">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="flex items-center gap-1"
+              onClick={handleStopCampaign}
+            >
               <PhoneOff size={16} />
               <span>Stop Campaign</span>
             </Button>
