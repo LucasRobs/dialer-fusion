@@ -21,6 +21,16 @@ interface StatsGridProps {
 }
 
 const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
+  // Use safe values in case stats are undefined or contain null/undefined values
+  const safeStats = {
+    totalClients: stats?.totalClients || 0,
+    activeClients: stats?.activeClients || 0,
+    recentCalls: stats?.recentCalls || 0,
+    avgCallDuration: stats?.avgCallDuration || '0:00',
+    callsToday: stats?.callsToday || 0,
+    completionRate: stats?.completionRate || '0%',
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <Card className="card-hover">
@@ -44,11 +54,11 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
             <>
               <div className="flex justify-between items-end">
                 <div>
-                  <div className="text-3xl font-bold">{stats.totalClients}</div>
+                  <div className="text-3xl font-bold">{safeStats.totalClients}</div>
                   <p className="text-sm text-foreground/70">Total de Clientes</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-semibold text-secondary">{stats.activeClients}</div>
+                  <div className="text-xl font-semibold text-secondary">{safeStats.activeClients}</div>
                   <p className="text-sm text-foreground/70">Ativos</p>
                 </div>
               </div>
@@ -84,11 +94,11 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
             <>
               <div className="flex justify-between items-end">
                 <div>
-                  <div className="text-3xl font-bold">{stats.recentCalls}</div>
+                  <div className="text-3xl font-bold">{safeStats.recentCalls}</div>
                   <p className="text-sm text-foreground/70">Ligações Realizadas</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-semibold">{stats.avgCallDuration}</div>
+                  <div className="text-xl font-semibold">{safeStats.avgCallDuration}</div>
                   <p className="text-sm text-foreground/70">Duração Média</p>
                 </div>
               </div>
@@ -124,11 +134,11 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
             <>
               <div className="flex justify-between items-end">
                 <div>
-                  <div className="text-3xl font-bold">{stats.callsToday}</div>
+                  <div className="text-3xl font-bold">{safeStats.callsToday}</div>
                   <p className="text-sm text-foreground/70">Ligações Hoje</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-semibold text-secondary">{stats.completionRate}</div>
+                  <div className="text-xl font-semibold text-secondary">{safeStats.completionRate}</div>
                   <p className="text-sm text-foreground/70">Taxa de Conclusão</p>
                 </div>
               </div>
