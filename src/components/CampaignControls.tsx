@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Play,
@@ -9,7 +8,8 @@ import {
   Save,
   BarChart3,
   Calendar,
-  ArrowRight
+  ArrowRight,
+  Phone as PhoneIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -31,6 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import WorkflowStatus from '@/components/WorkflowStatus';
+import { webhookService } from '@/services/webhookService';
 
 // Dummy client groups
 const clientGroups = [
@@ -93,40 +95,120 @@ const CampaignControls = () => {
   
   const { toast } = useToast();
   
-  const handleStartCampaign = (id: number) => {
+  const handleStartCampaign = async (id: number) => {
+    // Atualiza o estado
     setCampaigns(campaigns.map(campaign => 
       campaign.id === id ? { ...campaign, status: 'active' } : campaign
     ));
     
-    toast({
-      title: "Campaign Started",
-      description: "Your call campaign is now active and running.",
-    });
+    // Encontra a campanha atual
+    const campaign = campaigns.find(c => c.id === id);
+    
+    // Dispara o webhook para iniciar as ligações
+    if (campaign) {
+      try {
+        await webhookService.triggerCallWebhook({
+          action: 'start_campaign',
+          campaign_id: campaign.id,
+          additional_data: {
+            campaign_name: campaign.name,
+            client_count: campaign.clientCount,
+            ai_profile: campaign.aiProfile
+          }
+        });
+        
+        toast({
+          title: "Campanha Iniciada",
+          description: "Sua campanha de ligações está ativa e em execução.",
+        });
+      } catch (error) {
+        console.error('Erro ao notificar sistema de ligações:', error);
+        
+        toast({
+          title: "Campanha Iniciada",
+          description: "Campanha iniciada, mas houve um erro ao notificar o sistema de ligações.",
+          variant: "destructive"
+        });
+      }
+    }
   };
   
-  const handlePauseCampaign = (id: number) => {
+  const handlePauseCampaign = async (id: number) => {
+    // Atualiza o estado
     setCampaigns(campaigns.map(campaign => 
       campaign.id === id ? { ...campaign, status: 'paused' } : campaign
     ));
     
-    toast({
-      title: "Campaign Paused",
-      description: "Your call campaign has been paused. You can resume it anytime.",
-    });
+    // Encontra a campanha atual
+    const campaign = campaigns.find(c => c.id === id);
+    
+    // Dispara o webhook para pausar as ligações
+    if (campaign) {
+      try {
+        await webhookService.triggerCallWebhook({
+          action: 'pause_campaign',
+          campaign_id: campaign.id,
+          additional_data: {
+            campaign_name: campaign.name,
+            progress: campaign.progress
+          }
+        });
+        
+        toast({
+          title: "Campanha Pausada",
+          description: "Sua campanha de ligações foi pausada. Você pode retomá-la a qualquer momento.",
+        });
+      } catch (error) {
+        console.error('Erro ao notificar sistema de ligações:', error);
+        
+        toast({
+          title: "Campanha Pausada",
+          description: "Campanha pausada, mas houve um erro ao notificar o sistema de ligações.",
+          variant: "destructive"
+        });
+      }
+    }
   };
   
-  const handleStopCampaign = (id: number) => {
+  const handleStopCampaign = async (id: number) => {
+    // Atualiza o estado
     setCampaigns(campaigns.map(campaign => 
       campaign.id === id ? { ...campaign, status: 'stopped' } : campaign
     ));
     
-    toast({
-      title: "Campaign Stopped",
-      description: "Your call campaign has been stopped.",
-    });
+    // Encontra a campanha atual
+    const campaign = campaigns.find(c => c.id === id);
+    
+    // Dispara o webhook para parar as ligações
+    if (campaign) {
+      try {
+        await webhookService.triggerCallWebhook({
+          action: 'stop_campaign',
+          campaign_id: campaign.id,
+          additional_data: {
+            campaign_name: campaign.name,
+            progress: campaign.progress,
+            completed_calls: campaign.completedCalls
+          }
+        });
+        
+        toast({
+          title: "Campanha Interrompida",
+          description: "Sua campanha de ligações foi interrompida.",
+        });
+      } catch (error) {
+        console.error('Erro ao notificar sistema de ligações:', error);
+        
+        toast({
+          title: "Campanha Interrompida",
+          description: "Campanha interrompida, mas houve um erro ao notificar o sistema de ligações.",
+          variant: "destructive"
+        });
+      }
+    }
   };
   
-  const handleCreateCampaign = (e: React.FormEvent) => {
+  const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validation
@@ -161,12 +243,35 @@ const CampaignControls = () => {
       startDate: new Date().toLocaleDateString(),
     };
     
+    // Adiciona a nova campanha ao estado
     setCampaigns([...campaigns, createdCampaign]);
     
-    toast({
-      title: "Campaign Created",
-      description: "Your new campaign is ready to start.",
-    });
+    // Notifica o sistema de ligações sobre a nova campanha
+    try {
+      await webhookService.triggerCallWebhook({
+        action: 'create_campaign',
+        campaign_id: newId,
+        additional_data: {
+          campaign_name: createdCampaign.name,
+          client_count: clientCount,
+          ai_profile: aiProfileName,
+          client_group: selectedGroup?.name
+        }
+      });
+      
+      toast({
+        title: "Campanha Criada",
+        description: "Sua nova campanha está pronta para iniciar.",
+      });
+    } catch (error) {
+      console.error('Erro ao notificar sistema de ligações:', error);
+      
+      toast({
+        title: "Campanha Criada",
+        description: "Campanha criada, mas houve um erro ao notificar o sistema de ligações.",
+        variant: "destructive"
+      });
+    }
     
     // Reset form
     setNewCampaign({
@@ -197,12 +302,15 @@ const CampaignControls = () => {
         {/* Campaign List */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Your Campaigns</h2>
+            <h2 className="text-2xl font-bold">Suas Campanhas</h2>
             <Button size="sm">
               <BarChart3 className="h-4 w-4 mr-2" />
-              View Reports
+              Ver Relatórios
             </Button>
           </div>
+          
+          {/* Status do Workflow - adicionado aqui */}
+          <WorkflowStatus />
           
           {campaigns.length > 0 ? (
             <div className="space-y-4">
@@ -303,9 +411,9 @@ const CampaignControls = () => {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle>Create New Campaign</CardTitle>
+              <CardTitle>Criar Nova Campanha</CardTitle>
               <CardDescription>
-                Set up a new calling campaign using your AI assistant
+                Configure uma nova campanha de chamadas usando seu assistente de IA
               </CardDescription>
             </CardHeader>
             <CardContent>
