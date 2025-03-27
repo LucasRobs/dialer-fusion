@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
 // URL do webhook corrigida para o serviço de ligações
-const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
+const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook-test/collowop';
 const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook-test/createassistant';
 
 // Configure here your Vapi API credentials
