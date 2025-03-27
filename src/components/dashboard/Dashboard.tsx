@@ -56,69 +56,71 @@ const Dashboard = () => {
         if (profileError) throw profileError;
         setUserProfile(profileData);
         
-        // Fetch active campaign if exists
-        const { data: campaignData, error: campaignError } = await supabase
-          .from('campaigns')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-          
-        if (!campaignError && campaignData) {
-          // Calculate progress
-          const totalCalls = campaignData.total_calls || 0;
-          const answeredCalls = campaignData.answered_calls || 0;
-          const progress = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
-          const remaining = totalCalls - answeredCalls;
-          
-          setCampaignStatus({
-            active: true,
-            name: campaignData.name || "Unnamed Campaign",
-            progress: progress,
-            startTime: campaignData.start_date 
-              ? new Date(campaignData.start_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-              : "N/A",
-            callsMade: answeredCalls,
-            callsRemaining: remaining,
-            id: campaignData.id
-          });
-          
-          // Calculate the progress percentage
-          const progressPercent = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
-          
-          // Actual stats based on user's data
-          setStats({
-            totalClients: campaignData.total_calls || 0,
-            activeClients: Math.round((campaignData.total_calls || 0) * 0.7), // Example calculation
-            recentCalls: campaignData.answered_calls || 0,
-            avgCallDuration: campaignData.average_duration 
-              ? `${Math.floor(campaignData.average_duration / 60)}:${(campaignData.average_duration % 60).toString().padStart(2, '0')}`
-              : '0:00',
-            callsToday: Math.min(campaignData.answered_calls || 0, 100), // Example calculation
-            completionRate: `${progressPercent}%`,
-          });
-        } else {
-          // For new users, we'll set everything to zero - no sample data
-          setCampaignStatus({
-            active: false,
-            name: "",
-            progress: 0,
-            startTime: "",
-            callsMade: 0,
-            callsRemaining: 0,
-            id: null
-          });
-          
-          setStats({
-            totalClients: 0,
-            activeClients: 0,
-            recentCalls: 0,
-            avgCallDuration: '0:00',
-            callsToday: 0,
-            completionRate: '0%',
-          });
+        // For new users, set everything to zero - no sample data
+        setCampaignStatus({
+          active: false,
+          name: "",
+          progress: 0,
+          startTime: "",
+          callsMade: 0,
+          callsRemaining: 0,
+          id: null
+        });
+        
+        setStats({
+          totalClients: 0,
+          activeClients: 0,
+          recentCalls: 0,
+          avgCallDuration: '0:00',
+          callsToday: 0,
+          completionRate: '0%',
+        });
+        
+        // For existing users, try to fetch their active campaign if any
+        if (profileData) {
+          const { data: campaignData, error: campaignError } = await supabase
+            .from('campaigns')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+            
+          if (!campaignError && campaignData) {
+            // Calculate progress
+            const totalCalls = campaignData.total_calls || 0;
+            const answeredCalls = campaignData.answered_calls || 0;
+            const progress = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+            const remaining = totalCalls - answeredCalls;
+            
+            setCampaignStatus({
+              active: true,
+              name: campaignData.name || "Unnamed Campaign",
+              progress: progress,
+              startTime: campaignData.start_date 
+                ? new Date(campaignData.start_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                : "N/A",
+              callsMade: answeredCalls,
+              callsRemaining: remaining,
+              id: campaignData.id
+            });
+            
+            // Calculate the progress percentage
+            const progressPercent = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+            
+            // Actual stats based on user's data
+            setStats({
+              totalClients: campaignData.total_calls || 0,
+              activeClients: Math.round((campaignData.total_calls || 0) * 0.7), // Example calculation
+              recentCalls: campaignData.answered_calls || 0,
+              avgCallDuration: campaignData.average_duration 
+                ? `${Math.floor(campaignData.average_duration / 60)}:${(campaignData.average_duration % 60).toString().padStart(2, '0')}`
+                : '0:00',
+              callsToday: Math.min(campaignData.answered_calls || 0, 100), // Example calculation
+              completionRate: `${progressPercent}%`,
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
