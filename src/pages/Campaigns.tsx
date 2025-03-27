@@ -1,7 +1,7 @@
 
 import React from 'react';
 import Navbar from '@/components/Navbar';
-import CampaignControls from '@/components/CampaignControls';
+import CampaignControls from '@/components/campaigns/CampaignControls';
 
 const CampaignsPage = () => {
   return (

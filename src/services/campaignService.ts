@@ -1,15 +1,19 @@
+
 import { supabase } from '@/lib/supabase';
 
 export type Campaign = {
   id: number;
   name: string;
-  status: 'draft' | 'active' | 'paused' | 'completed';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'stopped';
   start_date?: string;
   end_date?: string;
   created_at?: string;
   total_calls: number;
   answered_calls: number;
   average_duration?: number;
+  progress?: number;
+  clientGroup?: string;
+  aiProfile?: string;
 };
 
 export type CampaignClient = {
