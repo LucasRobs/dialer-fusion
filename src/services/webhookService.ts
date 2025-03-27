@@ -16,6 +16,16 @@ export interface WebhookData {
   additional_data?: Record<string, any>;
 }
 
+// Interface para o log do webhook
+interface WebhookLog {
+  webhook_url: string;
+  request_data: WebhookData;
+  success: boolean;
+  error_message: string | null;
+  action: string;
+  response_data?: any;
+}
+
 // Serviço para gerenciar webhooks
 export const webhookService = {
   // Função para disparar o webhook
@@ -52,18 +62,28 @@ export const webhookService = {
   // Função para registrar a chamada do webhook no histórico
   async logWebhookCall(data: WebhookData, success: boolean, error?: any) {
     try {
-      const { data: logData, error: logError } = await supabase
-        .from('webhook_logs')
-        .insert([{
-          webhook_url: WEBHOOK_URL,
-          request_data: data,
-          success,
-          error_message: error ? String(error) : null,
-          action: data.action
-        }]);
-        
-      if (logError) {
-        console.error('Erro ao registrar log do webhook:', logError);
+      const logData: WebhookLog = {
+        webhook_url: WEBHOOK_URL,
+        request_data: data,
+        success,
+        error_message: error ? String(error) : null,
+        action: data.action
+      };
+      
+      // Uso direto de fetch para contornar problemas de tipagem com o cliente Supabase
+      const response = await fetch(`${supabase.supabaseUrl}/rest/v1/webhook_logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabase.supabaseKey,
+          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(logData)
+      });
+      
+      if (!response.ok) {
+        console.error('Erro ao registrar log do webhook via REST:', await response.text());
       }
     } catch (err) {
       console.error('Erro ao registrar log do webhook:', err);
@@ -72,14 +92,27 @@ export const webhookService = {
   
   // Função para buscar o histórico de chamadas webhook
   async getWebhookLogs(limit = 20) {
-    const { data, error } = await supabase
-      .from('webhook_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    try {
+      // Uso direto de fetch para contornar problemas de tipagem com o cliente Supabase
+      const response = await fetch(
+        `${supabase.supabaseUrl}/rest/v1/webhook_logs?select=*&order=created_at.desc&limit=${limit}`, 
+        {
+          headers: {
+            'apikey': supabase.supabaseKey,
+            'Authorization': `Bearer ${supabase.supabaseKey}`
+          }
+        }
+      );
       
-    if (error) throw error;
-    return data;
+      if (!response.ok) {
+        throw new Error(`Error fetching webhook logs: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao buscar logs do webhook:', error);
+      throw error;
+    }
   },
   
   // Função para verificar o status das automações do n8n
