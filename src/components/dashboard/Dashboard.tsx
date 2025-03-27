@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Phone, BarChart3 } from 'lucide-react';
@@ -88,6 +89,11 @@ const Dashboard = () => {
         // Fetch dashboard stats
         // For now, we'll set some initial values based on campaign data
         if (campaignData) {
+          // Calculate the progress percentage
+          const totalCalls = campaignData.total_calls || 0;
+          const answeredCalls = campaignData.answered_calls || 0;
+          const progressPercent = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
+          
           // Actual stats based on user's data
           setStats({
             totalClients: campaignData.total_calls || 0,
@@ -97,7 +103,7 @@ const Dashboard = () => {
               ? `${Math.floor(campaignData.average_duration / 60)}:${(campaignData.average_duration % 60).toString().padStart(2, '0')}`
               : '0:00',
             callsToday: Math.min(campaignData.answered_calls || 0, 100), // Example calculation
-            completionRate: `${campaignData.progress || 0}%`,
+            completionRate: `${progressPercent}%`,
           });
         } else {
           // Default stats for new users
