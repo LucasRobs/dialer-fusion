@@ -47,8 +47,24 @@ export const webhookService = {
       webhookData.additional_data = {};
     }
     
+    // Check if we have a custom assistant ID in localStorage
+    const storedAssistant = localStorage.getItem('vapi_assistant');
+    let assistantId = VAPI_ASSISTANT_ID;
+    
+    if (storedAssistant) {
+      try {
+        const assistantData = JSON.parse(storedAssistant);
+        if (assistantData && assistantData.id) {
+          assistantId = assistantData.id;
+          console.log('Using custom Vapi assistant ID:', assistantId);
+        }
+      } catch (e) {
+        console.error('Error parsing stored assistant data:', e);
+      }
+    }
+    
     // Certifica que o assistant ID está configurado
-    webhookData.additional_data.vapi_assistant_id = VAPI_ASSISTANT_ID;
+    webhookData.additional_data.vapi_assistant_id = assistantId;
     
     try {
       // Envia requisição para o webhook
@@ -170,6 +186,22 @@ export const webhookService = {
       
       const campaignClients = await response.json();
       
+      // Check if we have a custom assistant ID in localStorage
+      const storedAssistant = localStorage.getItem('vapi_assistant');
+      let assistantId = VAPI_ASSISTANT_ID;
+      
+      if (storedAssistant) {
+        try {
+          const assistantData = JSON.parse(storedAssistant);
+          if (assistantData && assistantData.id) {
+            assistantId = assistantData.id;
+            console.log('Using custom Vapi assistant ID for bulk calls:', assistantId);
+          }
+        } catch (e) {
+          console.error('Error parsing stored assistant data:', e);
+        }
+      }
+      
       // Prepara os dados para o webhook
       const bulkCallData: Omit<WebhookData, 'timestamp'>[] = campaignClients.map((client: any) => ({
         action: 'start_call',
@@ -179,7 +211,7 @@ export const webhookService = {
         client_phone: client.clients?.phone,
         additional_data: {
           vapi_caller_id: VAPI_API_CALLER_ID,
-          vapi_assistant_id: VAPI_ASSISTANT_ID,
+          vapi_assistant_id: assistantId,
           call_type: 'bulk_campaign'
         }
       }));

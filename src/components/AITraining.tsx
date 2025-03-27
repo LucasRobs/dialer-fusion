@@ -26,6 +26,15 @@ import {
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { webhookService } from '@/services/webhookService';
+
+// Interface for the Vapi assistant
+interface VapiAssistant {
+  id: string;
+  name: string;
+  description: string;
+  voice: string;
+}
 
 const AITraining = () => {
   const [trainingName, setTrainingName] = useState('');
@@ -41,11 +50,12 @@ const AITraining = () => {
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [activeTab, setActiveTab] = useState('basic');
+  const [selectedVoice, setSelectedVoice] = useState('Female 1');
+  const [createdAssistant, setCreatedAssistant] = useState<VapiAssistant | null>(null);
   
   const { toast } = useToast();
   
   const handleSaveProfile = () => {
-    // In a real app, this would save the profile to a database
     if (!trainingName || !trainingDescription) {
       toast({
         title: "Missing information",
@@ -87,7 +97,7 @@ const AITraining = () => {
     setResponses(newResponses);
   };
   
-  const handleStartTraining = () => {
+  const handleStartTraining = async () => {
     // In a real app, this would start an actual training process
     setIsTraining(true);
     setTrainingProgress(0);
@@ -97,6 +107,10 @@ const AITraining = () => {
       description: "Your AI assistant is now being trained with your data."
     });
     
+    // Simulate Vapi assistant creation process
+    // In a real implementation, this would make API calls to Vapi
+    const assistantId = await simulateVapiAssistantCreation();
+    
     // Simulate training progress
     const interval = setInterval(() => {
       setTrainingProgress(prev => {
@@ -104,9 +118,20 @@ const AITraining = () => {
           clearInterval(interval);
           setIsTraining(false);
           
+          // Save the created assistant to localStorage for use in call webhooks
+          const assistantData: VapiAssistant = {
+            id: assistantId,
+            name: trainingName,
+            description: trainingDescription,
+            voice: selectedVoice
+          };
+          
+          localStorage.setItem('vapi_assistant', JSON.stringify(assistantData));
+          setCreatedAssistant(assistantData);
+          
           toast({
             title: "Training complete",
-            description: "Your AI assistant has been successfully trained and is ready to use."
+            description: "Your AI assistant has been successfully trained and is ready to use in calls."
           });
           
           return 100;
@@ -116,12 +141,73 @@ const AITraining = () => {
     }, 300);
   };
   
+  // Simulates creating a Vapi assistant
+  // In a real implementation, this would call the Vapi API
+  const simulateVapiAssistantCreation = async (): Promise<string> => {
+    // For this simulation, we'll just return a random ID that looks like a UUID
+    // In a real implementation, this would be the ID returned by Vapi API
+    
+    // Simulate an API call delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // In a real app, this would be the ID returned from the Vapi API
+    // For now, we'll return the default ID used in webhookService or a new one
+    return trainingName ? `assistant_${Date.now()}` : "01646bac-c486-455b-bbc4-a2bc5a1da47c";
+  };
+  
   const handleTestVoice = () => {
-    // In a real app, this would play a sample of the AI voice
     toast({
       title: "Voice test",
       description: "This would play a sample of your AI assistant's voice in a real application."
     });
+  };
+  
+  const handleTestCall = async () => {
+    if (!createdAssistant) {
+      toast({
+        title: "No assistant created",
+        description: "You need to create and train an assistant first before testing a call.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      // Use the webhookService to trigger a test call with the created assistant ID
+      const testData = {
+        action: 'test_call',
+        client_name: "Cliente Teste",
+        client_phone: "+5511999999999",
+        additional_data: {
+          source: 'manual_test',
+          user_interface: 'AITraining',
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a", // Default caller ID
+          vapi_assistant_id: createdAssistant.id // Use the created assistant ID
+        }
+      };
+      
+      const result = await webhookService.triggerCallWebhook(testData);
+      
+      if (result.success) {
+        toast({
+          title: "Test call initiated",
+          description: `A test call is being made using your "${createdAssistant.name}" assistant.`,
+        });
+      } else {
+        toast({
+          title: "Call test failed",
+          description: "There was an error initiating the test call.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error testing call:', error);
+      toast({
+        title: "Call test error",
+        description: "An unexpected error occurred while trying to make a test call.",
+        variant: "destructive"
+      });
+    }
   };
   
   return (
@@ -187,7 +273,11 @@ const AITraining = () => {
                 <Label htmlFor="voice">Voice Selection</Label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {['Female 1', 'Female 2', 'Male 1', 'Male 2'].map((voice) => (
-                    <div key={voice} className="border rounded-lg p-3 text-center hover:border-secondary/50 cursor-pointer transition-colors">
+                    <div 
+                      key={voice} 
+                      className={`border rounded-lg p-3 text-center hover:border-secondary/50 cursor-pointer transition-colors ${selectedVoice === voice ? 'border-secondary bg-secondary/5' : ''}`}
+                      onClick={() => setSelectedVoice(voice)}
+                    >
                       <div className="flex justify-center mb-2">
                         <Mic className="h-6 w-6 text-muted-foreground" />
                       </div>
@@ -321,7 +411,7 @@ const AITraining = () => {
                     </div>
                     <div className="flex justify-between items-center text-sm border-b pb-2">
                       <span className="text-muted-foreground">Voice Profile</span>
-                      <span className="font-medium">Female 1</span>
+                      <span className="font-medium">{selectedVoice}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm border-b pb-2">
                       <span className="text-muted-foreground">Response Pairs</span>
@@ -375,9 +465,20 @@ const AITraining = () => {
                       <span>Training in progress... This may take a few minutes</span>
                     </div>
                   ) : trainingProgress === 100 ? (
-                    <div className="flex items-center justify-center gap-2 text-sm text-secondary">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>Training complete! Your AI assistant is ready to use.</span>
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="flex items-center justify-center gap-2 text-sm text-secondary">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Training complete! Your AI assistant is ready to use.</span>
+                      </div>
+                      
+                      <Button 
+                        onClick={handleTestCall}
+                        variant="outline"
+                        className="mt-2"
+                      >
+                        <Phone className="h-4 w-4 mr-2" />
+                        Test a Call with this Assistant
+                      </Button>
                     </div>
                   ) : (
                     <Button 
@@ -391,6 +492,27 @@ const AITraining = () => {
                   )}
                 </div>
               </div>
+              
+              {createdAssistant && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-center gap-2 text-green-700 font-medium">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span>Assistant Created Successfully</span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Assistant ID:</span>
+                      <code className="bg-white px-2 py-1 rounded border text-xs overflow-hidden text-ellipsis">{createdAssistant.id}</code>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Name:</span> {createdAssistant.name}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This assistant has been saved and will be used for your outbound calls.
+                  </p>
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex justify-between">
               <Button variant="outline" onClick={() => setActiveTab('responses')}>Back</Button>

@@ -35,7 +35,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const [vapiSettings, setVapiSettings] = useState({
     callerId: "97141b30-c5bc-4234-babb-d38b79452e2a", // Default Vapi caller ID
     apiKey: "",
-    assistantId: "01646bac-c486-455b-bbc4-a2bc5a1da47c" // Default assistant ID
+    assistantId: "" // Will be populated from localStorage if available
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { toast } = useToast();
@@ -62,7 +62,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     } catch (error) {
       console.error('Erro ao carregar dados de status:', error);
       toast({
-        title: "Erro ao carregar status",
         description: "Não foi possível obter as informações mais recentes do workflow.",
         variant: "destructive"
       });
@@ -81,6 +80,24 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   
   const testWebhook = async () => {
     try {
+      // Get assistant ID from localStorage or use default
+      const storedAssistant = localStorage.getItem('vapi_assistant');
+      let assistantId = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Default Vapi Assistant ID
+      let assistantName = "Default Assistant";
+      
+      if (storedAssistant) {
+        try {
+          const assistantData = JSON.parse(storedAssistant);
+          if (assistantData && assistantData.id) {
+            assistantId = assistantData.id;
+            assistantName = assistantData.name || "Custom Assistant";
+            console.log('Using custom Vapi assistant for test call:', assistantData);
+          }
+        } catch (e) {
+          console.error('Error parsing stored assistant data:', e);
+        }
+      }
+      
       const testData: Omit<WebhookData, 'timestamp'> = {
         action: 'test_call',
         campaign_id: campaignId,
@@ -90,7 +107,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
           vapi_caller_id: vapiSettings.callerId,
-          vapi_assistant_id: vapiSettings.assistantId
+          vapi_assistant_id: assistantId
         }
       };
       
@@ -98,13 +115,11 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       
       if (result.success) {
         toast({
-          title: "Webhook disparado com sucesso",
-          description: "O teste de integração foi enviado com sucesso.",
+          description: `O teste de ligação foi enviado com sucesso usando o assistente "${assistantName}".`,
           variant: "default"
         });
       } else {
         toast({
-          title: "Erro no teste de webhook",
           description: "Não foi possível completar o teste. Verifique os logs.",
           variant: "destructive"
         });
@@ -114,8 +129,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     } catch (error) {
       console.error('Erro ao testar webhook:', error);
       toast({
-        title: "Erro no teste",
-        description: "Ocorreu um erro ao tentar testar o webhook.",
+        description: "Ocorreu um erro ao tentar testar a ligação.",
         variant: "destructive"
       });
     }
@@ -124,7 +138,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const saveVapiSettings = () => {
     localStorage.setItem('vapi_settings', JSON.stringify(vapiSettings));
     toast({
-      title: "Configurações Salvas",
       description: "As configurações da Vapi foram salvas com sucesso.",
     });
     setSettingsOpen(false);
@@ -137,11 +150,26 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         const parsed = JSON.parse(savedSettings);
         setVapiSettings(prev => ({
           ...parsed,
-          callerId: parsed.callerId || prev.callerId,
-          assistantId: parsed.assistantId || prev.assistantId
+          callerId: parsed.callerId || prev.callerId
         }));
       } catch (e) {
         console.error("Erro ao carregar configurações Vapi:", e);
+      }
+    }
+    
+    // Check for the assistant ID from localStorage
+    const storedAssistant = localStorage.getItem('vapi_assistant');
+    if (storedAssistant) {
+      try {
+        const assistantData = JSON.parse(storedAssistant);
+        if (assistantData && assistantData.id) {
+          setVapiSettings(prev => ({
+            ...prev,
+            assistantId: assistantData.id
+          }));
+        }
+      } catch (e) {
+        console.error("Erro ao carregar dados do assistente:", e);
       }
     }
   }, []);
@@ -219,11 +247,15 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
               <Label htmlFor="assistantId">ID do Assistente Vapi</Label>
               <Input
                 id="assistantId"
-                value={vapiSettings.assistantId}
+                value={vapiSettings.assistantId || "Assistente personalizado será usado. Crie um na aba de AI Training"}
                 onChange={(e) => setVapiSettings({...vapiSettings, assistantId: e.target.value})}
                 readOnly
               />
-              <p className="text-xs text-muted-foreground">ID do assistente configurado: 01646bac-c486-455b-bbc4-a2bc5a1da47c</p>
+              {vapiSettings.assistantId ? (
+                <p className="text-xs text-secondary">Você está usando um assistente personalizado.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Crie um assistente personalizado na aba AI Training.</p>
+              )}
             </div>
             
             <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>

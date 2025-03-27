@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 export type Campaign = {
@@ -353,6 +352,93 @@ export const campaignService = {
       callsData: getMonthData(),
       campaignData
     };
+  },
+
+  async getClientsByIdsForCampaign(clientIds: number[]) {
+    try {
+      // If there are no client IDs, return an empty array
+      if (!clientIds || clientIds.length === 0) {
+        return [];
+      }
+      
+      const clientIdsParam = clientIds.join(',');
+      const response = await fetch(
+        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/clients?id=in.(${clientIdsParam})&select=id,name,phone,email`,
+        {
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8`
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching clients: ${response.statusText}`);
+      }
+      
+      const clients = await response.json();
+      return clients;
+    } catch (error) {
+      console.error('Error fetching clients for campaign:', error);
+      throw error;
+    }
+  },
+  
+  async exportCampaignClientsToCsv(campaignId: number) {
+    try {
+      // Get campaign details
+      const campaign = await this.getCampaignById(campaignId);
+      
+      // Get the campaign clients with their details
+      const response = await fetch(
+        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/campaign_clients?select=client_id,status,clients(name,phone,email)&campaign_id=eq.${campaignId}`,
+        {
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8`
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching campaign clients: ${response.statusText}`);
+      }
+      
+      const campaignClients = await response.json();
+      
+      // Transform the data for CSV
+      const csvData = campaignClients.map((client: any) => ({
+        name: client.clients?.name || '',
+        phone: client.clients?.phone || '',
+        email: client.clients?.email || '',
+        status: client.status || 'pending'
+      }));
+      
+      // Generate CSV content
+      let csvContent = 'Name,Phone,Email,Status\n';
+      
+      csvData.forEach((row: any) => {
+        const formattedRow = `"${row.name}","${row.phone}","${row.email}","${row.status}"`;
+        csvContent += formattedRow + '\n';
+      });
+      
+      // Create a Blob with the CSV content
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      // Trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `campaign_${campaignId}_${campaign?.name || 'export'}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      return true;
+    } catch (error) {
+      console.error('Error exporting campaign clients to CSV:', error);
+      throw error;
+    }
   }
 };
 
