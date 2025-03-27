@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Phone, BarChart3 } from 'lucide-react';
@@ -98,7 +97,7 @@ const Dashboard = () => {
               ? `${Math.floor(campaignData.average_duration / 60)}:${(campaignData.average_duration % 60).toString().padStart(2, '0')}`
               : '0:00',
             callsToday: Math.min(campaignData.answered_calls || 0, 100), // Example calculation
-            completionRate: `${progress}%`,
+            completionRate: `${campaignData.progress || 0}%`,
           });
         } else {
           // Default stats for new users
