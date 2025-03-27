@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -76,10 +75,7 @@ const ContactHistory = () => {
       return;
     }
     
-    toast({
-      title: "Exportação iniciada",
-      description: "Seu histórico de contatos está sendo exportado."
-    });
+    toast("Exportação iniciada. Seu histórico de contatos está sendo exportado.");
   };
 
   const viewContactDetails = (contact) => {
