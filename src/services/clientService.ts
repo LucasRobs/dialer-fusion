@@ -8,6 +8,7 @@ export type Client = {
   email: string;
   status: string;
   created_at?: string;
+  updated_at?: string;
 };
 
 export const clientService = {
@@ -35,10 +36,10 @@ export const clientService = {
   },
 
   // Adicionar um novo cliente
-  async addClient(client: Omit<Client, 'id' | 'created_at'>) {
+  async addClient(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) {
     const { data, error } = await supabase
       .from('clients')
-      .insert([client])
+      .insert([{ ...client, user_id: (await supabase.auth.getUser()).data.user?.id }])
       .select();
     
     if (error) throw error;
@@ -66,5 +67,22 @@ export const clientService = {
     
     if (error) throw error;
     return true;
+  },
+  
+  // Obter estatísticas dos clientes
+  async getClientStats() {
+    const { data: allClients, error: clientsError } = await supabase
+      .from('clients')
+      .select('id, status');
+    
+    if (clientsError) throw clientsError;
+    
+    const totalClients = allClients?.length || 0;
+    const activeClients = allClients?.filter(client => client.status === 'Active')?.length || 0;
+    
+    return {
+      totalClients,
+      activeClients
+    };
   }
 };

@@ -18,6 +18,7 @@ export type Database = {
           created_at: string
           id: number
           status: string | null
+          updated_at: string | null
         }
         Insert: {
           call_duration?: number | null
@@ -27,6 +28,7 @@ export type Database = {
           created_at?: string
           id?: number
           status?: string | null
+          updated_at?: string | null
         }
         Update: {
           call_duration?: number | null
@@ -36,6 +38,7 @@ export type Database = {
           created_at?: string
           id?: number
           status?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -50,6 +53,8 @@ export type Database = {
           start_date: string | null
           status: string | null
           total_calls: number | null
+          updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           answered_calls?: number | null
@@ -61,6 +66,8 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           total_calls?: number | null
+          updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           answered_calls?: number | null
@@ -72,21 +79,65 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           total_calls?: number | null
+          updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
       clients: {
         Row: {
           created_at: string
+          email: string | null
           id: number
+          name: string | null
+          phone: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
+          email?: string | null
           id?: number
+          name?: string | null
+          phone?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
+          email?: string | null
           id?: number
+          name?: string | null
+          phone?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
         }
         Relationships: []
       }

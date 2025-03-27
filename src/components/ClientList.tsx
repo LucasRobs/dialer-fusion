@@ -7,7 +7,8 @@ import {
   Upload, 
   Search, 
   Plus,
-  Phone
+  Phone,
+  Loader2
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,92 +29,117 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-
-// Dummy client data
-const dummyClients = [
-  { id: 1, name: 'John Smith', phone: '(555) 123-4567', email: 'john.smith@example.com', status: 'Active' },
-  { id: 2, name: 'Sarah Johnson', phone: '(555) 234-5678', email: 'sarah.j@example.com', status: 'Active' },
-  { id: 3, name: 'Michael Brown', phone: '(555) 345-6789', email: 'michael.b@example.com', status: 'Inactive' },
-  { id: 4, name: 'Emily Davis', phone: '(555) 456-7890', email: 'emily.d@example.com', status: 'Active' },
-  { id: 5, name: 'Robert Wilson', phone: '(555) 567-8901', email: 'robert.w@example.com', status: 'Active' },
-  { id: 6, name: 'Jennifer Taylor', phone: '(555) 678-9012', email: 'jennifer.t@example.com', status: 'Inactive' },
-  { id: 7, name: 'David Martinez', phone: '(555) 789-0123', email: 'david.m@example.com', status: 'Active' },
-  { id: 8, name: 'Amanda Anderson', phone: '(555) 890-1234', email: 'amanda.a@example.com', status: 'Active' },
-];
+import { toast } from 'sonner';
+import { Client, clientService } from '@/services/clientService';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const ClientList = () => {
-  const [clients, setClients] = useState(dummyClients);
   const [searchTerm, setSearchTerm] = useState('');
-  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '', status: 'Active' });
-  const [editingClient, setEditingClient] = useState<any | null>(null);
+  const [newClient, setNewClient] = useState<Partial<Client>>({ name: '', phone: '', email: '', status: 'Active' });
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
-  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Buscar clientes
+  const { data: clients = [], isLoading, error } = useQuery({
+    queryKey: ['clients'],
+    queryFn: clientService.getClients
+  });
+  
+  // Mutação para adicionar cliente
+  const addClientMutation = useMutation({
+    mutationFn: clientService.addClient,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clientStats'] });
+      toast.success('Cliente adicionado com sucesso');
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: (error: any) => {
+      console.error('Erro ao adicionar cliente:', error);
+      toast.error(`Erro ao adicionar cliente: ${error.message}`);
+    }
+  });
+  
+  // Mutação para atualizar cliente
+  const updateClientMutation = useMutation({
+    mutationFn: ({ id, client }: { id: number, client: Partial<Client> }) => 
+      clientService.updateClient(id, client),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clientStats'] });
+      toast.success('Cliente atualizado com sucesso');
+      resetForm();
+      setDialogOpen(false);
+    },
+    onError: (error: any) => {
+      console.error('Erro ao atualizar cliente:', error);
+      toast.error(`Erro ao atualizar cliente: ${error.message}`);
+    }
+  });
+  
+  // Mutação para excluir cliente
+  const deleteClientMutation = useMutation({
+    mutationFn: clientService.deleteClient,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clientStats'] });
+      toast.success('Cliente removido com sucesso');
+    },
+    onError: (error: any) => {
+      console.error('Erro ao excluir cliente:', error);
+      toast.error(`Erro ao excluir cliente: ${error.message}`);
+    }
+  });
 
   const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.phone.includes(searchTerm) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+    client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.phone?.includes(searchTerm) ||
+    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleEdit = (client: any) => {
+  const handleEdit = (client: Client) => {
     setEditingClient(client);
     setIsEditing(true);
     setDialogOpen(true);
   };
 
   const handleDelete = (id: number) => {
-    setClients(clients.filter(client => client.id !== id));
-    toast({
-      title: "Client deleted",
-      description: "The client has been removed from your database."
-    });
+    if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+      deleteClientMutation.mutate(id);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (isEditing && editingClient) {
-      // Update existing client
-      setClients(clients.map(client => 
-        client.id === editingClient.id ? { ...editingClient } : client
-      ));
-      toast({
-        title: "Client updated",
-        description: "The client information has been updated successfully."
+      // Remover campos que não devem ser alterados
+      const { id, name, phone, email, status } = editingClient;
+      updateClientMutation.mutate({ 
+        id, 
+        client: { name, phone, email, status } 
       });
     } else {
-      // Add new client
-      const id = Math.max(0, ...clients.map(c => c.id)) + 1;
-      setClients([...clients, { ...newClient, id }]);
-      toast({
-        title: "Client added",
-        description: "New client has been added to your database."
-      });
+      // Validação básica
+      if (!newClient.name || !newClient.phone) {
+        toast.error('Nome e telefone são obrigatórios');
+        return;
+      }
+      
+      addClientMutation.mutate(newClient as Omit<Client, 'id' | 'created_at' | 'updated_at'>);
     }
-    
-    setDialogOpen(false);
-    setNewClient({ name: '', phone: '', email: '', status: 'Active' });
-    setEditingClient(null);
-    setIsEditing(false);
   };
 
   const handleExport = () => {
-    // In a real app, this would generate and download a CSV/Excel file
-    toast({
-      title: "Export started",
-      description: "Your client list is being exported."
-    });
+    toast.info('Exportação em desenvolvimento');
   };
 
   const handleImport = () => {
-    // In a real app, this would open a file selector and process the file
-    toast({
-      title: "Import feature",
-      description: "Import functionality would be implemented here."
-    });
+    toast.info('Importação em desenvolvimento');
   };
 
   const resetForm = () => {
@@ -128,16 +154,35 @@ const ClientList = () => {
     setDialogOpen(true);
   };
 
+  if (error) {
+    console.error("Erro ao carregar clientes:", error);
+    return (
+      <div className="container mx-auto p-4 max-w-7xl">
+        <div className="flex justify-center items-center h-40">
+          <div className="text-center">
+            <p className="text-red-500 mb-2">Erro ao carregar clientes</p>
+            <Button 
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['clients'] })}
+              variant="outline"
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-3xl font-bold mb-4 md:mb-0">Client Database</h1>
+        <h1 className="text-3xl font-bold mb-4 md:mb-0">Base de Clientes</h1>
         
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search clients..."
+              placeholder="Buscar clientes..."
               className="pl-8 w-full"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -147,15 +192,15 @@ const ClientList = () => {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleExport} className="whitespace-nowrap">
               <Download className="mr-2 h-4 w-4" />
-              Export
+              Exportar
             </Button>
             <Button variant="outline" size="sm" onClick={handleImport} className="whitespace-nowrap">
               <Upload className="mr-2 h-4 w-4" />
-              Import
+              Importar
             </Button>
             <Button size="sm" onClick={openAddDialog} className="whitespace-nowrap">
               <Plus className="mr-2 h-4 w-4" />
-              Add Client
+              Adicionar Cliente
             </Button>
           </div>
         </div>
@@ -166,15 +211,24 @@ const ClientList = () => {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[50px]">#</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
+              <TableHead>Nome</TableHead>
+              <TableHead>Telefone</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
               <TableHead className="hidden md:table-cell">Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredClients.length > 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <div className="flex justify-center items-center">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
+                    <span>Carregando clientes...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredClients.length > 0 ? (
               filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium">{client.id}</TableCell>
@@ -195,7 +249,12 @@ const ClientList = () => {
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(client)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleDelete(client.id)}
+                        disabled={deleteClientMutation.isPending}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon">
@@ -208,7 +267,7 @@ const ClientList = () => {
             ) : (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No clients found. Try adjusting your search or add new clients.
+                  Nenhum cliente encontrado. Ajuste sua busca ou adicione novos clientes.
                 </TableCell>
               </TableRow>
             )}
@@ -220,19 +279,19 @@ const ClientList = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+            <DialogTitle>{isEditing ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</DialogTitle>
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Nome Completo</Label>
                 <Input
                   id="name"
-                  placeholder="John Smith"
-                  value={isEditing ? editingClient?.name : newClient.name}
+                  placeholder="João Silva"
+                  value={isEditing ? editingClient?.name || '' : newClient.name}
                   onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient, name: e.target.value})
+                    ? setEditingClient({...editingClient!, name: e.target.value})
                     : setNewClient({...newClient, name: e.target.value})
                   }
                   required
@@ -240,13 +299,13 @@ const ClientList = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label htmlFor="phone">Número de Telefone</Label>
                 <Input
                   id="phone"
-                  placeholder="(555) 123-4567"
-                  value={isEditing ? editingClient?.phone : newClient.phone}
+                  placeholder="(11) 99999-9999"
+                  value={isEditing ? editingClient?.phone || '' : newClient.phone}
                   onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient, phone: e.target.value})
+                    ? setEditingClient({...editingClient!, phone: e.target.value})
                     : setNewClient({...newClient, phone: e.target.value})
                   }
                   required
@@ -254,17 +313,16 @@ const ClientList = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">Endereço de E-mail</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="john.smith@example.com"
-                  value={isEditing ? editingClient?.email : newClient.email}
+                  placeholder="joao.silva@exemplo.com"
+                  value={isEditing ? editingClient?.email || '' : newClient.email}
                   onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient, email: e.target.value})
+                    ? setEditingClient({...editingClient!, email: e.target.value})
                     : setNewClient({...newClient, email: e.target.value})
                   }
-                  required
                 />
               </div>
               
@@ -273,24 +331,38 @@ const ClientList = () => {
                 <select
                   id="status"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={isEditing ? editingClient?.status : newClient.status}
+                  value={isEditing ? editingClient?.status || 'Active' : newClient.status}
                   onChange={(e) => isEditing 
-                    ? setEditingClient({...editingClient, status: e.target.value})
+                    ? setEditingClient({...editingClient!, status: e.target.value})
                     : setNewClient({...newClient, status: e.target.value})
                   }
                 >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
+                  <option value="Active">Ativo</option>
+                  <option value="Inactive">Inativo</option>
                 </select>
               </div>
             </div>
             
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  resetForm();
+                  setDialogOpen(false);
+                }}
+                disabled={addClientMutation.isPending || updateClientMutation.isPending}
+              >
+                Cancelar
               </Button>
-              <Button type="submit">
-                {isEditing ? 'Save Changes' : 'Add Client'}
+              <Button 
+                type="submit"
+                disabled={addClientMutation.isPending || updateClientMutation.isPending}
+              >
+                {(addClientMutation.isPending || updateClientMutation.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {isEditing ? 'Salvar Alterações' : 'Adicionar Cliente'}
               </Button>
             </DialogFooter>
           </form>

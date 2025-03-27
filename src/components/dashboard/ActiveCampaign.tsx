@@ -4,16 +4,17 @@ import { Link } from 'react-router-dom';
 import { PhoneOff, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
-import { webhookService } from '@/services/webhookService';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface CampaignStatus {
+  id: number;
   name: string;
   progress: number;
   startTime: string;
   callsMade: number;
   callsRemaining: number;
-  id?: number;
+  active: boolean;
 }
 
 interface ActiveCampaignProps {
@@ -22,44 +23,27 @@ interface ActiveCampaignProps {
 }
 
 const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignStopped }) => {
-  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleStopCampaign = async () => {
     if (!campaign.id) {
-      toast({
-        title: "Error",
-        description: "Campaign ID is missing. Cannot stop campaign.",
-        variant: "destructive"
-      });
+      toast.error("ID da campanha não encontrado. Não é possível interromper a campanha.");
       return;
     }
 
     try {
-      await webhookService.triggerCallWebhook({
-        action: 'stop_campaign',
-        campaign_id: campaign.id,
-        additional_data: {
-          campaign_name: campaign.name,
-          progress: campaign.progress,
-          completed_calls: campaign.callsMade
-        }
-      });
-      
-      toast({
-        title: "Campaign Stopped",
-        description: "Your campaign has been successfully stopped.",
-      });
-      
       if (onCampaignStopped) {
         onCampaignStopped();
       }
+      
+      // Invalidar as queries para forçar o recarregamento dos dados
+      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
+      
+      toast.success("Campanha interrompida com sucesso");
     } catch (error) {
-      console.error('Error stopping campaign:', error);
-      toast({
-        title: "Error",
-        description: "Failed to stop the campaign. Please try again.",
-        variant: "destructive"
-      });
+      console.error('Erro ao interromper campanha:', error);
+      toast.error("Erro ao interromper a campanha. Por favor, tente novamente.");
     }
   };
 
@@ -70,9 +54,9 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           <div>
             <CardTitle className="text-xl flex items-center">
               <div className="h-3 w-3 rounded-full bg-secondary animate-pulse mr-2"></div>
-              Active Campaign: {campaign.name}
+              Campanha Ativa: {campaign.name}
             </CardTitle>
-            <p className="text-sm text-foreground/70">Started at {campaign.startTime}</p>
+            <p className="text-sm text-foreground/70">Iniciada às {campaign.startTime}</p>
           </div>
           <div className="flex gap-2">
             <Button 
@@ -82,12 +66,12 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               onClick={handleStopCampaign}
             >
               <PhoneOff size={16} />
-              <span>Stop Campaign</span>
+              <span>Interromper Campanha</span>
             </Button>
             <Link to="/campaigns">
               <Button size="sm" className="flex items-center gap-1">
                 <BarChart3 size={16} />
-                <span>View Details</span>
+                <span>Ver Detalhes</span>
               </Button>
             </Link>
           </div>
@@ -101,8 +85,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           ></div>
         </div>
         <div className="flex justify-between mt-2 text-sm text-foreground/70">
-          <span>{campaign.callsMade} calls made</span>
-          <span>{campaign.callsRemaining} calls remaining</span>
+          <span>{campaign.callsMade} ligações realizadas</span>
+          <span>{campaign.callsRemaining} ligações restantes</span>
         </div>
       </CardContent>
     </Card>

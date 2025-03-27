@@ -4,13 +4,15 @@ import { supabase } from '@/lib/supabase';
 export type Campaign = {
   id: number;
   name: string;
-  status: 'draft' | 'active' | 'paused' | 'completed';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'stopped';
   start_date?: string;
   end_date?: string;
   created_at?: string;
+  updated_at?: string;
   total_calls: number;
   answered_calls: number;
   average_duration?: number;
+  user_id?: string;
 };
 
 export type CampaignClient = {
@@ -20,6 +22,8 @@ export type CampaignClient = {
   status: 'pending' | 'called' | 'answered' | 'failed';
   call_duration?: number;
   call_timestamp?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export const campaignService = {
@@ -28,6 +32,18 @@ export const campaignService = {
     const { data, error } = await supabase
       .from('campaigns')
       .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data as Campaign[];
+  },
+
+  // Buscar campanhas ativas
+  async getActiveCampaigns() {
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('status', 'active')
       .order('created_at', { ascending: false });
     
     if (error) throw error;
@@ -47,10 +63,10 @@ export const campaignService = {
   },
 
   // Criar uma nova campanha
-  async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at'>) {
+  async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at' | 'updated_at'>) {
     const { data, error } = await supabase
       .from('campaigns')
-      .insert([campaign])
+      .insert([{ ...campaign, user_id: (await supabase.auth.getUser()).data.user?.id }])
       .select();
     
     if (error) throw error;
@@ -114,5 +130,64 @@ export const campaignService = {
     
     if (error) throw error;
     return data[0] as CampaignClient;
+  },
+  
+  // Obter estatísticas de campanhas
+  async getCampaignStats() {
+    // Estatísticas de ligações recentes
+    const { data: campaignData, error: campaignError } = await supabase
+      .from('campaigns')
+      .select(`
+        id,
+        total_calls,
+        answered_calls,
+        average_duration,
+        status
+      `);
+    
+    if (campaignError) throw campaignError;
+    
+    // Total de ligações feitas
+    const totalCalls = campaignData?.reduce((acc, campaign) => acc + (campaign.total_calls || 0), 0) || 0;
+    
+    // Ligações atendidas
+    const answeredCalls = campaignData?.reduce((acc, campaign) => acc + (campaign.answered_calls || 0), 0) || 0;
+    
+    // Calcular duração média
+    const totalDuration = campaignData?.reduce((acc, campaign) => {
+      if (campaign.average_duration && campaign.answered_calls) {
+        return acc + (campaign.average_duration * campaign.answered_calls);
+      }
+      return acc;
+    }, 0) || 0;
+    
+    const avgDuration = answeredCalls > 0 ? totalDuration / answeredCalls : 0;
+    
+    // Formatar para minutos:segundos
+    const minutes = Math.floor(avgDuration / 60);
+    const seconds = Math.floor(avgDuration % 60);
+    const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Calcular ligações de hoje
+    const today = new Date().toISOString().split('T')[0];
+    const { data: todayCalls, error: todayError } = await supabase
+      .from('campaign_clients')
+      .select('id')
+      .gte('call_timestamp', `${today}T00:00:00`);
+    
+    if (todayError) throw todayError;
+    
+    const callsToday = todayCalls?.length || 0;
+    
+    // Taxa de conclusão
+    const completionRate = totalCalls > 0 ? 
+      `${Math.round((answeredCalls / totalCalls) * 100)}%` : '0%';
+    
+    return {
+      recentCalls: answeredCalls,
+      avgCallDuration: formattedDuration,
+      callsToday,
+      completionRate
+    };
   }
 };
