@@ -14,9 +14,9 @@ const Login = () => {
           <div className="flex justify-center mb-6">
             <Logo size="lg" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
+          <h1 className="text-3xl font-bold mb-2">Welcome</h1>
           <p className="text-muted-foreground">
-            Sign in to your account to continue managing your AI call campaigns.
+            Sign in to your account to manage your AI call campaigns.
           </p>
         </div>
         
