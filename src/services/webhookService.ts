@@ -4,6 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 // URL do webhook para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook-test/collowop';
 
+// Configure here your Vapi API credentials
+const VAPI_API_CALLER_ID = ""; // You need to add your Vapi caller ID number here
+
 // Interface para os dados do webhook
 export interface WebhookData {
   action: string;
@@ -70,13 +73,16 @@ export const webhookService = {
         action: data.action
       };
       
-      // Uso direto de fetch para contornar problemas de tipagem com o cliente Supabase
-      const response = await fetch(`${supabase.supabaseUrl}/rest/v1/webhook_logs`, {
+      // Use the direct REST API URL instead of accessing protected properties
+      const supabaseRestUrl = 'https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/webhook_logs';
+      const supabaseApiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8';
+      
+      const response = await fetch(supabaseRestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': supabase.supabaseKey,
-          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'apikey': supabaseApiKey,
+          'Authorization': `Bearer ${supabaseApiKey}`,
           'Prefer': 'return=minimal'
         },
         body: JSON.stringify(logData)
@@ -93,13 +99,16 @@ export const webhookService = {
   // Função para buscar o histórico de chamadas webhook
   async getWebhookLogs(limit = 20) {
     try {
-      // Uso direto de fetch para contornar problemas de tipagem com o cliente Supabase
+      // Use the direct REST API URL instead of accessing protected properties
+      const supabaseRestUrl = 'https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/webhook_logs';
+      const supabaseApiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8';
+      
       const response = await fetch(
-        `${supabase.supabaseUrl}/rest/v1/webhook_logs?select=*&order=created_at.desc&limit=${limit}`, 
+        `${supabaseRestUrl}?select=*&order=created_at.desc&limit=${limit}`, 
         {
           headers: {
-            'apikey': supabase.supabaseKey,
-            'Authorization': `Bearer ${supabase.supabaseKey}`
+            'apikey': supabaseApiKey,
+            'Authorization': `Bearer ${supabaseApiKey}`
           }
         }
       );
@@ -128,6 +137,56 @@ export const webhookService = {
       };
     } catch (error) {
       console.error('Erro ao verificar status do workflow n8n:', error);
+      throw error;
+    }
+  },
+  
+  // Nova função para preparar um lote de ligações para uma campanha
+  async prepareBulkCallsForCampaign(campaignId: number) {
+    try {
+      // Busca todos os clientes associados à campanha
+      const response = await fetch(
+        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/campaign_clients?select=client_id,clients(name,phone)&campaign_id=eq.${campaignId}&status=eq.pending`,
+        {
+          headers: {
+            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8`
+          }
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching campaign clients: ${response.statusText}`);
+      }
+      
+      const campaignClients = await response.json();
+      
+      // Prepara os dados para o webhook
+      const bulkCallData: Omit<WebhookData, 'timestamp'>[] = campaignClients.map((client: any) => ({
+        action: 'start_call',
+        campaign_id: campaignId,
+        client_id: client.client_id,
+        client_name: client.clients?.name,
+        client_phone: client.clients?.phone,
+        additional_data: {
+          vapi_caller_id: VAPI_API_CALLER_ID,
+          call_type: 'bulk_campaign'
+        }
+      }));
+      
+      // Envia os dados para o webhook
+      const results = await Promise.all(
+        bulkCallData.map(callData => this.triggerCallWebhook(callData))
+      );
+      
+      return {
+        success: results.every(r => r.success),
+        totalCalls: results.length,
+        successfulCalls: results.filter(r => r.success).length,
+        failedCalls: results.filter(r => !r.success).length
+      };
+    } catch (error) {
+      console.error('Erro ao preparar lote de ligações:', error);
       throw error;
     }
   }

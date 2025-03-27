@@ -34,7 +34,6 @@ import {
 import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService } from '@/services/webhookService';
 
-// Dummy client groups
 const clientGroups = [
   { id: 1, name: 'All Clients', count: 1250 },
   { id: 2, name: 'Active Clients', count: 876 },
@@ -42,7 +41,6 @@ const clientGroups = [
   { id: 4, name: 'Past Customers', count: 528 },
 ];
 
-// Dummy AI profiles
 const aiProfiles = [
   { id: 1, name: 'Sales Assistant', description: 'Optimized for sales calls and conversions' },
   { id: 2, name: 'Customer Support', description: 'Focused on helping customers with issues' },
@@ -96,15 +94,12 @@ const CampaignControls = () => {
   const { toast } = useToast();
   
   const handleStartCampaign = async (id: number) => {
-    // Atualiza o estado
     setCampaigns(campaigns.map(campaign => 
       campaign.id === id ? { ...campaign, status: 'active' } : campaign
     ));
     
-    // Encontra a campanha atual
     const campaign = campaigns.find(c => c.id === id);
     
-    // Dispara o webhook para iniciar as ligações
     if (campaign) {
       try {
         await webhookService.triggerCallWebhook({
@@ -117,9 +112,11 @@ const CampaignControls = () => {
           }
         });
         
+        const bulkCallResult = await webhookService.prepareBulkCallsForCampaign(campaign.id);
+        
         toast({
           title: "Campanha Iniciada",
-          description: "Sua campanha de ligações está ativa e em execução.",
+          description: `Sua campanha está ativa com ${bulkCallResult.totalCalls} ligações programadas (${bulkCallResult.successfulCalls} enviadas com sucesso).`,
         });
       } catch (error) {
         console.error('Erro ao notificar sistema de ligações:', error);
@@ -134,15 +131,12 @@ const CampaignControls = () => {
   };
   
   const handlePauseCampaign = async (id: number) => {
-    // Atualiza o estado
     setCampaigns(campaigns.map(campaign => 
       campaign.id === id ? { ...campaign, status: 'paused' } : campaign
     ));
     
-    // Encontra a campanha atual
     const campaign = campaigns.find(c => c.id === id);
     
-    // Dispara o webhook para pausar as ligações
     if (campaign) {
       try {
         await webhookService.triggerCallWebhook({
@@ -171,15 +165,12 @@ const CampaignControls = () => {
   };
   
   const handleStopCampaign = async (id: number) => {
-    // Atualiza o estado
     setCampaigns(campaigns.map(campaign => 
       campaign.id === id ? { ...campaign, status: 'stopped' } : campaign
     ));
     
-    // Encontra a campanha atual
     const campaign = campaigns.find(c => c.id === id);
     
-    // Dispara o webhook para parar as ligações
     if (campaign) {
       try {
         await webhookService.triggerCallWebhook({
@@ -211,7 +202,6 @@ const CampaignControls = () => {
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
     if (!newCampaign.name || !newCampaign.clientGroup || !newCampaign.aiProfile) {
       toast({
         title: "Error",
@@ -221,15 +211,12 @@ const CampaignControls = () => {
       return;
     }
     
-    // Get client count based on selected group
     const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
     const clientCount = selectedGroup ? selectedGroup.count : 0;
     
-    // Get AI profile name
     const selectedProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
     const aiProfileName = selectedProfile ? selectedProfile.name : '';
     
-    // Create new campaign
     const newId = Math.max(0, ...campaigns.map(c => c.id)) + 1;
     const createdCampaign = {
       id: newId,
@@ -243,10 +230,8 @@ const CampaignControls = () => {
       startDate: new Date().toLocaleDateString(),
     };
     
-    // Adiciona a nova campanha ao estado
     setCampaigns([...campaigns, createdCampaign]);
     
-    // Notifica o sistema de ligações sobre a nova campanha
     try {
       await webhookService.triggerCallWebhook({
         action: 'create_campaign',
@@ -273,7 +258,6 @@ const CampaignControls = () => {
       });
     }
     
-    // Reset form
     setNewCampaign({
       name: '',
       clientGroup: '',
@@ -299,7 +283,6 @@ const CampaignControls = () => {
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Campaign List */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold">Suas Campanhas</h2>
@@ -309,7 +292,6 @@ const CampaignControls = () => {
             </Button>
           </div>
           
-          {/* Status do Workflow - adicionado aqui */}
           <WorkflowStatus />
           
           {campaigns.length > 0 ? (
@@ -407,7 +389,6 @@ const CampaignControls = () => {
           )}
         </div>
         
-        {/* Create Campaign Form */}
         <div>
           <Card>
             <CardHeader>
