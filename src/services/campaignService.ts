@@ -4,13 +4,14 @@ import { supabase } from '@/lib/supabase';
 export type Campaign = {
   id: number;
   name: string;
-  status: 'draft' | 'active' | 'paused' | 'completed';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'stopped';
   start_date?: string;
   end_date?: string;
   created_at?: string;
   total_calls: number;
   answered_calls: number;
   average_duration?: number;
+  user_id?: string;
 };
 
 export type CampaignClient = {
@@ -23,23 +24,35 @@ export type CampaignClient = {
 };
 
 export const campaignService = {
-  // Buscar todas as campanhas
+  // Buscar todas as campanhas (apenas do usuário atual)
   async getCampaigns() {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session?.user) {
+      throw new Error('User not authenticated');
+    }
+    
     const { data, error } = await supabase
       .from('campaigns')
       .select('*')
+      .eq('user_id', session.session.user.id)
       .order('created_at', { ascending: false });
     
     if (error) throw error;
     return data as Campaign[];
   },
 
-  // Buscar uma campanha por ID
+  // Buscar uma campanha por ID (apenas do usuário atual)
   async getCampaignById(id: number) {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session?.user) {
+      throw new Error('User not authenticated');
+    }
+    
     const { data, error } = await supabase
       .from('campaigns')
       .select('*')
       .eq('id', id)
+      .eq('user_id', session.session.user.id)
       .single();
     
     if (error) throw error;
@@ -48,9 +61,17 @@ export const campaignService = {
 
   // Criar uma nova campanha
   async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at'>) {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session?.user) {
+      throw new Error('User not authenticated');
+    }
+    
     const { data, error } = await supabase
       .from('campaigns')
-      .insert([campaign])
+      .insert([{
+        ...campaign,
+        user_id: session.session.user.id
+      }])
       .select();
     
     if (error) throw error;
@@ -59,10 +80,16 @@ export const campaignService = {
 
   // Atualizar uma campanha
   async updateCampaign(id: number, campaign: Partial<Campaign>) {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session?.user) {
+      throw new Error('User not authenticated');
+    }
+    
     const { data, error } = await supabase
       .from('campaigns')
       .update(campaign)
       .eq('id', id)
+      .eq('user_id', session.session.user.id)
       .select();
     
     if (error) throw error;
@@ -88,6 +115,21 @@ export const campaignService = {
 
   // Buscar clientes de uma campanha
   async getCampaignClients(campaignId: number) {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session?.user) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Primeiro verificar se a campanha pertence ao usuário
+    const { data: campaign, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('id', campaignId)
+      .eq('user_id', session.session.user.id)
+      .single();
+      
+    if (campaignError) throw campaignError;
+    
     const { data, error } = await supabase
       .from('campaign_clients')
       .select(`
