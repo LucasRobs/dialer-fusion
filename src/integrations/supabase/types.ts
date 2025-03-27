@@ -11,31 +11,67 @@ export type Database = {
     Tables: {
       campaign_clients: {
         Row: {
+          call_duration: number | null
+          call_timestamp: string | null
+          campaign_id: number | null
+          client_id: number | null
           created_at: string
           id: number
+          status: string | null
         }
         Insert: {
+          call_duration?: number | null
+          call_timestamp?: string | null
+          campaign_id?: number | null
+          client_id?: number | null
           created_at?: string
           id?: number
+          status?: string | null
         }
         Update: {
+          call_duration?: number | null
+          call_timestamp?: string | null
+          campaign_id?: number | null
+          client_id?: number | null
           created_at?: string
           id?: number
+          status?: string | null
         }
         Relationships: []
       }
       campaigns: {
         Row: {
+          answered_calls: number | null
+          average_duration: number | null
           created_at: string
+          end_date: string | null
           id: number
+          name: string | null
+          start_date: string | null
+          status: string | null
+          total_calls: number | null
         }
         Insert: {
+          answered_calls?: number | null
+          average_duration?: number | null
           created_at?: string
+          end_date?: string | null
           id?: number
+          name?: string | null
+          start_date?: string | null
+          status?: string | null
+          total_calls?: number | null
         }
         Update: {
+          answered_calls?: number | null
+          average_duration?: number | null
           created_at?: string
+          end_date?: string | null
           id?: number
+          name?: string | null
+          start_date?: string | null
+          status?: string | null
+          total_calls?: number | null
         }
         Relationships: []
       }
@@ -81,6 +117,45 @@ export type Database = {
         Update: {
           created_at?: string
           id?: number
+        }
+        Relationships: []
+      }
+      webhook_logs: {
+        Row: {
+          action: string
+          created_at: string
+          error_message: string | null
+          id: string
+          processing_time: number | null
+          request_data: Json
+          response_data: Json | null
+          success: boolean
+          updated_at: string
+          webhook_url: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          processing_time?: number | null
+          request_data: Json
+          response_data?: Json | null
+          success?: boolean
+          updated_at?: string
+          webhook_url: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          processing_time?: number | null
+          request_data?: Json
+          response_data?: Json | null
+          success?: boolean
+          updated_at?: string
+          webhook_url?: string
         }
         Relationships: []
       }

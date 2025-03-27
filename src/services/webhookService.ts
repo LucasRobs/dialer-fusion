@@ -88,7 +88,7 @@ export const webhookService = {
       // Esta é uma simulação - em produção, você precisaria integrar com a API do n8n
       // ou receber atualizações de status via webhook
       return {
-        status: 'running',
+        status: 'running' as const,
         completedTasks: 45,
         totalTasks: 100,
         lastUpdated: new Date().toISOString()

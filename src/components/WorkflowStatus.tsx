@@ -5,7 +5,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon, PhoneIcon } from 'lucide-react';
+import { RotateCw, CheckCircle, AlertCircle, Phone } from 'lucide-react';
 import { webhookService, WebhookData } from '@/services/webhookService';
 
 interface WorkflowStatusProps {
@@ -39,7 +39,13 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     try {
       // Busca status do workflow
       const status = await webhookService.getN8nWorkflowStatus();
-      setWorkflowStatus(status);
+      // Ensure the status type matches our state type
+      setWorkflowStatus({
+        status: status.status as 'idle' | 'running' | 'completed' | 'failed',
+        completedTasks: status.completedTasks,
+        totalTasks: status.totalTasks,
+        lastUpdated: status.lastUpdated
+      });
       
       // Busca logs recentes
       const recentLogs = await webhookService.getWebhookLogs(5);
@@ -173,9 +179,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
               {logs.map((log, index) => (
                 <div key={index} className="flex items-start gap-2 text-sm border-b pb-2">
                   {log.success ? (
-                    <CheckCircleIcon className="w-4 h-4 text-green-500 mt-0.5" />
+                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
                   ) : (
-                    <ExclamationCircleIcon className="w-4 h-4 text-red-500 mt-0.5" />
+                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
                   )}
                   <div>
                     <div className="font-medium">{log.action || 'Ação do Webhook'}</div>
@@ -192,11 +198,11 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       
       <CardFooter className="gap-2 justify-between flex-wrap">
         <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
-          <ArrowPathIcon className="h-4 w-4 mr-2" />
+          <RotateCw className="h-4 w-4 mr-2" />
           Atualizar
         </Button>
         <Button size="sm" onClick={testWebhook} disabled={loading}>
-          <PhoneIcon className="h-4 w-4 mr-2" />
+          <Phone className="h-4 w-4 mr-2" />
           Testar Integração
         </Button>
       </CardFooter>
