@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 
 export type Campaign = {
@@ -132,6 +133,18 @@ export const campaignService = {
       .eq('campaign_id', campaignId);
     
     if (error) throw error;
+    
+    // Count actual clients in the campaign
+    const clientCount = data ? data.length : 0;
+    
+    // Update the campaign with the actual client count
+    if (clientCount > 0) {
+      await supabase
+        .from('campaigns')
+        .update({ total_calls: clientCount })
+        .eq('id', campaignId);
+    }
+    
     return data;
   },
 

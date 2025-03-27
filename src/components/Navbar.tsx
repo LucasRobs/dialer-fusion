@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
@@ -6,6 +5,8 @@ import Logo from './Logo';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { NavLink } from 'react-router-dom';
+import Brain from 'lucide-react';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -82,6 +83,17 @@ const Navbar = () => {
               <Link to="/analytics" className="text-foreground/80 hover:text-foreground transition-colors">
                 Análises
               </Link>
+              <NavLink
+                to="/vapi-assistant"
+                className={({ isActive }) =>
+                  isActive
+                    ? "text-primary font-medium flex items-center"
+                    : "text-muted-foreground hover:text-foreground transition-colors flex items-center"
+                }
+              >
+                <Brain className="mr-2 h-4 w-4" />
+                Vapi Assistant
+              </NavLink>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 Sair
               </Button>

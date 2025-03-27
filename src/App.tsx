@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,6 +17,7 @@ import Campaigns from "./pages/Campaigns";
 import History from "./pages/History";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
+import VapiAssistant from './pages/VapiAssistant';
 
 const App = () => {
   // Create a client instance that persists across renders
@@ -73,6 +73,11 @@ const App = () => {
               <Route path="/analytics" element={
                 <ProtectedRoute>
                   <Analytics />
+                </ProtectedRoute>
+              } />
+              <Route path="/vapi-assistant" element={
+                <ProtectedRoute>
+                  <VapiAssistant />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<NotFound />} />
