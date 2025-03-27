@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 
 export type Campaign = {
@@ -190,12 +191,13 @@ export const campaignService = {
     };
   },
 
-  // Return real call history data from the database
+  // Return empty call history data for new users
   getCallHistory: async () => {
     const { data: user } = await supabase.auth.getUser();
     
     if (!user || !user.user) {
-      throw new Error("User not authenticated");
+      // Return empty array for new users
+      return [];
     }
     
     const { data, error } = await supabase
@@ -216,8 +218,13 @@ export const campaignService = {
       return [];
     }
     
+    // Return empty array if no data
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
     // Format the data to match the expected structure in the UI
-    return data?.map(item => ({
+    return data.map(item => ({
       id: item.id,
       clientName: item.clients?.name || 'Unknown',
       phone: item.clients?.phone || 'N/A',
@@ -228,15 +235,26 @@ export const campaignService = {
       status: item.status || 'Unknown',
       outcome: determineOutcome(item.status),
       notes: 'Auto-generated call log.'
-    })) || [];
+    }));
   },
   
-  // Return real analytics data from the database
+  // Return empty analytics data for new users
   getAnalyticsData: async () => {
     const { data: user } = await supabase.auth.getUser();
     
     if (!user || !user.user) {
-      throw new Error("User not authenticated");
+      // Return empty data for new users
+      return {
+        totalCalls: 0,
+        callsChangePercentage: 0,
+        avgCallDuration: '0:00',
+        durationChangePercentage: 0,
+        conversionRate: 0,
+        conversionChangePercentage: 0,
+        callsToday: 0,
+        callsData: getEmptyMonthData(),
+        campaignData: []
+      };
     }
     
     // Get calls from the last 30 days
@@ -258,13 +276,38 @@ export const campaignService = {
     
     if (callsError) {
       console.error("Error fetching call analytics:", callsError);
-      return null;
+      return {
+        totalCalls: 0,
+        callsChangePercentage: 0,
+        avgCallDuration: '0:00',
+        durationChangePercentage: 0,
+        conversionRate: 0,
+        conversionChangePercentage: 0,
+        callsToday: 0,
+        callsData: getEmptyMonthData(),
+        campaignData: []
+      };
+    }
+    
+    // If no data, return empty stats
+    if (!calls || calls.length === 0) {
+      return {
+        totalCalls: 0,
+        callsChangePercentage: 0,
+        avgCallDuration: '0:00',
+        durationChangePercentage: 0,
+        conversionRate: 0,
+        conversionChangePercentage: 0,
+        callsToday: 0,
+        callsData: getEmptyMonthData(),
+        campaignData: []
+      };
     }
     
     // Get calls from today
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const callsToday = calls?.filter(call => new Date(call.call_timestamp) >= today) || [];
+    const callsToday = calls.filter(call => new Date(call.call_timestamp) >= today) || [];
     
     // Get all campaign data
     const { data: campaigns, error: campaignsError } = await supabase
@@ -274,31 +317,23 @@ export const campaignService = {
     
     if (campaignsError) {
       console.error("Error fetching campaign analytics:", campaignsError);
-      return null;
+      return {
+        totalCalls: 0,
+        callsChangePercentage: 0,
+        avgCallDuration: '0:00',
+        durationChangePercentage: 0,
+        conversionRate: 0,
+        conversionChangePercentage: 0,
+        callsToday: 0,
+        callsData: getEmptyMonthData(),
+        campaignData: []
+      };
     }
     
     // Calculate call metrics
-    const totalCalls = calls?.length || 0;
-    const completedCalls = calls?.filter(call => call.status === 'Completed').length || 0;
-    const avgDuration = calls?.reduce((sum, call) => sum + (call.call_duration || 0), 0) / (totalCalls || 1);
-    
-    // Generate charts data
-    const getMonthData = () => {
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const currentMonth = new Date().getMonth();
-      const last6Months = [];
-      
-      for (let i = 5; i >= 0; i--) {
-        const monthIndex = (currentMonth - i + 12) % 12;
-        last6Months.push(monthNames[monthIndex]);
-      }
-      
-      return last6Months.map(month => ({
-        name: month,
-        calls: 0,
-        cost: 0
-      }));
-    };
+    const totalCalls = calls.length || 0;
+    const completedCalls = calls.filter(call => call.status === 'Completed').length || 0;
+    const avgDuration = calls.reduce((sum, call) => sum + (call.call_duration || 0), 0) / (totalCalls || 1);
     
     // Campaign data for pie chart
     const campaignData = campaigns?.map(campaign => ({
@@ -343,4 +378,40 @@ function determineOutcome(status) {
     default:
       return 'N/A';
   }
+}
+
+// Helper function to generate empty month data for charts
+function getEmptyMonthData() {
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const currentMonth = new Date().getMonth();
+  const last6Months = [];
+  
+  for (let i = 5; i >= 0; i--) {
+    const monthIndex = (currentMonth - i + 12) % 12;
+    last6Months.push(monthNames[monthIndex]);
+  }
+  
+  return last6Months.map(month => ({
+    name: month,
+    calls: 0,
+    cost: 0
+  }));
+}
+
+// Helper function to generate month data for charts with real data
+function getMonthData() {
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const currentMonth = new Date().getMonth();
+  const last6Months = [];
+  
+  for (let i = 5; i >= 0; i--) {
+    const monthIndex = (currentMonth - i + 12) % 12;
+    last6Months.push(monthNames[monthIndex]);
+  }
+  
+  return last6Months.map(month => ({
+    name: month,
+    calls: 0,
+    cost: 0
+  }));
 }
