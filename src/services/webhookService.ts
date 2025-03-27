@@ -1,11 +1,10 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 // URL do webhook para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook-test/collowop';
 
 // Configure here your Vapi API credentials
-const VAPI_API_CALLER_ID = ""; // You need to add your Vapi caller ID number here
+const VAPI_API_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Vapi caller ID
 const VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Vapi Assistant ID
 
 // Interface para os dados do webhook

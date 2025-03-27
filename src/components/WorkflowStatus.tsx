@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -34,20 +33,17 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [vapiSettings, setVapiSettings] = useState({
-    callerId: "",
+    callerId: "97141b30-c5bc-4234-babb-d38b79452e2a", // Default Vapi caller ID
     apiKey: "",
     assistantId: "01646bac-c486-455b-bbc4-a2bc5a1da47c" // Default assistant ID
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { toast } = useToast();
   
-  // Função para carregar os dados
   const loadData = async () => {
     setLoading(true);
     try {
-      // Busca status do workflow
       const status = await webhookService.getN8nWorkflowStatus();
-      // Ensure the status type matches our state type
       setWorkflowStatus({
         status: status.status as 'idle' | 'running' | 'completed' | 'failed',
         completedTasks: status.completedTasks,
@@ -55,7 +51,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         lastUpdated: status.lastUpdated
       });
       
-      // Busca logs recentes
       const recentLogs = await webhookService.getWebhookLogs(5);
       setLogs(recentLogs || []);
     } catch (error) {
@@ -70,18 +65,14 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     }
   };
   
-  // Carrega dados ao montar o componente
   useEffect(() => {
     loadData();
     
-    // Configura atualização periódica
     const interval = setInterval(loadData, refreshInterval);
     
-    // Limpa o intervalo ao desmontar
     return () => clearInterval(interval);
   }, [refreshInterval]);
   
-  // Função para testar o webhook manualmente
   const testWebhook = async () => {
     try {
       const testData: Omit<WebhookData, 'timestamp'> = {
@@ -113,7 +104,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         });
       }
       
-      // Recarrega os dados
       await loadData();
     } catch (error) {
       console.error('Erro ao testar webhook:', error);
@@ -125,7 +115,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     }
   };
   
-  // Salvar configurações da Vapi
   const saveVapiSettings = () => {
     localStorage.setItem('vapi_settings', JSON.stringify(vapiSettings));
     toast({
@@ -135,15 +124,14 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     setSettingsOpen(false);
   };
   
-  // Carregar configurações da Vapi ao inicializar
   useEffect(() => {
     const savedSettings = localStorage.getItem('vapi_settings');
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
-        // Manter o assistantId padrão se não existir no localStorage
         setVapiSettings(prev => ({
           ...parsed,
+          callerId: parsed.callerId || prev.callerId,
           assistantId: parsed.assistantId || prev.assistantId
         }));
       } catch (e) {
@@ -152,7 +140,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     }
   }, []);
   
-  // Calcula a porcentagem de progresso
   const progressPercentage = workflowStatus.totalTasks > 0
     ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
     : 0;
@@ -183,7 +170,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Progresso da automação */}
         {workflowStatus.totalTasks > 0 && (
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
@@ -194,7 +180,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           </div>
         )}
         
-        {/* Configurações da Vapi */}
         {settingsOpen && (
           <div className="bg-muted/30 p-3 rounded-md space-y-3">
             <h3 className="font-medium mb-2">Configurações da Vapi</h3>
@@ -206,8 +191,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
                 placeholder="+55119999999999"
                 value={vapiSettings.callerId}
                 onChange={(e) => setVapiSettings({...vapiSettings, callerId: e.target.value})}
+                readOnly
               />
-              <p className="text-xs text-muted-foreground">Este é o número que aparecerá para quem receber a chamada</p>
+              <p className="text-xs text-muted-foreground">ID do chamador configurado: 97141b30-c5bc-4234-babb-d38b79452e2a</p>
             </div>
             
             <div className="space-y-2">
@@ -236,7 +222,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           </div>
         )}
         
-        {/* Estatísticas rápidas */}
         <div className="grid grid-cols-2 gap-3 pt-2">
           <div className="bg-muted/30 p-3 rounded-md">
             <div className="text-sm text-muted-foreground">Chamadas Enviadas</div>
@@ -252,7 +237,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           </div>
         </div>
         
-        {/* Logs recentes */}
         {logs.length > 0 && (
           <div className="pt-2">
             <h3 className="text-sm font-medium mb-2">Atividade Recente</h3>

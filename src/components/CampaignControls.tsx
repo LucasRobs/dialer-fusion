@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   PauseCircle,
@@ -33,57 +33,12 @@ import {
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService } from '@/services/webhookService';
-
-const clientGroups = [
-  { id: 1, name: 'All Clients', count: 1250 },
-  { id: 2, name: 'Active Clients', count: 876 },
-  { id: 3, name: 'New Leads', count: 342 },
-  { id: 4, name: 'Past Customers', count: 528 },
-];
-
-const aiProfiles = [
-  { id: 1, name: 'Sales Assistant', description: 'Optimized for sales calls and conversions' },
-  { id: 2, name: 'Customer Support', description: 'Focused on helping customers with issues' },
-  { id: 3, name: 'Appointment Setter', description: 'Specialized in booking appointments' },
-  { id: 4, name: 'Survey Collector', description: 'Designed to collect feedback and survey data' },
-];
+import { campaignService } from '@/services/campaignService';
+import { useQuery } from '@tanstack/react-query';
 
 const CampaignControls = () => {
-  const [campaigns, setCampaigns] = useState([
-    { 
-      id: 1, 
-      name: 'Summer Promotion 2023', 
-      status: 'active', 
-      progress: 60, 
-      clientGroup: 'Active Clients',
-      clientCount: 876,
-      completedCalls: 526,
-      aiProfile: 'Sales Assistant',
-      startDate: new Date().toLocaleDateString(),
-    },
-    { 
-      id: 2, 
-      name: 'Customer Feedback', 
-      status: 'paused', 
-      progress: 35, 
-      clientGroup: 'Past Customers',
-      clientCount: 528,
-      completedCalls: 184,
-      aiProfile: 'Survey Collector',
-      startDate: new Date(Date.now() - 86400000 * 2).toLocaleDateString(),
-    },
-    { 
-      id: 3, 
-      name: 'Appointment Reminder', 
-      status: 'completed', 
-      progress: 100, 
-      clientGroup: 'Active Clients',
-      clientCount: 192,
-      completedCalls: 192,
-      aiProfile: 'Appointment Setter',
-      startDate: new Date(Date.now() - 86400000 * 5).toLocaleDateString(),
-    }
-  ]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [newCampaign, setNewCampaign] = useState({
     name: '',
@@ -92,6 +47,70 @@ const CampaignControls = () => {
   });
   
   const { toast } = useToast();
+  
+  const { data: clientGroups = [] } = useQuery({
+    queryKey: ['clientGroups'],
+    queryFn: async () => {
+      return [
+        { id: 1, name: 'All Clients', count: 1250 },
+        { id: 2, name: 'Active Clients', count: 876 },
+        { id: 3, name: 'New Leads', count: 342 },
+        { id: 4, name: 'Past Customers', count: 528 },
+      ];
+    }
+  });
+  
+  const { data: aiProfiles = [] } = useQuery({
+    queryKey: ['aiProfiles'],
+    queryFn: async () => {
+      return [
+        { id: 1, name: 'Sales Assistant', description: 'Optimized for sales calls and conversions' },
+        { id: 2, name: 'Customer Support', description: 'Focused on helping customers with issues' },
+        { id: 3, name: 'Appointment Setter', description: 'Specialized in booking appointments' },
+        { id: 4, name: 'Survey Collector', description: 'Designed to collect feedback and survey data' },
+      ];
+    }
+  });
+  
+  const { data: supabaseCampaigns, refetch: refetchCampaigns } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      try {
+        return await campaignService.getCampaigns();
+      } catch (error) {
+        console.error('Error fetching campaigns:', error);
+        toast({
+          title: "Error fetching campaigns",
+          description: "Failed to load campaigns from database.",
+          variant: "destructive"
+        });
+        return [];
+      }
+    }
+  });
+  
+  useEffect(() => {
+    if (supabaseCampaigns) {
+      const formattedCampaigns = supabaseCampaigns.map(campaign => ({
+        id: campaign.id,
+        name: campaign.name || 'Untitled Campaign',
+        status: campaign.status || 'draft',
+        progress: campaign.total_calls > 0 
+          ? Math.round((campaign.answered_calls / campaign.total_calls) * 100) 
+          : 0,
+        clientGroup: 'Active Clients',
+        clientCount: campaign.total_calls || 0,
+        completedCalls: campaign.answered_calls || 0,
+        aiProfile: 'Sales Assistant',
+        startDate: campaign.start_date 
+          ? new Date(campaign.start_date).toLocaleDateString() 
+          : new Date().toLocaleDateString()
+      }));
+      
+      setCampaigns(formattedCampaigns);
+      setIsLoading(false);
+    }
+  }, [supabaseCampaigns]);
   
   const handleStartCampaign = async (id: number) => {
     setCampaigns(campaigns.map(campaign => 
@@ -102,13 +121,19 @@ const CampaignControls = () => {
     
     if (campaign) {
       try {
+        await campaignService.updateCampaign(id, {
+          status: 'active',
+          start_date: new Date().toISOString()
+        });
+        
         await webhookService.triggerCallWebhook({
           action: 'start_campaign',
           campaign_id: campaign.id,
           additional_data: {
             campaign_name: campaign.name,
             client_count: campaign.clientCount,
-            ai_profile: campaign.aiProfile
+            ai_profile: campaign.aiProfile,
+            vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
           }
         });
         
@@ -118,6 +143,8 @@ const CampaignControls = () => {
           title: "Campanha Iniciada",
           description: `Sua campanha está ativa com ${bulkCallResult.totalCalls} ligações programadas (${bulkCallResult.successfulCalls} enviadas com sucesso).`,
         });
+        
+        refetchCampaigns();
       } catch (error) {
         console.error('Erro ao notificar sistema de ligações:', error);
         
@@ -217,30 +244,25 @@ const CampaignControls = () => {
     const selectedProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
     const aiProfileName = selectedProfile ? selectedProfile.name : '';
     
-    const newId = Math.max(0, ...campaigns.map(c => c.id)) + 1;
-    const createdCampaign = {
-      id: newId,
-      name: newCampaign.name,
-      status: 'ready',
-      progress: 0,
-      clientGroup: selectedGroup ? selectedGroup.name : '',
-      clientCount,
-      completedCalls: 0,
-      aiProfile: aiProfileName,
-      startDate: new Date().toLocaleDateString(),
-    };
-    
-    setCampaigns([...campaigns, createdCampaign]);
-    
     try {
+      const createdCampaign = await campaignService.createCampaign({
+        name: newCampaign.name,
+        status: 'draft',
+        total_calls: clientCount,
+        answered_calls: 0,
+        start_date: null,
+        end_date: null
+      });
+      
       await webhookService.triggerCallWebhook({
         action: 'create_campaign',
-        campaign_id: newId,
+        campaign_id: createdCampaign.id,
         additional_data: {
           campaign_name: createdCampaign.name,
           client_count: clientCount,
           ai_profile: aiProfileName,
-          client_group: selectedGroup?.name
+          client_group: selectedGroup?.name,
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
         }
       });
       
@@ -248,21 +270,23 @@ const CampaignControls = () => {
         title: "Campanha Criada",
         description: "Sua nova campanha está pronta para iniciar.",
       });
+      
+      setNewCampaign({
+        name: '',
+        clientGroup: '',
+        aiProfile: '',
+      });
+      
+      refetchCampaigns();
     } catch (error) {
-      console.error('Erro ao notificar sistema de ligações:', error);
+      console.error('Erro ao criar campanha:', error);
       
       toast({
-        title: "Campanha Criada",
-        description: "Campanha criada, mas houve um erro ao notificar o sistema de ligações.",
+        title: "Erro ao Criar Campanha",
+        description: "Houve um problema ao criar sua campanha. Por favor, tente novamente.",
         variant: "destructive"
       });
     }
-    
-    setNewCampaign({
-      name: '',
-      clientGroup: '',
-      aiProfile: '',
-    });
   };
   
   const getStatusColor = (status: string) => {
@@ -294,7 +318,16 @@ const CampaignControls = () => {
           
           <WorkflowStatus />
           
-          {campaigns.length > 0 ? (
+          {isLoading ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Carregando campanhas...</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : campaigns.length > 0 ? (
             <div className="space-y-4">
               {campaigns.map((campaign) => (
                 <Card key={campaign.id} className="overflow-hidden">

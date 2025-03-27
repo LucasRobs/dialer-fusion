@@ -1,16 +1,22 @@
 
 import React from 'react';
 import Navbar from '@/components/Navbar';
-import Dashboard from '@/components/Dashboard';
+import CampaignControls from '@/components/CampaignControls';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Create a client
+const queryClient = new QueryClient();
 
 const DashboardPage = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <div className="pt-28 pb-16">
-        <Dashboard />
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="pt-28 pb-16">
+          <CampaignControls />
+        </div>
       </div>
-    </div>
+    </QueryClientProvider>
   );
 };
 
