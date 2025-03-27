@@ -4,16 +4,13 @@ import { supabase } from '@/lib/supabase';
 export type Campaign = {
   id: number;
   name: string;
-  status: 'draft' | 'active' | 'paused' | 'completed' | 'stopped';
+  status: 'draft' | 'active' | 'paused' | 'completed';
   start_date?: string;
   end_date?: string;
   created_at?: string;
   total_calls: number;
   answered_calls: number;
   average_duration?: number;
-  progress?: number;
-  clientGroup?: string;
-  aiProfile?: string;
 };
 
 export type CampaignClient = {
@@ -117,26 +114,5 @@ export const campaignService = {
     
     if (error) throw error;
     return data[0] as CampaignClient;
-  },
-
-  // Delete a campaign
-  async deleteCampaign(id: number) {
-    // First delete associated campaign_clients
-    const { error: clientsError } = await supabase
-      .from('campaign_clients')
-      .delete()
-      .eq('campaign_id', id);
-    
-    if (clientsError) throw clientsError;
-    
-    // Then delete the campaign
-    const { data, error } = await supabase
-      .from('campaigns')
-      .delete()
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    return data?.[0] as Campaign;
   }
 };
