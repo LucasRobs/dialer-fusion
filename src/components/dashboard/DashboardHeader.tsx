@@ -3,12 +3,18 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DashboardHeader = () => {
+  const { user } = useAuth();
+  
+  // Get the user's name from metadata if available
+  const userName = user?.user_metadata?.name || 'User';
+  
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
       <div>
-        <h1 className="text-3xl font-bold">Welcome back, User</h1>
+        <h1 className="text-3xl font-bold">Welcome back, {userName}</h1>
         <p className="text-foreground/70">Here's what's happening with your campaigns today.</p>
       </div>
       <div className="mt-4 md:mt-0 flex gap-3">
