@@ -1,6 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
 import {
-  Play,
   PauseCircle,
   StopCircle,
   Users,
@@ -8,8 +8,6 @@ import {
   Save,
   BarChart3,
   Calendar,
-  ArrowRight,
-  Phone as PhoneIcon,
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -49,15 +47,43 @@ const CampaignControls = () => {
   
   const { toast } = useToast();
   
-  const { data: clientGroups = [] } = useQuery({
+  // Fetch real client groups from supabase
+  const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
     queryFn: async () => {
-      return [
-        { id: 1, name: 'All Clients', count: 1250 },
-        { id: 2, name: 'Active Clients', count: 876 },
-        { id: 3, name: 'New Leads', count: 342 },
-        { id: 4, name: 'Past Customers', count: 528 },
-      ];
+      try {
+        // Get clients from supabase
+        const { data, error } = await supabase
+          .from('clients')
+          .select('status, count')
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+          .group('status');
+        
+        if (error) throw error;
+        
+        // Get all clients count
+        const { count: totalCount } = await supabase
+          .from('clients')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
+        
+        // Format client groups
+        const groups = [
+          { id: 'all', name: 'All Clients', count: totalCount || 0 },
+          ...data.map((group, index) => ({
+            id: index + 1,
+            name: `${group.status} Clients`,
+            count: group.count
+          }))
+        ];
+        
+        return groups;
+      } catch (error) {
+        console.error('Error fetching client groups:', error);
+        return [
+          { id: 'all', name: 'All Clients', count: 0 }
+        ];
+      }
     }
   });
   
@@ -114,14 +140,14 @@ const CampaignControls = () => {
   }, [supabaseCampaigns]);
   
   const handleStartCampaign = async (id: number) => {
-    setCampaigns(campaigns.map(campaign => 
-      campaign.id === id ? { ...campaign, status: 'active' } : campaign
-    ));
-    
-    const campaign = campaigns.find(c => c.id === id);
-    
-    if (campaign) {
-      try {
+    try {
+      setCampaigns(campaigns.map(campaign => 
+        campaign.id === id ? { ...campaign, status: 'active' } : campaign
+      ));
+      
+      const campaign = campaigns.find(c => c.id === id);
+      
+      if (campaign) {
         await campaignService.updateCampaign(id, {
           status: 'active',
           start_date: new Date().toISOString()
@@ -138,23 +164,60 @@ const CampaignControls = () => {
           }
         });
         
-        const bulkCallResult = await webhookService.prepareBulkCallsForCampaign(campaign.id);
+        // Get all clients associated with this campaign
+        const clients = await campaignService.getClientDataForCampaign(campaign.id);
         
-        toast({
-          title: "Campanha Iniciada",
-          description: `Sua campanha está ativa com ${bulkCallResult.totalCalls} ligações programadas (${bulkCallResult.successfulCalls} enviadas com sucesso).`,
-        });
+        if (clients && clients.length > 0) {
+          // Send each client to webhook individually
+          let successCount = 0;
+          let failCount = 0;
+          
+          for (const client of clients) {
+            try {
+              const result = await webhookService.triggerCallWebhook({
+                action: 'start_call',
+                campaign_id: campaign.id,
+                client_id: client.id,
+                client_name: client.name,
+                client_phone: client.phone,
+                additional_data: {
+                  vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
+                  call_type: 'campaign_call'
+                }
+              });
+              
+              if (result.success) {
+                successCount++;
+              } else {
+                failCount++;
+              }
+            } catch (err) {
+              console.error(`Error sending webhook for client ${client.id}:`, err);
+              failCount++;
+            }
+          }
+          
+          toast({
+            title: "Campanha Iniciada",
+            description: `Campanha iniciada com ${successCount} ligações enviadas (${failCount} falhas).`,
+          });
+        } else {
+          toast({
+            title: "Campanha Iniciada",
+            description: "Campanha iniciada, mas não há clientes associados.",
+          });
+        }
         
         refetchCampaigns();
-      } catch (error) {
-        console.error('Erro ao notificar sistema de ligações:', error);
-        
-        toast({
-          title: "Campanha Iniciada",
-          description: "Campanha iniciada, mas houve um erro ao notificar o sistema de ligações.",
-          variant: "destructive"
-        });
       }
+    } catch (error) {
+      console.error('Erro ao iniciar campanha:', error);
+      
+      toast({
+        title: "Erro",
+        description: "Falha ao iniciar a campanha. Por favor, tente novamente.",
+        variant: "destructive"
+      });
     }
   };
   
@@ -409,7 +472,6 @@ const CampaignControls = () => {
                       ) : campaign.status === 'paused' ? (
                         <>
                           <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStartCampaign(campaign.id)}>
-                            <Play className="h-4 w-4 mr-2" />
                             Resume
                           </Button>
                           <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStopCampaign(campaign.id)}>
@@ -420,8 +482,7 @@ const CampaignControls = () => {
                       ) : (
                         <>
                           <Button className="flex-1" variant="outline" size="sm" onClick={() => handleStartCampaign(campaign.id)}>
-                            <Play className="h-4 w-4 mr-2" />
-                            Start Campaign
+                            Start
                           </Button>
                           <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDeleteCampaign(campaign.id)}>
                             <Trash2 className="h-4 w-4 mr-2" />
@@ -480,11 +541,15 @@ const CampaignControls = () => {
                       <SelectValue placeholder="Select a client group" />
                     </SelectTrigger>
                     <SelectContent>
-                      {clientGroups.map((group) => (
-                        <SelectItem key={group.id} value={group.id.toString()}>
-                          {group.name} ({group.count} clients)
-                        </SelectItem>
-                      ))}
+                      {isLoadingGroups ? (
+                        <SelectItem value="loading" disabled>Loading client groups...</SelectItem>
+                      ) : (
+                        clientGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id.toString()}>
+                            {group.name} ({group.count} clients)
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

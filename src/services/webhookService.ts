@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 // URL do webhook corrigida para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
+const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
 
 // Configure here your Vapi API credentials
 const VAPI_API_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Vapi caller ID
@@ -20,10 +21,18 @@ export interface WebhookData {
   additional_data?: Record<string, any>;
 }
 
+export interface AssistantWebhookData {
+  assistant_name: string;
+  first_message: string;
+  system_prompt: string;
+  timestamp: string;
+  additional_data?: Record<string, any>;
+}
+
 // Interface para o log do webhook
 interface WebhookLog {
   webhook_url: string;
-  request_data: WebhookData;
+  request_data: WebhookData | AssistantWebhookData;
   success: boolean;
   error_message: string | null;
   action: string;
@@ -90,15 +99,55 @@ export const webhookService = {
     }
   },
   
-  // Função para registrar a chamada do webhook no histórico
-  async logWebhookCall(data: WebhookData, success: boolean, error?: any) {
+  // Função para criar um novo assistente via webhook
+  async createAssistant(data: Omit<AssistantWebhookData, 'timestamp'>) {
+    console.log('Criando novo assistente:', data);
+    
+    // Adiciona timestamp
+    const webhookData: AssistantWebhookData = {
+      ...data,
+      timestamp: new Date().toISOString()
+    };
+    
     try {
+      // Envia requisição para o webhook
+      const response = await fetch(VAPI_ASSISTANT_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookData),
+      });
+      
+      const responseData = await response.json();
+      
+      // Registra a chamada no histórico
+      await this.logWebhookCall(webhookData, response.ok, 'create_assistant');
+      
+      return { 
+        success: response.ok, 
+        status: response.status,
+        data: responseData
+      };
+    } catch (error) {
+      console.error('Erro ao criar assistente:', error);
+      await this.logWebhookCall(webhookData, false, 'create_assistant', error);
+      return { success: false, error };
+    }
+  },
+  
+  // Função para registrar a chamada do webhook no histórico
+  async logWebhookCall(data: WebhookData | AssistantWebhookData, success: boolean, action?: string, error?: any) {
+    try {
+      const webhookUrl = 'action' in data ? WEBHOOK_URL : VAPI_ASSISTANT_WEBHOOK_URL;
+      const actionValue = 'action' in data ? data.action : (action || 'create_assistant');
+      
       const logData: WebhookLog = {
-        webhook_url: WEBHOOK_URL,
+        webhook_url: webhookUrl,
         request_data: data,
         success,
         error_message: error ? String(error) : null,
-        action: data.action
+        action: actionValue
       };
       
       // Use the direct REST API URL instead of accessing protected properties

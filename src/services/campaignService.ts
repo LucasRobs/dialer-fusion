@@ -489,7 +489,7 @@ export const campaignService = {
       if (error) throw error;
       
       // Extract client data from the nested structure
-      const clientData = data.map((item: any) => {
+      const clientData = data.map((item) => {
         return {
           id: item.client_id,
           name: item.clients?.name || 'Desconhecido',
