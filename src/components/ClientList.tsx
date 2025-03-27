@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -48,7 +49,7 @@ export default function ClientList() {
   const queryClient = useQueryClient();
   
   const { 
-    data: clients, 
+    data: clients = [], 
     isLoading, 
     error, 
     refetch 
@@ -57,7 +58,9 @@ export default function ClientList() {
     queryFn: () => clientService.getClients(),
   });
   
-  const addClientMutation = useMutation(clientService.addClient, {
+  const addClientMutation = useMutation({
+    mutationFn: (clientData: { name: string; phone: string; email: string; status: string }) => 
+      clientService.addClient(clientData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       toast({
@@ -67,7 +70,7 @@ export default function ClientList() {
       setShowNewClientDialog(false);
       clearForm();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Erro ao adicionar cliente",
         description: error.message || "Ocorreu um erro ao adicionar o cliente.",
@@ -76,7 +79,9 @@ export default function ClientList() {
     },
   });
   
-  const updateClientMutation = useMutation(clientService.updateClient, {
+  const updateClientMutation = useMutation({
+    mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string } }) => 
+      clientService.updateClient(data.id, data.client),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       toast({
@@ -86,7 +91,7 @@ export default function ClientList() {
       setShowEditClientDialog(false);
       clearForm();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Erro ao atualizar cliente",
         description: error.message || "Ocorreu um erro ao atualizar o cliente.",
@@ -95,7 +100,8 @@ export default function ClientList() {
     },
   });
   
-  const deleteClientMutation = useMutation(clientService.deleteClient, {
+  const deleteClientMutation = useMutation({
+    mutationFn: (id: number) => clientService.deleteClient(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       toast({
@@ -105,7 +111,7 @@ export default function ClientList() {
       setShowDeleteClientDialog(false);
       clearForm();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Erro ao excluir cliente",
         description: error.message || "Ocorreu um erro ao excluir o cliente.",
@@ -146,7 +152,10 @@ export default function ClientList() {
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedClient) {
-      updateClientMutation.mutate({ id: selectedClient.id, name, phone, email, status });
+      updateClientMutation.mutate({ 
+        id: selectedClient.id, 
+        client: { name, phone, email, status } 
+      });
     }
   };
   
@@ -164,7 +173,7 @@ export default function ClientList() {
     setSelectedClient(null);
   };
 
-  // Adicionar função para iniciar chamada para um cliente
+  // Função para iniciar chamada para um cliente
   const handleCall = async (client: any) => {
     try {
       const { data } = await supabase.auth.getUser();
@@ -206,7 +215,7 @@ export default function ClientList() {
     }
   };
 
-  // Modificar a renderização da tabela para incluir botão de ligação
+  // Renderização da tabela
   return (
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
