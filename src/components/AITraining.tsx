@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,13 +21,13 @@ import {
   PlusCircle,
   CheckCircle2,
   X,
-  Loader2
+  Loader2,
+  Phone
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { webhookService } from '@/services/webhookService';
 
-// Interface for the Vapi assistant
 interface VapiAssistant {
   id: string;
   name: string;
@@ -98,7 +97,6 @@ const AITraining = () => {
   };
   
   const handleStartTraining = async () => {
-    // In a real app, this would start an actual training process
     setIsTraining(true);
     setTrainingProgress(0);
     
@@ -107,18 +105,14 @@ const AITraining = () => {
       description: "Your AI assistant is now being trained with your data."
     });
     
-    // Simulate Vapi assistant creation process
-    // In a real implementation, this would make API calls to Vapi
     const assistantId = await simulateVapiAssistantCreation();
     
-    // Simulate training progress
     const interval = setInterval(() => {
       setTrainingProgress(prev => {
         if (prev >= 100) {
           clearInterval(interval);
           setIsTraining(false);
           
-          // Save the created assistant to localStorage for use in call webhooks
           const assistantData: VapiAssistant = {
             id: assistantId,
             name: trainingName,
@@ -141,17 +135,7 @@ const AITraining = () => {
     }, 300);
   };
   
-  // Simulates creating a Vapi assistant
-  // In a real implementation, this would call the Vapi API
   const simulateVapiAssistantCreation = async (): Promise<string> => {
-    // For this simulation, we'll just return a random ID that looks like a UUID
-    // In a real implementation, this would be the ID returned by Vapi API
-    
-    // Simulate an API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // In a real app, this would be the ID returned from the Vapi API
-    // For now, we'll return the default ID used in webhookService or a new one
     return trainingName ? `assistant_${Date.now()}` : "01646bac-c486-455b-bbc4-a2bc5a1da47c";
   };
   
@@ -173,7 +157,6 @@ const AITraining = () => {
     }
     
     try {
-      // Use the webhookService to trigger a test call with the created assistant ID
       const testData = {
         action: 'test_call',
         client_name: "Cliente Teste",
@@ -181,8 +164,8 @@ const AITraining = () => {
         additional_data: {
           source: 'manual_test',
           user_interface: 'AITraining',
-          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a", // Default caller ID
-          vapi_assistant_id: createdAssistant.id // Use the created assistant ID
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
+          vapi_assistant_id: createdAssistant.id
         }
       };
       
@@ -229,7 +212,6 @@ const AITraining = () => {
           <TabsTrigger value="training">Training</TabsTrigger>
         </TabsList>
         
-        {/* Basic Setup Tab */}
         <TabsContent value="basic">
           <Card>
             <CardHeader>
@@ -303,7 +285,6 @@ const AITraining = () => {
           </Card>
         </TabsContent>
         
-        {/* Responses Tab */}
         <TabsContent value="responses">
           <Card>
             <CardHeader>
@@ -387,7 +368,6 @@ const AITraining = () => {
           </Card>
         </TabsContent>
         
-        {/* Training Tab */}
         <TabsContent value="training">
           <Card>
             <CardHeader>
