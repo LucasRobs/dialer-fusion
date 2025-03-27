@@ -35,7 +35,8 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const [loading, setLoading] = useState(false);
   const [vapiSettings, setVapiSettings] = useState({
     callerId: "",
-    apiKey: ""
+    apiKey: "",
+    assistantId: "01646bac-c486-455b-bbc4-a2bc5a1da47c" // Default assistant ID
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { toast } = useToast();
@@ -91,7 +92,8 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         additional_data: {
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
-          vapi_caller_id: vapiSettings.callerId
+          vapi_caller_id: vapiSettings.callerId,
+          vapi_assistant_id: vapiSettings.assistantId
         }
       };
       
@@ -137,7 +139,16 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   useEffect(() => {
     const savedSettings = localStorage.getItem('vapi_settings');
     if (savedSettings) {
-      setVapiSettings(JSON.parse(savedSettings));
+      try {
+        const parsed = JSON.parse(savedSettings);
+        // Manter o assistantId padrão se não existir no localStorage
+        setVapiSettings(prev => ({
+          ...parsed,
+          assistantId: parsed.assistantId || prev.assistantId
+        }));
+      } catch (e) {
+        console.error("Erro ao carregar configurações Vapi:", e);
+      }
     }
   }, []);
   
@@ -210,6 +221,17 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
               />
             </div>
             
+            <div className="space-y-2">
+              <Label htmlFor="assistantId">ID do Assistente Vapi</Label>
+              <Input
+                id="assistantId"
+                value={vapiSettings.assistantId}
+                onChange={(e) => setVapiSettings({...vapiSettings, assistantId: e.target.value})}
+                readOnly
+              />
+              <p className="text-xs text-muted-foreground">ID do assistente configurado: 01646bac-c486-455b-bbc4-a2bc5a1da47c</p>
+            </div>
+            
             <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>
           </div>
         )}
@@ -250,6 +272,11 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
                     {log.request_data?.client_name && (
                       <div className="text-xs">
                         Cliente: {log.request_data.client_name} ({log.request_data.client_phone})
+                      </div>
+                    )}
+                    {log.request_data?.additional_data?.vapi_assistant_id && (
+                      <div className="text-xs text-muted-foreground">
+                        Assistant ID: {log.request_data.additional_data.vapi_assistant_id.substring(0, 8)}...
                       </div>
                     )}
                   </div>

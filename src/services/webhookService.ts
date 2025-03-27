@@ -6,6 +6,7 @@ const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook-test
 
 // Configure here your Vapi API credentials
 const VAPI_API_CALLER_ID = ""; // You need to add your Vapi caller ID number here
+const VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Vapi Assistant ID
 
 // Interface para os dados do webhook
 export interface WebhookData {
@@ -40,6 +41,14 @@ export const webhookService = {
       ...data,
       timestamp: new Date().toISOString()
     };
+    
+    // Adiciona o assistant ID nas informações adicionais se não existir
+    if (!webhookData.additional_data) {
+      webhookData.additional_data = {};
+    }
+    
+    // Certifica que o assistant ID está configurado
+    webhookData.additional_data.vapi_assistant_id = VAPI_ASSISTANT_ID;
     
     try {
       // Envia requisição para o webhook
@@ -170,6 +179,7 @@ export const webhookService = {
         client_phone: client.clients?.phone,
         additional_data: {
           vapi_caller_id: VAPI_API_CALLER_ID,
+          vapi_assistant_id: VAPI_ASSISTANT_ID,
           call_type: 'bulk_campaign'
         }
       }));
