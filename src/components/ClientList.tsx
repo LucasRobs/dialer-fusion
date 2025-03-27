@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Pencil, 
   Trash2, 
@@ -29,42 +29,60 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-
-// Dummy client data
-const dummyClients = [
-  { id: 1, name: 'John Smith', phone: '(555) 123-4567', email: 'john.smith@example.com', status: 'Active' },
-  { id: 2, name: 'Sarah Johnson', phone: '(555) 234-5678', email: 'sarah.j@example.com', status: 'Active' },
-  { id: 3, name: 'Michael Brown', phone: '(555) 345-6789', email: 'michael.b@example.com', status: 'Inactive' },
-  { id: 4, name: 'Emily Davis', phone: '(555) 456-7890', email: 'emily.d@example.com', status: 'Active' },
-  { id: 5, name: 'Robert Wilson', phone: '(555) 567-8901', email: 'robert.w@example.com', status: 'Active' },
-  { id: 6, name: 'Jennifer Taylor', phone: '(555) 678-9012', email: 'jennifer.t@example.com', status: 'Inactive' },
-  { id: 7, name: 'David Martinez', phone: '(555) 789-0123', email: 'david.m@example.com', status: 'Active' },
-  { id: 8, name: 'Amanda Anderson', phone: '(555) 890-1234', email: 'amanda.a@example.com', status: 'Active' },
-];
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ClientList = () => {
-  const [clients, setClients] = useState(dummyClients);
+  const [clients, setClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [newClient, setNewClient] = useState({ name: '', phone: '', email: '', status: 'Active' });
-  const [editingClient, setEditingClient] = useState<any | null>(null);
+  const [editingClient, setEditingClient] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchClients = async () => {
+      if (!user) return;
+      
+      try {
+        setIsLoading(true);
+        
+        // In a real implementation, this would fetch from the database
+        // For now, we'll just set an empty array for new users instead of dummy data
+        setClients([]);
+        
+      } catch (error) {
+        console.error('Error fetching clients:', error);
+        toast({
+          title: "Error loading clients",
+          description: "Failed to load your client database.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchClients();
+  }, [user, toast]);
 
   const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.phone.includes(searchTerm) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+    client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.phone?.includes(searchTerm) ||
+    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleEdit = (client: any) => {
+  const handleEdit = (client) => {
     setEditingClient(client);
     setIsEditing(true);
     setDialogOpen(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id) => {
     setClients(clients.filter(client => client.id !== id));
     toast({
       title: "Client deleted",
@@ -72,7 +90,7 @@ const ClientList = () => {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     
     if (isEditing && editingClient) {
@@ -86,7 +104,7 @@ const ClientList = () => {
       });
     } else {
       // Add new client
-      const id = Math.max(0, ...clients.map(c => c.id)) + 1;
+      const id = Math.max(0, ...clients.map(c => c.id || 0)) + 1;
       setClients([...clients, { ...newClient, id }]);
       toast({
         title: "Client added",
@@ -174,7 +192,15 @@ const ClientList = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredClients.length > 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredClients.length > 0 ? (
               filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium">{client.id}</TableCell>
@@ -208,7 +234,7 @@ const ClientList = () => {
             ) : (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No clients found. Try adjusting your search or add new clients.
+                  No clients found. Click "Add Client" to add your first client.
                 </TableCell>
               </TableRow>
             )}

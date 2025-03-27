@@ -84,14 +84,8 @@ const Dashboard = () => {
             callsRemaining: remaining,
             id: campaignData.id
           });
-        }
-        
-        // Fetch dashboard stats
-        // For now, we'll set some initial values based on campaign data
-        if (campaignData) {
+          
           // Calculate the progress percentage
-          const totalCalls = campaignData.total_calls || 0;
-          const answeredCalls = campaignData.answered_calls || 0;
           const progressPercent = totalCalls > 0 ? Math.round((answeredCalls / totalCalls) * 100) : 0;
           
           // Actual stats based on user's data
@@ -106,7 +100,17 @@ const Dashboard = () => {
             completionRate: `${progressPercent}%`,
           });
         } else {
-          // Default stats for new users
+          // For new users, we'll set everything to zero - no sample data
+          setCampaignStatus({
+            active: false,
+            name: "",
+            progress: 0,
+            startTime: "",
+            callsMade: 0,
+            callsRemaining: 0,
+            id: null
+          });
+          
           setStats({
             totalClients: 0,
             activeClients: 0,
