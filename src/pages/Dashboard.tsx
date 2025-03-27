@@ -1,7 +1,7 @@
 
 import React from 'react';
 import Navbar from '@/components/Navbar';
-import CampaignControls from '@/components/CampaignControls';
+import Dashboard from '@/components/Dashboard';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Create a client
@@ -13,7 +13,7 @@ const DashboardPage = () => {
       <div className="min-h-screen bg-background">
         <Navbar />
         <div className="pt-28 pb-16">
-          <CampaignControls />
+          <Dashboard />
         </div>
       </div>
     </QueryClientProvider>
