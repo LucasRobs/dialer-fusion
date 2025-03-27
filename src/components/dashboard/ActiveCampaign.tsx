@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { webhookService } from '@/services/webhookService';
-import { supabase } from '@/integrations/supabase/client';
 
 interface CampaignStatus {
   name: string;
@@ -36,18 +35,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
 
     try {
-      // First update the campaign in the database
-      const { error: dbError } = await supabase
-        .from('campaigns')
-        .update({
-          status: 'stopped',
-          end_date: new Date().toISOString()
-        })
-        .eq('id', campaign.id);
-        
-      if (dbError) throw dbError;
-      
-      // Then trigger the webhook
       await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,

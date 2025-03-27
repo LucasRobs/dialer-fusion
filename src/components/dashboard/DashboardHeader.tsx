@@ -3,16 +3,19 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
-interface DashboardHeaderProps {
-  userName?: string;
-}
-
-const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userName = 'User' }) => {
+const DashboardHeader = () => {
+  const { user } = useAuth();
+  
+  // Get the user's first name from metadata if available
+  const firstName = user?.user_metadata?.firstName || 
+                   (user?.user_metadata?.name ? user.user_metadata.name.split(' ')[0] : 'User');
+  
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
       <div>
-        <h1 className="text-3xl font-bold">Welcome back, {userName}</h1>
+        <h1 className="text-3xl font-bold">Welcome back, {firstName}</h1>
         <p className="text-foreground/70">Here's what's happening with your campaigns today.</p>
       </div>
       <div className="mt-4 md:mt-0 flex gap-3">
