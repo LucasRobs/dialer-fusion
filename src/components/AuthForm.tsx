@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { ArrowRight, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AuthFormProps {
   type: 'login' | 'register';
@@ -21,6 +22,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
   
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signIn, signUp } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +30,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     // Validation
     if (!email || !password) {
       toast({
-        title: "Error",
-        description: "Please fill in all required fields",
+        title: "Erro",
+        description: "Por favor, preencha todos os campos obrigatórios",
         variant: "destructive"
       });
       return;
@@ -38,8 +40,8 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     if (type === 'register') {
       if (password !== confirmPassword) {
         toast({
-          title: "Error",
-          description: "Passwords do not match",
+          title: "Erro",
+          description: "As senhas não coincidem",
           variant: "destructive"
         });
         return;
@@ -48,44 +50,63 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     
     setIsLoading(true);
     
-    // Simulate auth process
-    setTimeout(() => {
-      setIsLoading(false);
-      
+    try {
       if (type === 'login') {
-        // In a real app, we would validate credentials and get a token
+        const { error } = await signIn(email, password);
+        if (error) {
+          throw error;
+        }
         toast({
-          title: "Success",
-          description: "You have been logged in successfully"
+          title: "Sucesso",
+          description: "Login realizado com sucesso"
         });
+        navigate('/dashboard');
       } else {
-        // In a real app, we would create a new account
+        // Register
+        const userData = {
+          name,
+          company
+        };
+        
+        const { error } = await signUp(email, password, userData);
+        if (error) {
+          throw error;
+        }
+        
         toast({
-          title: "Account created",
-          description: "Your account has been created successfully"
+          title: "Conta criada",
+          description: "Sua conta foi criada com sucesso"
         });
+        
+        // Redirect to dashboard or login
+        navigate('/dashboard');
       }
-      
-      // Redirect to dashboard
-      navigate('/dashboard');
-    }, 1500);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Ocorreu um erro durante a autenticação",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="w-full max-w-md mx-auto p-8 glass rounded-xl">
       <h2 className="text-2xl font-bold mb-6 text-center">
-        {type === 'login' ? 'Welcome Back' : 'Create Your Account'}
+        {type === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}
       </h2>
       
       <form onSubmit={handleSubmit} className="space-y-4">
         {type === 'register' && (
           <>
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">Nome completo</Label>
               <Input
                 id="name"
                 type="text"
-                placeholder="Your name"
+                placeholder="Seu nome"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -93,11 +114,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="company">Company Name</Label>
+              <Label htmlFor="company">Nome da empresa</Label>
               <Input
                 id="company"
                 type="text"
-                placeholder="Your company"
+                placeholder="Sua empresa"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 required
@@ -111,7 +132,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           <Input
             id="email"
             type="email"
-            placeholder="your.email@example.com"
+            placeholder="seu.email@exemplo.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -119,7 +140,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
         </div>
         
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">Senha</Label>
           <Input
             id="password"
             type="password"
@@ -132,7 +153,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
         
         {type === 'register' && (
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Label htmlFor="confirmPassword">Confirme a senha</Label>
             <Input
               id="confirmPassword"
               type="password"
@@ -152,7 +173,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : null}
-          {type === 'login' ? 'Sign In' : 'Create Account'}
+          {type === 'login' ? 'Entrar' : 'Criar conta'}
           {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
         </Button>
       </form>
@@ -160,16 +181,16 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
       <div className="mt-6 text-center text-sm">
         {type === 'login' ? (
           <p>
-            Don't have an account?{' '}
+            Não tem uma conta?{' '}
             <Link to="/register" className="text-secondary font-medium hover:underline">
-              Sign up
+              Cadastre-se
             </Link>
           </p>
         ) : (
           <p>
-            Already have an account?{' '}
+            Já tem uma conta?{' '}
             <Link to="/login" className="text-secondary font-medium hover:underline">
-              Sign in
+              Entrar
             </Link>
           </p>
         )}

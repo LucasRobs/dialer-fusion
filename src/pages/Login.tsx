@@ -1,11 +1,21 @@
 
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AuthForm from '@/components/AuthForm';
 import Logo from '@/components/Logo';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
+  
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -14,9 +24,9 @@ const Login = () => {
           <div className="flex justify-center mb-6">
             <Logo size="lg" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Welcome</h1>
+          <h1 className="text-3xl font-bold mb-2">Bem-vindo</h1>
           <p className="text-muted-foreground">
-            Sign in to your account to manage your AI call campaigns.
+            Faça login na sua conta para gerenciar suas campanhas de chamadas com IA.
           </p>
         </div>
         

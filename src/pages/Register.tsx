@@ -1,11 +1,21 @@
 
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import AuthForm from '@/components/AuthForm';
 import Logo from '@/components/Logo';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Register = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
+  
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -14,9 +24,9 @@ const Register = () => {
           <div className="flex justify-center mb-6">
             <Logo size="lg" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Create Your Account</h1>
+          <h1 className="text-3xl font-bold mb-2">Crie sua conta</h1>
           <p className="text-muted-foreground">
-            Sign up to start automating your calls with AI technology.
+            Cadastre-se para começar a automatizar suas chamadas com tecnologia de IA.
           </p>
         </div>
         

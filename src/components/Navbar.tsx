@@ -1,14 +1,20 @@
 
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import Logo from './Logo';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
-  const isAuthenticated = location.pathname.includes('/dashboard') || 
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user, signOut } = useAuth();
+  
+  const isAuthenticated = !!user || location.pathname.includes('/dashboard') || 
                          location.pathname.includes('/clients') || 
                          location.pathname.includes('/training') || 
                          location.pathname.includes('/campaigns') || 
@@ -17,6 +23,23 @@ const Navbar = () => {
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+  
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast({
+        title: "Logout realizado",
+        description: "Você foi desconectado com sucesso"
+      });
+      navigate('/login');
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao desconectar",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -30,12 +53,12 @@ const Navbar = () => {
             <>
               <Link to="/login">
                 <Button variant="outline" size="sm" className="mr-2">
-                  Log In
+                  Entrar
                 </Button>
               </Link>
               <Link to="/register">
                 <Button size="sm">
-                  Sign Up
+                  Cadastre-se
                 </Button>
               </Link>
             </>
@@ -45,22 +68,22 @@ const Navbar = () => {
                 Dashboard
               </Link>
               <Link to="/clients" className="text-foreground/80 hover:text-foreground transition-colors">
-                Clients
+                Clientes
               </Link>
               <Link to="/training" className="text-foreground/80 hover:text-foreground transition-colors">
-                AI Training
+                Treinamento IA
               </Link>
               <Link to="/campaigns" className="text-foreground/80 hover:text-foreground transition-colors">
-                Campaigns
+                Campanhas
               </Link>
               <Link to="/history" className="text-foreground/80 hover:text-foreground transition-colors">
-                History
+                Histórico
               </Link>
               <Link to="/analytics" className="text-foreground/80 hover:text-foreground transition-colors">
-                Analytics
+                Análises
               </Link>
-              <Button variant="outline" size="sm" onClick={() => console.log('Logout')}>
-                Logout
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                Sair
               </Button>
             </>
           )}
@@ -84,10 +107,10 @@ const Navbar = () => {
               <>
                 <div className="flex flex-col space-y-2 pt-2">
                   <Link to="/login" onClick={toggleMenu}>
-                    <Button variant="outline" className="w-full">Log In</Button>
+                    <Button variant="outline" className="w-full">Entrar</Button>
                   </Link>
                   <Link to="/register" onClick={toggleMenu}>
-                    <Button className="w-full">Sign Up</Button>
+                    <Button className="w-full">Cadastre-se</Button>
                   </Link>
                 </div>
               </>
@@ -97,22 +120,22 @@ const Navbar = () => {
                   Dashboard
                 </Link>
                 <Link to="/clients" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  Clients
+                  Clientes
                 </Link>
                 <Link to="/training" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  AI Training
+                  Treinamento IA
                 </Link>
                 <Link to="/campaigns" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  Campaigns
+                  Campanhas
                 </Link>
                 <Link to="/history" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  History
+                  Histórico
                 </Link>
                 <Link to="/analytics" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  Analytics
+                  Análises
                 </Link>
-                <Button variant="outline" className="w-full" onClick={() => console.log('Logout')}>
-                  Logout
+                <Button variant="outline" className="w-full" onClick={handleLogout}>
+                  Sair
                 </Button>
               </>
             )}
