@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,6 +15,9 @@ import { webhookService } from '@/services/webhookService';
 const Dashboard = () => {
   const [activeCampaign, setActiveCampaign] = useState<any | null>(null);
   const [selectedAssistant, setSelectedAssistant] = useState<any | null>(null);
+  
+  // Get the user from AuthContext
+  const { user } = useAuth();
   
   // Buscar campanhas ativas
   const { data: activeCampaigns, isLoading: loadingCampaigns, error: campaignsError, refetch: refetchCampaigns } = useQuery({

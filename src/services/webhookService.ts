@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -28,11 +29,12 @@ export interface AssistantWebhookData {
   user_id?: string;
 }
 
-// Interface para o assistente de IA
+// Interface para o assistente de IA - adicionando created_at
 export interface VapiAssistant {
   id: string;
   name: string;
   assistant_id?: string;
+  created_at?: string;
   date?: string;
   status?: string;
 }
