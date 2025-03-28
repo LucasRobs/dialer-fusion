@@ -155,7 +155,11 @@ export const clientGroupService = {
     }
     
     // Properly extract and transform the nested clients data
-    const clients = data.map(item => item.clients as Client);
+    // Each item.clients is an object, not an array
+    const clients = data.map(item => {
+      if (!item.clients) return null;
+      return item.clients as unknown as Client;
+    }).filter(Boolean) as Client[];
     
     return clients;
   },
@@ -176,7 +180,11 @@ export const clientGroupService = {
     }
     
     // Properly extract and transform the nested groups data
-    const groups = data.map(item => item.client_groups as ClientGroup);
+    // Each item.client_groups is an object, not an array
+    const groups = data.map(item => {
+      if (!item.client_groups) return null;
+      return item.client_groups as unknown as ClientGroup;
+    }).filter(Boolean) as ClientGroup[];
     
     return groups;
   }

@@ -200,11 +200,11 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
                 </SelectTrigger>
                 <SelectContent onClick={(e) => e.stopPropagation()}>
                   {isLoadingGroups ? (
-                    <SelectItem value="loading" disabled>
+                    <SelectItem value="loading">
                       Carregando grupos...
                     </SelectItem>
                   ) : clientGroups.length === 0 ? (
-                    <SelectItem value="no-groups" disabled>
+                    <SelectItem value="no-groups">
                       Nenhum grupo encontrado
                     </SelectItem>
                   ) : (

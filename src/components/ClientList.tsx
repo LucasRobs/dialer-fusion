@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -303,7 +302,7 @@ export default function ClientList() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos os clientes</SelectItem>
+              <SelectItem value="all-clients">Todos os clientes</SelectItem>
               {clientGroups.map((group) => (
                 <SelectItem key={group.id} value={group.id}>
                   {group.name}

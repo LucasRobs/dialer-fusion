@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 
 export type Client = {
@@ -122,7 +123,11 @@ export const clientService = {
     if (error) throw error;
     
     // Properly extract and transform the nested clients data
-    const clients = data.map(item => item.clients as Client);
+    // Each item.clients is an object, not an array
+    const clients = data.map(item => {
+      if (!item.clients) return null;
+      return item.clients as unknown as Client;
+    }).filter(Boolean) as Client[];
     
     return clients;
   },
