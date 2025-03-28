@@ -153,7 +153,8 @@ export const clientGroupService = {
       throw error;
     }
     
-    // Return properly formatted ClientGroup objects
-    return data.map(item => item.client_groups as ClientGroup);
+    // Fix the type mismatch by properly extracting the client_groups property
+    // The issue was that each item.client_groups is already a ClientGroup object
+    return data.map(item => item.client_groups);
   }
 };
