@@ -180,6 +180,57 @@ export type Database = {
         }
         Relationships: []
       }
+      client_group_members: {
+        Row: {
+          client_id: number | null
+          created_at: string
+          group_id: string | null
+          id: number
+        }
+        Insert: {
+          client_id?: number | null
+          created_at?: string
+          group_id?: string | null
+          id?: number
+        }
+        Update: {
+          client_id?: number | null
+          created_at?: string
+          group_id?: string | null
+          id?: number
+        }
+        Relationships: []
+      }
+      client_groups: {
+        Row: {
+          client_count: number | null
+          created_at: string
+          description: string | null
+          group: string | null
+          id: number
+          name: string | null
+          user_id: string | null
+        }
+        Insert: {
+          client_count?: number | null
+          created_at?: string
+          description?: string | null
+          group?: string | null
+          id?: number
+          name?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          client_count?: number | null
+          created_at?: string
+          description?: string | null
+          group?: string | null
+          id?: number
+          name?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           created_at: string
