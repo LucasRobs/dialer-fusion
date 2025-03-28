@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService, VapiAssistant } from '@/services/webhookService';
-import { campaignService } from '@/services/campaignService';
+import { campaignService, Campaign } from '@/services/campaignService';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
@@ -50,6 +51,14 @@ const CampaignControls = () => {
   // Estado para controlar os assistentes personalizados
   const [customAssistants, setCustomAssistants] = useState<VapiAssistant[]>([]);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
+  
+  // Add a query to fetch campaigns
+  const { data: supabaseCampaigns, refetch: refetchCampaigns } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      return await campaignService.getCampaigns();
+    }
+  });
   
   // Carregar assistentes personalizados
   useEffect(() => {

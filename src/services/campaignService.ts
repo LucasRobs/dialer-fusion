@@ -386,6 +386,41 @@ export const campaignService = {
     };
   },
 
+  async getClientDataForCampaign(campaignId: number) {
+    try {
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .select(`
+          client_id,
+          clients (id, name, phone, email),
+          call_timestamp,
+          call_duration,
+          status
+        `)
+        .eq('campaign_id', campaignId);
+      
+      if (error) throw error;
+      
+      // Extract client data from the nested structure
+      const clientData = data.map((item) => {
+        return {
+          id: item.client_id,
+          name: item.clients?.name || 'Desconhecido',
+          phone: item.clients?.phone || '(não informado)',
+          email: item.clients?.email || '(não informado)',
+          call_timestamp: item.call_timestamp,
+          call_duration: item.call_duration || 0,
+          status: item.status || 'pending'
+        };
+      });
+      
+      return clientData;
+    } catch (error) {
+      console.error('Erro ao buscar dados de clientes para a campanha:', error);
+      throw error;
+    }
+  },
+
   async getClientsByIdsForCampaign(clientIds: number[]) {
     try {
       // If there are no client IDs, return an empty array
@@ -469,41 +504,6 @@ export const campaignService = {
       return true;
     } catch (error) {
       console.error('Error exporting campaign clients to CSV:', error);
-      throw error;
-    }
-  },
-
-  async getClientDataForCampaign(campaignId: number) {
-    try {
-      const { data, error } = await supabase
-        .from('campaign_clients')
-        .select(`
-          client_id,
-          clients (id, name, phone, email),
-          call_timestamp,
-          call_duration,
-          status
-        `)
-        .eq('campaign_id', campaignId);
-      
-      if (error) throw error;
-      
-      // Extract client data from the nested structure
-      const clientData = data.map((item) => {
-        return {
-          id: item.client_id,
-          name: item.clients?.name || 'Desconhecido',
-          phone: item.clients?.phone || '(não informado)',
-          email: item.clients?.email || '(não informado)',
-          call_timestamp: item.call_timestamp,
-          call_duration: item.call_duration || 0,
-          status: item.status || 'pending'
-        };
-      });
-      
-      return clientData;
-    } catch (error) {
-      console.error('Erro ao buscar dados de clientes para a campanha:', error);
       throw error;
     }
   }
