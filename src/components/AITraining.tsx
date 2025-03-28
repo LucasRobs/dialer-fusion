@@ -23,6 +23,7 @@ const AITraining = () => {
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [webhookResponse, setWebhookResponse] = useState<any>(null);
 
   // Fetch existing assistants
   const { data: assistants = [], isLoading, isError, refetch } = useQuery({
@@ -31,11 +32,11 @@ const AITraining = () => {
   });
 
   useEffect(() => {
-    // Clear error after 5 seconds
+    // Clear error after 10 seconds
     if (error) {
       const timer = setTimeout(() => {
         setError(null);
-      }, 5000);
+      }, 10000);
       return () => clearTimeout(timer);
     }
   }, [error]);
@@ -43,6 +44,7 @@ const AITraining = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setWebhookResponse(null);
     
     if (!aiName || !firstMessage || !systemPrompt) {
       toast({
@@ -75,6 +77,8 @@ const AITraining = () => {
         system_prompt: systemPrompt
       });
       
+      // Store the webhook response for debugging
+      setWebhookResponse(response);
       console.log("Resposta do webhook:", response);
       
       if (response.success && response.data && response.data.assistant_id) {
@@ -114,11 +118,21 @@ const AITraining = () => {
           });
         }
       } else {
-        const errorMsg = response.data?.error || response.error || 'Erro desconhecido';
+        // Better error handling
+        let errorMsg = 'Erro desconhecido';
+        
+        if (response.error) {
+          errorMsg = response.error;
+        } else if (response.data && response.data.error) {
+          errorMsg = response.data.error;
+        } else if (!response.success) {
+          errorMsg = 'Erro na comunicação com o servidor';
+        }
+        
         setError(`Erro na resposta do webhook: ${errorMsg}`);
         toast({
           title: "Erro ao criar assistente",
-          description: "Ocorreu um erro ao criar seu assistente. Verifique os logs para mais detalhes.",
+          description: errorMsg,
           variant: "destructive"
         });
         console.error('Erro na resposta do webhook:', response);
@@ -182,7 +196,22 @@ const AITraining = () => {
       {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Debug information panel - visible only when there's a webhook response with an error */}
+      {webhookResponse && !webhookResponse.success && (
+        <Alert className="mb-6 bg-orange-50 border-orange-200">
+          <AlertTitle className="text-orange-700">Detalhes técnicos do erro</AlertTitle>
+          <AlertDescription className="text-orange-600">
+            <div className="text-xs font-mono bg-orange-100 p-2 rounded my-2 overflow-auto max-h-40">
+              {JSON.stringify(webhookResponse, null, 2)}
+            </div>
+            <p className="text-sm mt-2">
+              Por favor, entre em contato com o suporte técnico e compartilhe estas informações.
+            </p>
+          </AlertDescription>
         </Alert>
       )}
       

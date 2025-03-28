@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import assistantService from './assistantService';
 
@@ -207,10 +208,42 @@ export const webhookService = {
       let responseData;
       try {
         responseData = await response.json();
+        console.log('Resposta JSON do webhook:', responseData);
+        
+        // Verifica se a resposta contém um assistant_id
+        if (!responseData.assistant_id) {
+          console.error('Resposta não contém assistant_id', responseData);
+          
+          // Se não há erro explícito mas também não há assistant_id, considera como erro
+          const errorMessage = 'Resposta do servidor não contém um ID de assistente válido';
+          await this.logWebhookCall(
+            webhookData, 
+            false, 
+            'create_assistant', 
+            errorMessage,
+            responseData
+          );
+          
+          return { 
+            success: false, 
+            status: response.status,
+            data: responseData,
+            error: errorMessage
+          };
+        }
       } catch (e) {
         console.error('Erro ao analisar resposta JSON:', e);
         const textResponse = await response.text();
         console.log('Resposta em texto:', textResponse);
+        
+        await this.logWebhookCall(
+          webhookData, 
+          false, 
+          'create_assistant', 
+          'Erro ao analisar resposta do servidor',
+          { text_response: textResponse }
+        );
+        
         return { 
           success: false, 
           status: response.status,
@@ -232,7 +265,9 @@ export const webhookService = {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Erro ao criar assistente:', errorMessage);
+      
       await this.logWebhookCall(webhookData, false, 'create_assistant', errorMessage);
+      
       return { 
         success: false, 
         error: errorMessage,
@@ -408,3 +443,5 @@ export const webhookService = {
     }
   }
 };
+
+export default webhookService;
