@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { trainingService } from '@/services/trainingService';
+import { webhookService } from '@/services/webhookService';
 
 const AITraining = () => {
   const { toast } = useToast();
@@ -30,47 +30,30 @@ const AITraining = () => {
     setIsSubmitting(true);
     
     try {
-      // Prepare data for the webhook
-      const trainingData = {
+      // Enviar dados para o webhook via serviço
+      const response = await webhookService.createAssistant({
         assistant_name: aiName,
         first_message: firstMessage,
-        system_prompt: systemPrompt,
-        timestamp: new Date().toISOString()
-      };
-      
-      // Send data to webhook
-      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/createassistant', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(trainingData),
+        system_prompt: systemPrompt
       });
       
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
+      if (response.success && response.data && response.data.assistant_id) {
+        toast({
+          title: "Assistente criado com sucesso",
+          description: "Seu assistente de IA foi criado e configurado.",
+        });
+        
+        // Reset form
+        setAiName('');
+        setFirstMessage('');
+        setSystemPrompt('');
+      } else {
+        toast({
+          title: "Erro ao criar assistente",
+          description: "Ocorreu um erro ao criar seu assistente. Verifique os logs para mais detalhes.",
+          variant: "destructive"
+        });
       }
-      
-      const result = await response.json();
-      
-      // Save the assistant information to localStorage
-      if (result && result.assistant_id) {
-        localStorage.setItem('vapi_assistant', JSON.stringify({
-          id: result.assistant_id,
-          name: aiName
-        }));
-      }
-      
-      toast({
-        title: "Assistente criado com sucesso",
-        description: "Seu assistente de IA foi criado e configurado.",
-      });
-      
-      // Reset form
-      setAiName('');
-      setFirstMessage('');
-      setSystemPrompt('');
-      
     } catch (error) {
       console.error('Error creating assistant:', error);
       toast({

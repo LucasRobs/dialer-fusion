@@ -29,6 +29,13 @@ export interface AssistantWebhookData {
   additional_data?: Record<string, any>;
 }
 
+// Interface para o assistente de IA
+export interface VapiAssistant {
+  id: string;
+  name: string;
+  date?: string;
+}
+
 // Interface para o log do webhook
 interface WebhookLog {
   webhook_url: string;
@@ -41,6 +48,48 @@ interface WebhookLog {
 
 // Serviço para gerenciar webhooks
 export const webhookService = {
+  // Função para buscar todos os assistentes do usuário
+  getAllAssistants(): VapiAssistant[] {
+    try {
+      const storedAssistantsStr = localStorage.getItem('vapi_assistants');
+      if (storedAssistantsStr) {
+        return JSON.parse(storedAssistantsStr);
+      }
+    } catch (error) {
+      console.error('Error parsing assistants from localStorage:', error);
+    }
+    
+    // Default assistant sempre disponível
+    return [{
+      id: VAPI_ASSISTANT_ID,
+      name: 'Default Vapi Assistant',
+      date: new Date().toISOString()
+    }];
+  },
+  
+  // Função para salvar um novo assistente
+  saveAssistant(assistant: VapiAssistant) {
+    try {
+      const currentAssistants = this.getAllAssistants();
+      
+      // Verifica se o assistente já existe
+      const exists = currentAssistants.some(a => a.id === assistant.id);
+      
+      if (!exists) {
+        // Adiciona o novo assistente à lista
+        const updatedAssistants = [...currentAssistants, {
+          ...assistant,
+          date: new Date().toISOString()
+        }];
+        
+        // Salva a lista atualizada
+        localStorage.setItem('vapi_assistants', JSON.stringify(updatedAssistants));
+      }
+    } catch (error) {
+      console.error('Error saving assistant to localStorage:', error);
+    }
+  },
+  
   // Função para disparar o webhook
   async triggerCallWebhook(data: Omit<WebhookData, 'timestamp'>) {
     console.log('Disparando webhook para ligação:', data);
@@ -56,19 +105,24 @@ export const webhookService = {
       webhookData.additional_data = {};
     }
     
-    // Check if we have a custom assistant ID in localStorage
-    const storedAssistant = localStorage.getItem('vapi_assistant');
+    // Check if we have a custom assistant ID specified
     let assistantId = VAPI_ASSISTANT_ID;
     
-    if (storedAssistant) {
+    // Se o additional_data já tiver um assistantId, use-o
+    if (webhookData.additional_data.vapi_assistant_id) {
+      assistantId = webhookData.additional_data.vapi_assistant_id;
+      console.log('Using provided Vapi assistant ID:', assistantId);
+    } 
+    // Se não tiver, verifica se há um assistente selecionado no localStorage
+    else if (localStorage.getItem('selected_assistant')) {
       try {
-        const assistantData = JSON.parse(storedAssistant);
-        if (assistantData && assistantData.id) {
-          assistantId = assistantData.id;
-          console.log('Using custom Vapi assistant ID:', assistantId);
+        const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
+        if (selectedAssistant && selectedAssistant.id) {
+          assistantId = selectedAssistant.id;
+          console.log('Using selected Vapi assistant ID:', assistantId);
         }
       } catch (e) {
-        console.error('Error parsing stored assistant data:', e);
+        console.error('Error parsing selected assistant data:', e);
       }
     }
     
@@ -124,6 +178,22 @@ export const webhookService = {
       // Registra a chamada no histórico
       await this.logWebhookCall(webhookData, response.ok, 'create_assistant');
       
+      // Se a criação foi bem-sucedida e temos um ID no retorno, salva o assistente
+      if (response.ok && responseData && responseData.assistant_id) {
+        // Salva no localStorage para uso posterior
+        const newAssistant: VapiAssistant = {
+          id: responseData.assistant_id,
+          name: data.assistant_name,
+          date: new Date().toISOString()
+        };
+        
+        // Salva como assistente atual
+        localStorage.setItem('selected_assistant', JSON.stringify(newAssistant));
+        
+        // Adiciona à lista de assistentes
+        this.saveAssistant(newAssistant);
+      }
+      
       return { 
         success: response.ok, 
         status: response.status,
@@ -133,6 +203,25 @@ export const webhookService = {
       console.error('Erro ao criar assistente:', error);
       await this.logWebhookCall(webhookData, false, 'create_assistant', error);
       return { success: false, error };
+    }
+  },
+  
+  // Função para selecionar um assistente para uso
+  selectAssistant(assistantId: string) {
+    try {
+      const assistants = this.getAllAssistants();
+      const assistant = assistants.find(a => a.id === assistantId);
+      
+      if (assistant) {
+        localStorage.setItem('selected_assistant', JSON.stringify(assistant));
+        console.log('Assistente selecionado:', assistant.name);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Erro ao selecionar assistente:', error);
+      return false;
     }
   },
   

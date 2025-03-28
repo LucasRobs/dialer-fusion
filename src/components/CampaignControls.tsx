@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -31,9 +30,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
-import { webhookService } from '@/services/webhookService';
+import { webhookService, VapiAssistant } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 const CampaignControls = () => {
   const [campaigns, setCampaigns] = useState([]);
@@ -47,37 +47,59 @@ const CampaignControls = () => {
   
   const { toast } = useToast();
   
+  // Estado para controlar os assistentes personalizados
+  const [customAssistants, setCustomAssistants] = useState<VapiAssistant[]>([]);
+  const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
+  
+  // Carregar assistentes personalizados
+  useEffect(() => {
+    const assistants = webhookService.getAllAssistants();
+    setCustomAssistants(assistants);
+    
+    // Verificar se há um assistente selecionado no localStorage
+    try {
+      const storedAssistant = localStorage.getItem('selected_assistant');
+      if (storedAssistant) {
+        const assistant = JSON.parse(storedAssistant);
+        setSelectedAssistant(assistant);
+      }
+    } catch (error) {
+      console.error('Error loading selected assistant:', error);
+    }
+  }, []);
+  
   // Fetch real client groups from supabase
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
-        // Get clients from supabase
-        const { data, error } = await supabase
+        // Get real count of clients per status
+        const { data: statusGroups } = await supabase
           .from('clients')
-          .select('status, count')
-          .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+          .select('status, count(*)')
           .group('status');
-        
-        if (error) throw error;
-        
-        // Get all clients count
+          
+        // Get total count
         const { count: totalCount } = await supabase
           .from('clients')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
-        
-        // Format client groups
-        const groups = [
-          { id: 'all', name: 'All Clients', count: totalCount || 0 },
-          ...data.map((group, index) => ({
-            id: index + 1,
-            name: `${group.status} Clients`,
-            count: group.count
-          }))
+          .select('*', { count: 'exact', head: true });
+          
+        // Format for UI
+        const formattedGroups = [
+          { id: 'all', name: 'All Clients', count: totalCount || 0 }
         ];
         
-        return groups;
+        if (statusGroups) {
+          statusGroups.forEach((group) => {
+            formattedGroups.push({
+              id: group.status || 'undefined',
+              name: `${group.status || 'Undefined'} Clients`,
+              count: group.count || 0
+            });
+          });
+        }
+        
+        return formattedGroups;
       } catch (error) {
         console.error('Error fetching client groups:', error);
         return [
@@ -87,32 +109,15 @@ const CampaignControls = () => {
     }
   });
   
+  // Using custom assistants instead of fixed profiles
   const { data: aiProfiles = [] } = useQuery({
-    queryKey: ['aiProfiles'],
-    queryFn: async () => {
-      return [
-        { id: 1, name: 'Sales Assistant', description: 'Optimized for sales calls and conversions' },
-        { id: 2, name: 'Customer Support', description: 'Focused on helping customers with issues' },
-        { id: 3, name: 'Appointment Setter', description: 'Specialized in booking appointments' },
-        { id: 4, name: 'Survey Collector', description: 'Designed to collect feedback and survey data' },
-      ];
-    }
-  });
-  
-  const { data: supabaseCampaigns, refetch: refetchCampaigns } = useQuery({
-    queryKey: ['campaigns'],
-    queryFn: async () => {
-      try {
-        return await campaignService.getCampaigns();
-      } catch (error) {
-        console.error('Error fetching campaigns:', error);
-        toast({
-          title: "Error fetching campaigns",
-          description: "Failed to load campaigns from database.",
-          variant: "destructive"
-        });
-        return [];
-      }
+    queryKey: ['aiProfiles', customAssistants.length],
+    queryFn: () => {
+      return customAssistants.map(assistant => ({
+        id: assistant.id,
+        name: assistant.name,
+        description: `Assistant created on ${assistant.date ? new Date(assistant.date).toLocaleDateString() : 'unknown date'}`
+      }));
     }
   });
   
@@ -153,62 +158,45 @@ const CampaignControls = () => {
           start_date: new Date().toISOString()
         });
         
+        // Determinar qual assistente de IA usar
+        const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
+        let vapiAssistantId = '';
+        
+        if (assistantProfile) {
+          vapiAssistantId = assistantProfile.id;
+          // Também seleciona o assistente para uso geral
+          webhookService.selectAssistant(vapiAssistantId);
+        } else if (selectedAssistant) {
+          vapiAssistantId = selectedAssistant.id;
+        }
+        
         await webhookService.triggerCallWebhook({
           action: 'start_campaign',
           campaign_id: campaign.id,
           additional_data: {
             campaign_name: campaign.name,
             client_count: campaign.clientCount,
-            ai_profile: campaign.aiProfile,
-            vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
+            ai_profile: assistantProfile ? assistantProfile.name : 'Default Assistant',
+            vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
+            vapi_assistant_id: vapiAssistantId
           }
         });
         
-        // Get all clients associated with this campaign
-        const clients = await campaignService.getClientDataForCampaign(campaign.id);
+        // Buscar os dados de todos os clientes para esta campanha
+        const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
         
-        if (clients && clients.length > 0) {
-          // Send each client to webhook individually
-          let successCount = 0;
-          let failCount = 0;
-          
-          for (const client of clients) {
-            try {
-              const result = await webhookService.triggerCallWebhook({
-                action: 'start_call',
-                campaign_id: campaign.id,
-                client_id: client.id,
-                client_name: client.name,
-                client_phone: client.phone,
-                additional_data: {
-                  vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
-                  call_type: 'campaign_call'
-                }
-              });
-              
-              if (result.success) {
-                successCount++;
-              } else {
-                failCount++;
-              }
-            } catch (err) {
-              console.error(`Error sending webhook for client ${client.id}:`, err);
-              failCount++;
-            }
-          }
-          
+        if (result.success) {
           toast({
             title: "Campanha Iniciada",
-            description: `Campanha iniciada com ${successCount} ligações enviadas (${failCount} falhas).`,
+            description: `${result.successfulCalls} ligações foram enviadas com sucesso (${result.failedCalls} falhas).`,
           });
         } else {
           toast({
-            title: "Campanha Iniciada",
-            description: "Campanha iniciada, mas não há clientes associados.",
+            title: "Campanha Iniciada Parcialmente",
+            description: "Alguns clientes não puderam ser contactados. Verifique os logs.",
+            variant: "destructive"
           });
         }
-        
-        refetchCampaigns();
       }
     } catch (error) {
       console.error('Erro ao iniciar campanha:', error);
@@ -330,8 +318,13 @@ const CampaignControls = () => {
     const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
     const clientCount = selectedGroup ? selectedGroup.count : 0;
     
-    const selectedProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
-    const aiProfileName = selectedProfile ? selectedProfile.name : '';
+    // Seleciona o assistente IA e obtém seus detalhes
+    const selectedAssistant = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
+    
+    if (selectedAssistant) {
+      // Salva o assistente selecionado para uso posterior
+      webhookService.selectAssistant(selectedAssistant.id);
+    }
     
     try {
       const createdCampaign = await campaignService.createCampaign({
@@ -349,9 +342,10 @@ const CampaignControls = () => {
         additional_data: {
           campaign_name: createdCampaign.name,
           client_count: clientCount,
-          ai_profile: aiProfileName,
+          ai_profile: selectedAssistant ? selectedAssistant.name : 'Default Assistant',
           client_group: selectedGroup?.name,
-          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
+          vapi_assistant_id: selectedAssistant ? selectedAssistant.id : undefined
         }
       });
       
@@ -366,7 +360,8 @@ const CampaignControls = () => {
         aiProfile: '',
       });
       
-      refetchCampaigns();
+      // Recarregar campanhas
+      await refetchCampaigns();
     } catch (error) {
       console.error('Erro ao criar campanha:', error);
       
@@ -555,13 +550,13 @@ const CampaignControls = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="aiProfile">Select AI Profile</Label>
+                  <Label htmlFor="aiProfile">Select AI Assistant</Label>
                   <Select
                     value={newCampaign.aiProfile}
                     onValueChange={(value) => setNewCampaign({...newCampaign, aiProfile: value})}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select an AI profile" />
+                      <SelectValue placeholder="Select an AI assistant" />
                     </SelectTrigger>
                     <SelectContent>
                       {aiProfiles.map((profile) => (
