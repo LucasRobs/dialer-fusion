@@ -140,7 +140,7 @@ export const clientGroupService = {
   },
   
   // Get all groups a client belongs to
-  getClientGroups: async (clientId: number): Promise<ClientGroup[]> => {
+  getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
     const { data, error } = await supabase
       .from('client_group_members')
       .select(`
@@ -153,6 +153,7 @@ export const clientGroupService = {
       throw error;
     }
     
-    return data.map(item => item.client_groups);
+    // Return properly formatted ClientGroup objects
+    return data.map(item => item.client_groups as ClientGroup);
   }
 };

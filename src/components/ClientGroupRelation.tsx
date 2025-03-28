@@ -27,10 +27,16 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { ClientGroup } from './ClientGroupManager';
+import { ClientGroup, clientGroupService } from '../services/clientGroupService';
 
 interface ClientGroupRelationProps {
   client: any;
+}
+
+// Define a type for the membership to ensure proper typing
+interface GroupMembership {
+  groupId: string;
+  groupName: string;
 }
 
 const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
@@ -75,13 +81,16 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           .eq('client_id', client.id);
           
         if (error) throw error;
-        return data.map(item => ({
+        
+        // Properly map and type the response
+        return data.map((item: any) => ({
           groupId: item.group_id,
           groupName: item.client_groups.name
-        }));
+        })) as GroupMembership[];
+        
       } catch (error) {
         console.error('Error fetching client group memberships:', error);
-        return [];
+        return [] as GroupMembership[];
       }
     },
     enabled: !!client.id
