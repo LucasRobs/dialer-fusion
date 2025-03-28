@@ -112,9 +112,6 @@ export const clientService = {
 
   // Buscar clientes por grupo
   async getClientsByGroupId(groupId: string) {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-    
     const { data, error } = await supabase
       .from('client_group_members')
       .select(`
@@ -125,8 +122,8 @@ export const clientService = {
     
     if (error) throw error;
     
-    // Extrair os clientes do resultado aninhado
-    const clients = data.map(item => item.clients).filter(Boolean);
+    // Extract clients from the nested structure
+    const clients = data.map(item => item.clients);
     
     return clients as Client[];
   },

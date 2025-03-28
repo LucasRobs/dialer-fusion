@@ -154,7 +154,7 @@ export const clientGroupService = {
       throw error;
     }
     
-    // Extrair os clientes do resultado aninhado
+    // Extract clients from the nested structure
     return data.map(item => item.clients) as Client[];
   },
   
