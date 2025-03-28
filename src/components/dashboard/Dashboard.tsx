@@ -79,7 +79,7 @@ const Dashboard = () => {
     if (activeCampaign) {
       try {
         await campaignService.updateCampaign(activeCampaign.id, {
-          status: 'stopped'
+          status: 'stopped' as any // Type assertion to handle the 'stopped' status
         });
         setActiveCampaign(null);
         refetchCampaigns();

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -49,10 +48,8 @@ const CampaignControls = () => {
   
   const { toast } = useToast();
   
-  // Estado para controlar os assistentes personalizados
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   
-  // Add a query to fetch campaigns
   const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
     queryFn: async () => {
@@ -60,23 +57,19 @@ const CampaignControls = () => {
     }
   });
   
-  // Fetch assistants from the database
   const { data: customAssistants = [], refetch: refetchAssistants } = useQuery({
     queryKey: ['assistants'],
     queryFn: webhookService.getAllAssistants
   });
   
-  // Carregar assistentes personalizados
   useEffect(() => {
     if (customAssistants.length > 0) {
-      // Verificar se há um assistente selecionado no localStorage
       try {
         const storedAssistant = localStorage.getItem('selected_assistant');
         if (storedAssistant) {
           const assistant = JSON.parse(storedAssistant);
           setSelectedAssistant(assistant);
         } else if (customAssistants.length > 0) {
-          // Selecionar o primeiro assistente por padrão
           setSelectedAssistant(customAssistants[0]);
           localStorage.setItem('selected_assistant', JSON.stringify(customAssistants[0]));
         }
@@ -86,22 +79,18 @@ const CampaignControls = () => {
     }
   }, [customAssistants]);
   
-  // Fetch real client groups from supabase but without using group()
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
-        // Get total count
         const { count: totalCount } = await supabase
           .from('clients')
           .select('*', { count: 'exact', head: true });
         
-        // Get counts by status - we need to fetch all clients and count manually
         const { data: clientsData } = await supabase
           .from('clients')
           .select('status');
         
-        // Count clients by status manually
         const statusCounts = {};
         if (clientsData) {
           clientsData.forEach(client => {
@@ -110,12 +99,10 @@ const CampaignControls = () => {
           });
         }
         
-        // Format for UI
         const formattedGroups = [
           { id: 'all', name: 'All Clients', count: totalCount || 0 }
         ];
         
-        // Add status groups
         Object.keys(statusCounts).forEach(status => {
           formattedGroups.push({
             id: status,
@@ -134,7 +121,6 @@ const CampaignControls = () => {
     }
   });
   
-  // Using custom assistants instead of fixed profiles
   const { data: aiProfiles = [] } = useQuery({
     queryKey: ['aiProfiles', customAssistants.length],
     queryFn: () => {
@@ -183,13 +169,11 @@ const CampaignControls = () => {
           start_date: new Date().toISOString()
         });
         
-        // Determinar qual assistente de IA usar
         const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
         let vapiAssistantId = '';
         
         if (assistantProfile) {
           vapiAssistantId = assistantProfile.id;
-          // Também seleciona o assistente para uso geral
           webhookService.selectAssistant(vapiAssistantId);
         } else if (selectedAssistant) {
           vapiAssistantId = selectedAssistant.id;
@@ -207,7 +191,6 @@ const CampaignControls = () => {
           }
         });
         
-        // Buscar os dados de todos os clientes para esta campanha
         const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
         
         if (result.success) {
@@ -343,11 +326,9 @@ const CampaignControls = () => {
     const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
     const clientCount = selectedGroup ? selectedGroup.count : 0;
     
-    // Seleciona o assistente IA e obtém seus detalhes
     const selectedAssistant = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
     
     if (selectedAssistant) {
-      // Salva o assistente selecionado para uso posterior
       webhookService.selectAssistant(selectedAssistant.id);
     }
     
@@ -355,7 +336,7 @@ const CampaignControls = () => {
       const createdCampaign = await campaignService.createCampaign({
         name: newCampaign.name,
         status: 'draft',
-        total_calls: clientCount,
+        total_calls: clientCount as any,
         answered_calls: 0,
         start_date: null,
         end_date: null
@@ -385,7 +366,6 @@ const CampaignControls = () => {
         aiProfile: '',
       });
       
-      // Recarregar campanhas
       await refetchCampaigns();
     } catch (error) {
       console.error('Erro ao criar campanha:', error);

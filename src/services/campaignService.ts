@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import { webhookService } from './webhookService';
 
@@ -7,11 +6,12 @@ export interface Campaign {
   id: number;
   name: string;
   description?: string;
-  start_date: string;
-  end_date?: string;
-  status: 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled';
+  start_date: string | null;
+  end_date?: string | null;
+  status: 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled' | 'stopped';
   client_count?: number;
-  call_count?: number;
+  total_calls?: number;
+  answered_calls?: number;
   success_rate?: number;
   created_at: string;
   updated_at: string;
@@ -73,6 +73,27 @@ const campaignService = {
     }
   },
 
+  // Função para obter campanhas ativas
+  async getActiveCampaigns(): Promise<Campaign[]> {
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('status', 'active')
+        .order('start_date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching active campaigns:', error);
+        throw new Error('Failed to fetch active campaigns');
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error in getActiveCampaigns:', error);
+      throw error;
+    }
+  },
+
   // Função para obter uma campanha específica por ID
   async getCampaignById(id: number): Promise<Campaign | null> {
     try {
@@ -95,7 +116,7 @@ const campaignService = {
   },
 
   // Função para criar uma nova campanha
-  async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at' | 'updated_at'>): Promise<Campaign> {
+  async createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
     try {
       // Verifica se status está definido, se não, define como "draft"
       if (!campaign.status) {
@@ -322,8 +343,19 @@ const campaignService = {
   },
 
   // Função para obter estatísticas da campanha
-  async getCampaignStats(campaignId: number): Promise<any> {
+  async getCampaignStats(campaignId: number = 0): Promise<any> {
     try {
+      // Se nenhum ID específico for fornecido, retorna estatísticas gerais
+      if (campaignId === 0) {
+        // Dados simulados para o dashboard
+        return {
+          recentCalls: 342,
+          avgCallDuration: '2:45',
+          callsToday: 124,
+          completionRate: '87%'
+        };
+      }
+      
       // Obtem os clientes da campanha com seus status
       const { data: clients, error } = await supabase
         .from('campaign_clients')
@@ -441,6 +473,44 @@ const campaignService = {
       console.error('Error in getNextActiveCampaign:', error);
       throw error;
     }
+  },
+
+  // Função para obter dados de análise para o dashboard
+  async getAnalyticsData(): Promise<any> {
+    try {
+      // Dados simulados para o dashboard de analytics
+      return {
+        totalCalls: 1258,
+        callsChangePercentage: 12,
+        avgCallDuration: '3:24',
+        durationChangePercentage: 5,
+        conversionRate: 32,
+        conversionChangePercentage: -2,
+        callsData: [
+          { name: 'Jan', calls: 65, cost: 400 },
+          { name: 'Feb', calls: 78, cost: 380 },
+          { name: 'Mar', calls: 90, cost: 430 },
+          { name: 'Apr', calls: 81, cost: 400 },
+          { name: 'May', calls: 95, cost: 450 },
+          { name: 'Jun', calls: 110, cost: 500 },
+        ],
+        campaignData: [
+          { name: 'Summer Promotion', value: 35 },
+          { name: 'Customer Feedback', value: 25 },
+          { name: 'New Product Launch', value: 20 },
+          { name: 'Follow-up Calls', value: 15 },
+          { name: 'Service Renewal', value: 5 },
+        ]
+      };
+    } catch (error) {
+      console.error('Error in getAnalyticsData:', error);
+      throw error;
+    }
+  },
+  
+  // Método para obter todas as campanhas (alias para getAllCampaigns para compatibilidade)
+  async getCampaigns(): Promise<Campaign[]> {
+    return this.getAllCampaigns();
   }
 };
 
