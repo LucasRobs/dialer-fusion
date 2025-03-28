@@ -31,7 +31,7 @@ const AITraining = () => {
   });
 
   useEffect(() => {
-    // Limpar o erro após 5 segundos
+    // Clear error after 5 seconds
     if (error) {
       const timer = setTimeout(() => {
         setError(null);
@@ -68,7 +68,7 @@ const AITraining = () => {
     try {
       console.log("Iniciando criação do assistente:", aiName);
       
-      // Enviar dados para o webhook via serviço
+      // Send data to webhook service
       const response = await webhookService.createAssistant({
         assistant_name: aiName,
         first_message: firstMessage,
@@ -80,16 +80,16 @@ const AITraining = () => {
       if (response.success && response.data && response.data.assistant_id) {
         console.log("Assistant ID recebido:", response.data.assistant_id);
         
-        // Salvar assistente no banco de dados
-        const savedAssistant = await assistantService.saveAssistant({
-          name: aiName,
-          assistant_id: response.data.assistant_id,
-          system_prompt: systemPrompt,
-          first_message: firstMessage,
-          user_id: user.id
-        });
-        
-        if (savedAssistant) {
+        try {
+          // Save assistant to database
+          const savedAssistant = await assistantService.saveAssistant({
+            name: aiName,
+            assistant_id: response.data.assistant_id,
+            system_prompt: systemPrompt,
+            first_message: firstMessage,
+            user_id: user.id
+          });
+          
           console.log("Assistente salvo com sucesso:", savedAssistant);
           
           toast({
@@ -104,16 +104,18 @@ const AITraining = () => {
           
           // Refresh assistants list
           queryClient.invalidateQueries({ queryKey: ['assistants'] });
-        } else {
-          setError("O assistente foi criado na API, mas não foi possível salvá-lo no banco de dados.");
+        } catch (saveError) {
+          console.error("Erro ao salvar assistente:", saveError);
+          setError(`Erro ao salvar assistente: ${saveError instanceof Error ? saveError.message : 'Erro desconhecido'}`);
           toast({
             title: "Erro ao salvar assistente",
-            description: "O assistente foi criado na Vapi, mas não foi possível salvá-lo no banco de dados.",
+            description: "O assistente foi criado na API, mas não foi possível salvá-lo no banco de dados.",
             variant: "destructive"
           });
         }
       } else {
-        setError(`Erro na resposta do webhook: ${JSON.stringify(response.data || {})}`);
+        const errorMsg = response.data?.error || response.error || 'Erro desconhecido';
+        setError(`Erro na resposta do webhook: ${errorMsg}`);
         toast({
           title: "Erro ao criar assistente",
           description: "Ocorreu um erro ao criar seu assistente. Verifique os logs para mais detalhes.",

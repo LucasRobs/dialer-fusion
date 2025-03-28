@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService from './assistantService';
 
@@ -102,8 +101,8 @@ export const webhookService = {
     else if (localStorage.getItem('selected_assistant')) {
       try {
         const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
-        if (selectedAssistant && selectedAssistant.id) {
-          assistantId = selectedAssistant.id;
+        if (selectedAssistant && selectedAssistant.assistant_id) {
+          assistantId = selectedAssistant.assistant_id;
           console.log('Using selected Vapi assistant ID:', assistantId);
         }
       } catch (e) {
@@ -171,8 +170,24 @@ export const webhookService = {
       
       if (!response.ok) {
         console.error('Erro HTTP ao criar assistente:', response.status, response.statusText);
-        const errorText = await response.text();
-        console.error('Resposta de erro:', errorText);
+        let errorText = '';
+        try {
+          const errorResponse = await response.text();
+          console.error('Resposta de erro:', errorResponse);
+          errorText = errorResponse;
+          
+          // Tenta analisar JSON se possível
+          try {
+            const errorJson = JSON.parse(errorResponse);
+            if (errorJson.error) {
+              errorText = errorJson.error;
+            }
+          } catch {
+            // Se não for JSON, usa o texto como está
+          }
+        } catch (e) {
+          errorText = `${response.status} ${response.statusText}`;
+        }
         
         await this.logWebhookCall(
           webhookData, 
@@ -184,11 +199,26 @@ export const webhookService = {
         return { 
           success: false, 
           status: response.status,
-          data: { error: errorText }
+          data: { error: errorText },
+          error: errorText
         };
       }
       
-      const responseData = await response.json();
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (e) {
+        console.error('Erro ao analisar resposta JSON:', e);
+        const textResponse = await response.text();
+        console.log('Resposta em texto:', textResponse);
+        return { 
+          success: false, 
+          status: response.status,
+          data: null,
+          error: 'Erro ao analisar resposta do servidor'
+        };
+      }
+      
       console.log('Resposta do webhook de assistente:', responseData);
       
       // Registra a chamada no histórico

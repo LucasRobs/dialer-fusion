@@ -40,7 +40,7 @@ const assistantService = {
       
       if (!assistant.user_id) {
         console.error('Error saving assistant: user_id is required');
-        return null;
+        throw new Error('User ID is required to save an assistant');
       }
       
       const { data, error } = await supabase
@@ -51,14 +51,14 @@ const assistantService = {
       
       if (error) {
         console.error('Error saving assistant to Supabase:', error);
-        return null;
+        throw new Error(`Failed to save assistant: ${error.message}`);
       }
       
       console.log('Successfully saved assistant:', data.name, 'with ID:', data.id);
       return data;
     } catch (error) {
       console.error('Exception in saveAssistant:', error);
-      return null;
+      throw error; // Re-throw to allow proper handling in the UI
     }
   },
   
