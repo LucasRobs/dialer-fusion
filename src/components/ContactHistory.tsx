@@ -1,389 +1,324 @@
+
 import React, { useState, useEffect } from 'react';
-import { useToast } from "@/hooks/use-toast";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash } from "lucide-react";
-import { webhookService } from '@/services/webhookService';
-import assistantService, { Assistant } from '@/services/assistantService';
+import { 
+  Search, 
+  ChevronDown, 
+  Phone, 
+  BarChart, 
+  UserCheck, 
+  Clock, 
+  CheckCircle2,
+  XCircle, 
+  AlertCircle, 
+  Calendar, 
+  FileText
+} from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent
+} from '@/components/ui/card';
+import { useQuery } from '@tanstack/react-query';
+import campaignService from '@/services/campaignService';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-const AITraining = () => {
-  const { toast } = useToast();
+const ContactHistory = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [selectedCall, setSelectedCall] = useState(null);
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const [aiName, setAiName] = useState('');
-  const [firstMessage, setFirstMessage] = useState('');
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [webhookResponse, setWebhookResponse] = useState<any>(null);
-  const [isAsyncProcess, setIsAsyncProcess] = useState(false);
 
-  const { data: assistants = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['assistants'],
-    queryFn: assistantService.getAllAssistants
+  // Fetch call history data
+  const { data: callHistory, isLoading, error, refetch } = useQuery({
+    queryKey: ['callHistory'],
+    queryFn: async () => {
+      try {
+        return await campaignService.getCallHistory();
+      } catch (error) {
+        console.error("Error fetching call history:", error);
+        return [];
+      }
+    }
   });
 
   useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        setError(null);
-      }, 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+    refetch();
+  }, [user, refetch]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setWebhookResponse(null);
-    setIsAsyncProcess(false);
-    
-    if (!aiName || !firstMessage || !systemPrompt) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos obrigatórios.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (!user?.id) {
-      setError("Usuário não autenticado. Por favor, faça login novamente.");
-      toast({
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para criar um assistente.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsSubmitting(true);
-    
-    try {
-      console.log("Iniciando criação do assistente:", aiName);
-      
-      const response = await webhookService.createAssistant({
-        assistant_name: aiName,
-        first_message: firstMessage,
-        system_prompt: systemPrompt
-      });
-      
-      setWebhookResponse(response);
-      console.log("Resposta do webhook:", response);
-      
-      if (response.success) {
-        if (response.data && (response.data.isAsync || 
-            (response.data.message && response.data.message.includes("started")))) {
-          setIsAsyncProcess(true);
-          
-          try {
-            const tempAssistantId = response.data.assistant_id || `pending_${Date.now()}`;
-            
-            // Salva o assistente com status "pending"
-            const savedAssistant = await assistantService.saveAssistant({
-              name: aiName,
-              assistant_id: tempAssistantId,
-              system_prompt: systemPrompt,
-              first_message: firstMessage,
-              user_id: user.id,
-              status: 'pending'
-            });
-            
-            console.log("Assistente temporário salvo com sucesso:", savedAssistant);
-            
-            toast({
-              title: "Assistente em processamento",
-              description: "Seu assistente foi enviado para processamento e será disponibilizado em breve.",
-            });
-            
-            setAiName('');
-            setFirstMessage('');
-            setSystemPrompt('');
-            
-            queryClient.invalidateQueries({ queryKey: ['assistants'] });
-          } catch (saveError) {
-            console.error("Erro ao salvar assistente temporário:", saveError);
-            setError(`Não foi possível registrar o assistente localmente: ${saveError instanceof Error ? saveError.message : 'Erro desconhecido'}`);
-            toast({
-              title: "Erro ao salvar localmente",
-              description: "O assistente está sendo processado, mas não foi possível registrá-lo no banco de dados.",
-              variant: "destructive"
-            });
-          }
-        } else if (response.data && response.data.assistant_id) {
-          console.log("Assistant ID recebido:", response.data.assistant_id);
-          
-          try {
-            const savedAssistant = await assistantService.saveAssistant({
-              name: aiName,
-              assistant_id: response.data.assistant_id,
-              system_prompt: systemPrompt,
-              first_message: firstMessage,
-              user_id: user.id,
-              status: 'active'
-            });
-            
-            console.log("Assistente salvo com sucesso:", savedAssistant);
-            
-            toast({
-              title: "Assistente criado com sucesso",
-              description: "Seu assistente de IA foi criado e configurado.",
-            });
-            
-            setAiName('');
-            setFirstMessage('');
-            setSystemPrompt('');
-            
-            queryClient.invalidateQueries({ queryKey: ['assistants'] });
-          } catch (saveError) {
-            console.error("Erro ao salvar assistente:", saveError);
-            setError(`Erro ao salvar assistente: ${saveError instanceof Error ? saveError.message : 'Erro desconhecido'}`);
-            toast({
-              title: "Erro ao salvar assistente",
-              description: "O assistente foi criado na API, mas não foi possível salvá-lo no banco de dados.",
-              variant: "destructive"
-            });
-          }
-        } else {
-          let errorMsg = 'Erro desconhecido';
-          
-          if (response.error) {
-            errorMsg = response.error;
-          } else if (response.data && response.data.error) {
-            errorMsg = response.data.error;
-          } else if (!response.success) {
-            errorMsg = 'Erro na comunicação com o servidor';
-          }
-          
-          setError(`Erro na resposta do webhook: ${errorMsg}`);
-          toast({
-            title: "Erro ao criar assistente",
-            description: errorMsg,
-            variant: "destructive"
-          });
-          console.error('Erro na resposta do webhook:', response);
-        }
-      } else {
-        let errorMsg = 'Erro desconhecido';
-        
-        if (response.error) {
-          errorMsg = response.error;
-        } else if (response.data && response.data.error) {
-          errorMsg = response.data.error;
-        } else if (!response.success) {
-          errorMsg = 'Erro na comunicação com o servidor';
-        }
-        
-        setError(`Erro na resposta do webhook: ${errorMsg}`);
-        toast({
-          title: "Erro ao criar assistente",
-          description: errorMsg,
-          variant: "destructive"
-        });
-        console.error('Erro na resposta do webhook:', response);
-      }
-    } catch (error) {
-      console.error('Error creating assistant:', error);
-      setError(`Erro ao criar assistente: ${error instanceof Error ? error.message : String(error)}`);
-      toast({
-        title: "Erro ao criar assistente",
-        description: "Ocorreu um erro ao criar seu assistente. Por favor, tente novamente.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  // Filtered call history based on search query and status filter
+  const filteredCallHistory = React.useMemo(() => {
+    if (!callHistory) return [];
 
-  const handleDelete = async (assistant: Assistant) => {
-    if (!assistant.assistant_id) return;
-    
-    setIsDeleting(assistant.assistant_id);
-    try {
-      const deleted = await assistantService.deleteAssistant(assistant.assistant_id);
-      
-      if (deleted) {
-        toast({
-          title: "Assistente excluído",
-          description: `O assistente "${assistant.name}" foi excluído com sucesso.`,
-        });
-        
-        queryClient.invalidateQueries({ queryKey: ['assistants'] });
-      } else {
-        toast({
-          title: "Erro ao excluir",
-          description: "Não foi possível excluir o assistente. Tente novamente.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error('Error deleting assistant:', error);
-      toast({
-        title: "Erro ao excluir",
-        description: "Ocorreu um erro ao excluir o assistente.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsDeleting(null);
-    }
+    return callHistory.filter(call => {
+      const searchMatch =
+        call.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        call.client_phone.includes(searchQuery) ||
+        call.campaign_name.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const statusMatch = statusFilter ? call.status === statusFilter : true;
+
+      return searchMatch && statusMatch;
+    });
+  }, [callHistory, searchQuery, statusFilter]);
+
+  // Status options for the select filter
+  const statusOptions = [
+    { value: '', label: 'All Statuses' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'called', label: 'Called' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'failed', label: 'Failed' },
+  ];
+
+  // Function to format call duration from seconds to mm:ss
+  const formatCallDuration = (durationInSeconds: number | undefined): string => {
+    if (!durationInSeconds) return 'N/A';
+    const minutes = Math.floor(durationInSeconds / 60);
+    const seconds = durationInSeconds % 60;
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
   return (
-    <div className="container mx-auto px-4 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Treinamento de IA</h1>
-        <p className="text-muted-foreground">
-          Configure seu assistente virtual personalizado para interagir com seus clientes.
-        </p>
-      </div>
-      
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {isAsyncProcess && (
-        <Alert className="mb-6 bg-blue-50 border-blue-200">
-          <AlertTitle className="text-blue-700">Processamento em andamento</AlertTitle>
-          <AlertDescription className="text-blue-600">
-            Seu assistente está sendo criado em segundo plano. Este processo pode levar alguns minutos.
-            Você será notificado quando o processo estiver concluído.
-          </AlertDescription>
-        </Alert>
-      )}
-      
-      {webhookResponse && !webhookResponse.success && (
-        <Alert className="mb-6 bg-orange-50 border-orange-200">
-          <AlertTitle className="text-orange-700">Detalhes técnicos do erro</AlertTitle>
-          <AlertDescription className="text-orange-600">
-            <div className="text-xs font-mono bg-orange-100 p-2 rounded my-2 overflow-auto max-h-40">
-              {JSON.stringify(webhookResponse, null, 2)}
-            </div>
-            <p className="text-sm mt-2">
-              Por favor, entre em contato com o suporte técnico e compartilhe estas informações.
-            </p>
-          </AlertDescription>
-        </Alert>
-      )}
-      
-      {assistants.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Assistentes Criados</CardTitle>
-            <CardDescription>
-              Assistentes de IA que você já configurou
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {assistants.map(assistant => (
-                <div key={assistant.id} className="p-4 border rounded-md flex justify-between items-center">
-                  <div className="flex-1">
-                    <div className="font-medium">{assistant.name}</div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
-                    </div>
-                    {assistant.status === 'pending' && (
-                      <div className="text-xs text-blue-600 mt-1 flex items-center">
-                        <div className="h-2 w-2 bg-blue-600 rounded-full mr-1 animate-pulse"></div>
-                        Em processamento
-                      </div>
-                    )}
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => handleDelete(assistant)}
-                    disabled={isDeleting === assistant.assistant_id}
-                  >
-                    {isDeleting === assistant.assistant_id ? (
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    ) : (
-                      <Trash className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      <Card className="mb-8">
+    <div className="container mx-auto p-4 max-w-7xl">
+      <Card>
         <CardHeader>
-          <CardTitle>Configurar Assistente Virtual</CardTitle>
+          <CardTitle className="text-2xl font-bold">Contact History</CardTitle>
           <CardDescription>
-            Defina as configurações básicas para seu assistente virtual
+            View a detailed history of all client interactions.
           </CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="aiName">Nome do Assistente</Label>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="md:col-span-1">
               <Input
-                id="aiName"
-                value={aiName}
-                onChange={(e) => setAiName(e.target.value)}
-                placeholder="Ex: Assistente de Vendas"
-                required
+                type="search"
+                placeholder="Search contacts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="firstMessage">Primeira Mensagem</Label>
-              <Textarea
-                id="firstMessage"
-                value={firstMessage}
-                onChange={(e) => setFirstMessage(e.target.value)}
-                placeholder="Ex: Olá! Sou o assistente da empresa X. Como posso ajudar você hoje?"
-                rows={3}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Esta será a primeira mensagem que seu assistente enviará ao cliente.
-              </p>
+            <div className="md:col-span-1">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="systemPrompt">Prompt do Sistema</Label>
-              <Textarea
-                id="systemPrompt"
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="Ex: Você é um assistente especializado em vendas de produtos de tecnologia. Seja educado, informativo e ajude o cliente a encontrar o produto ideal para suas necessidades."
-                rows={5}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Estas são as instruções que definem como seu assistente deve se comportar.
-              </p>
+            <div className="md:col-span-1 flex justify-end">
+              <Button onClick={() => refetch()}>
+                <Calendar className="mr-2 h-4 w-4" />
+                Atualizar
+              </Button>
             </div>
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" disabled={isSubmitting} className="w-full">
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-current rounded-full"></div>
-                  Criando Assistente...
-                </>
-              ) : (
-                "Criar Assistente"
-              )}
-            </Button>
-          </CardFooter>
-        </form>
+          </div>
+          <Separator />
+          <div className="overflow-x-auto mt-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <Clock className="mr-2 h-6 w-6 animate-spin" />
+                Loading call history...
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center h-48 text-red-500">
+                <AlertCircle className="mr-2 h-6 w-6" />
+                Error fetching call history.
+              </div>
+            ) : filteredCallHistory.length === 0 ? (
+              <div className="flex items-center justify-center h-48 text-muted-foreground">
+                <FileText className="mr-2 h-6 w-6" />
+                No call history found.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Campaign</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCallHistory.map((call) => (
+                    <TableRow key={call.id}>
+                      <TableCell className="font-medium">{call.client_name}</TableCell>
+                      <TableCell>{call.campaign_name}</TableCell>
+                      <TableCell>
+                        {call.status === 'completed' ? (
+                          <Badge variant="outline">
+                            <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
+                            Completed
+                          </Badge>
+                        ) : call.status === 'failed' ? (
+                          <Badge variant="outline">
+                            <XCircle className="mr-2 h-4 w-4 text-red-500" />
+                            Failed
+                          </Badge>
+                        ) : (
+                          call.status
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(call.call_date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>{formatCallDuration(call.call_duration)}</TableCell>
+                      <TableCell className="text-right">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedCall(call)}
+                              >
+                                View Details
+                                <ChevronDown className="ml-2 h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View details about this call.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </CardContent>
       </Card>
+
+      <Dialog open={selectedCall !== null} onOpenChange={() => setSelectedCall(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Call Details</DialogTitle>
+            <DialogDescription>
+              Information about the call with {selectedCall?.client_name}.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedCall && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="client" className="text-right">
+                  Client:
+                </Label>
+                <Input
+                  id="client"
+                  value={selectedCall.client_name}
+                  className="col-span-3"
+                  readOnly
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="campaign" className="text-right">
+                  Campaign:
+                </Label>
+                <Input
+                  id="campaign"
+                  value={selectedCall.campaign_name}
+                  className="col-span-3"
+                  readOnly
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="status" className="text-right">
+                  Status:
+                </Label>
+                <Input
+                  id="status"
+                  value={selectedCall.status}
+                  className="col-span-3"
+                  readOnly
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="date" className="text-right">
+                  Date:
+                </Label>
+                <Input
+                  id="date"
+                  value={new Date(selectedCall.call_date).toLocaleDateString()}
+                  className="col-span-3"
+                  readOnly
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="duration" className="text-right">
+                  Duration:
+                </Label>
+                <Input
+                  id="duration"
+                  value={formatCallDuration(selectedCall.call_duration)}
+                  className="col-span-3"
+                  readOnly
+                />
+              </div>
+              {selectedCall.call_summary && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="summary" className="text-right">
+                    Summary:
+                  </Label>
+                  <Input
+                    id="summary"
+                    value={selectedCall.call_summary}
+                    className="col-span-3"
+                    readOnly
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
-export default AITraining;
+export default ContactHistory;

@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,14 +79,12 @@ const AITraining = () => {
       console.log("Resposta do webhook:", response);
       
       if (response.success) {
-        if (response.data && (response.data.isAsync || 
-            (response.data.message && response.data.message.includes("started")))) {
+        if (response.data && response.data.isAsync) {
           setIsAsyncProcess(true);
           
           try {
             const tempAssistantId = response.data.assistant_id || `pending_${Date.now()}`;
             
-            // Salva o assistente com status "pending"
             const savedAssistant = await assistantService.saveAssistant({
               name: aiName,
               assistant_id: tempAssistantId,
@@ -96,8 +93,6 @@ const AITraining = () => {
               user_id: user.id,
               status: 'pending'
             });
-            
-            console.log("Assistente temporário salvo com sucesso:", savedAssistant);
             
             toast({
               title: "Assistente em processamento",
@@ -111,10 +106,9 @@ const AITraining = () => {
             queryClient.invalidateQueries({ queryKey: ['assistants'] });
           } catch (saveError) {
             console.error("Erro ao salvar assistente temporário:", saveError);
-            setError(`Não foi possível registrar o assistente localmente: ${saveError instanceof Error ? saveError.message : 'Erro desconhecido'}`);
             toast({
-              title: "Erro ao salvar localmente",
-              description: "O assistente está sendo processado, mas não foi possível registrá-lo no banco de dados.",
+              title: "Aviso",
+              description: "Assistente em processamento, mas não foi possível registrá-lo localmente.",
               variant: "destructive"
             });
           }
@@ -293,12 +287,6 @@ const AITraining = () => {
                     <div className="text-sm text-muted-foreground mt-1">
                       Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
                     </div>
-                    {assistant.status === 'pending' && (
-                      <div className="text-xs text-blue-600 mt-1 flex items-center">
-                        <div className="h-2 w-2 bg-blue-600 rounded-full mr-1 animate-pulse"></div>
-                        Em processamento
-                      </div>
-                    )}
                   </div>
                   <Button 
                     variant="outline" 
