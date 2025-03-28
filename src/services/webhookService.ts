@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -53,11 +52,13 @@ export const webhookService = {
   async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
     try {
       // First try to get assistants from Vapi through n8n
+      console.log('Buscando assistentes do usuário:', userId);
       try {
         const response = await fetch(VAPI_GET_ASSISTANTS_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd'
           },
           body: JSON.stringify({
             user_id: userId,
@@ -67,6 +68,8 @@ export const webhookService = {
         
         if (response.ok) {
           const data = await response.json();
+          console.log('Resposta completa do webhook getassistants:', data);
+          
           if (data && data.assistants && Array.isArray(data.assistants)) {
             console.log('Successfully retrieved assistants from Vapi:', data.assistants);
             // Update local database with latest data from Vapi
@@ -83,6 +86,8 @@ export const webhookService = {
             });
             return data.assistants;
           }
+        } else {
+          console.error('Erro na resposta do webhook getassistants:', await response.text());
         }
       } catch (vapiError) {
         console.error('Error fetching assistants from Vapi:', vapiError);
@@ -193,6 +198,7 @@ export const webhookService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd'
         },
         body: JSON.stringify(webhookData),
       });
@@ -215,6 +221,58 @@ export const webhookService = {
     }
   },
   
+  // Função para obter assistentes do Vapi via webhook
+  async getAssistantsFromVapi(userId?: string) {
+    console.log('Buscando assistentes do Vapi para usuário:', userId);
+    
+    try {
+      const response = await fetch(VAPI_GET_ASSISTANTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd'
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          timestamp: new Date().toISOString()
+        }),
+      });
+      
+      if (!response.ok) {
+        console.error('Erro na resposta do webhook getassistants:', response.status, await response.text());
+        return { 
+          success: false, 
+          status: response.status,
+          message: 'Erro ao buscar assistentes do Vapi'
+        };
+      }
+      
+      const responseData = await response.json();
+      console.log('Assistentes obtidos do Vapi:', responseData);
+      
+      // Log da chamada bem-sucedida
+      await this.logWebhookCall({
+        action: 'get_assistants',
+        timestamp: new Date().toISOString(),
+        user_id: userId
+      }, true);
+      
+      return { 
+        success: true, 
+        status: response.status,
+        data: responseData
+      };
+    } catch (error) {
+      console.error('Erro ao buscar assistentes do Vapi:', error);
+      await this.logWebhookCall({
+        action: 'get_assistants',
+        timestamp: new Date().toISOString(),
+        user_id: userId
+      }, false);
+      return { success: false, error };
+    }
+  },
+  
   // Função para selecionar um assistente para uso
   async selectAssistant(assistantId: string) {
     try {
@@ -227,9 +285,12 @@ export const webhookService = {
   },
   
   // Função para registrar a chamada do webhook no histórico
-  async logWebhookCall(data: WebhookData | AssistantWebhookData, success: boolean, action?: string, error?: any) {
+  async logWebhookCall(data: WebhookData | AssistantWebhookData, success: boolean, action?: string | any, error?: any) {
     try {
-      const webhookUrl = 'action' in data ? WEBHOOK_URL : VAPI_ASSISTANT_WEBHOOK_URL;
+      const webhookUrl = 'action' in data ? WEBHOOK_URL : 
+                         action === 'get_assistants' ? VAPI_GET_ASSISTANTS_URL : 
+                         VAPI_ASSISTANT_WEBHOOK_URL;
+      
       const actionValue = 'action' in data ? data.action : (action || 'create_assistant');
       
       const logData: WebhookLog = {
@@ -263,7 +324,6 @@ export const webhookService = {
     }
   },
   
-  // Função para buscar o histórico de chamadas webhook
   async getWebhookLogs(limit = 20) {
     try {
       // Use the direct REST API URL instead of accessing protected properties
@@ -291,7 +351,6 @@ export const webhookService = {
     }
   },
   
-  // Função para verificar o status das automações do n8n
   async getN8nWorkflowStatus(workflowId?: string) {
     try {
       // Esta é uma simulação - em produção, você precisaria integrar com a API do n8n
