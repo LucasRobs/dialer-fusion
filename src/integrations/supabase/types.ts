@@ -45,6 +45,66 @@ export type Database = {
         }
         Relationships: []
       }
+      calls: {
+        Row: {
+          assistant_id: string | null
+          call_end: string | null
+          call_start: string | null
+          call_summary: string | null
+          campaign_id: number | null
+          client_id: number | null
+          created_at: string
+          duration: number | null
+          id: string
+          recording_url: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          assistant_id?: string | null
+          call_end?: string | null
+          call_start?: string | null
+          call_summary?: string | null
+          campaign_id?: number | null
+          client_id?: number | null
+          created_at?: string
+          duration?: number | null
+          id?: string
+          recording_url?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assistant_id?: string | null
+          call_end?: string | null
+          call_start?: string | null
+          call_summary?: string | null
+          campaign_id?: number | null
+          client_id?: number | null
+          created_at?: string
+          duration?: number | null
+          id?: string
+          recording_url?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calls_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_clients: {
         Row: {
           call_duration: number | null
