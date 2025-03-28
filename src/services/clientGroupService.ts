@@ -99,22 +99,20 @@ export const clientGroupService = {
 
   getClientsInGroup: async (groupId: string): Promise<Client[]> => {
     const { data, error } = await supabase
-      .from('client_group_members')
-      .select('client_id')
-      .eq('group_id', groupId);
-    
-    if (error) throw error;
-    if (!data.length) return [];
-    
-    const clientIds = data.map(({ client_id }) => client_id);
-    const { data: clients, error: clientError } = await supabase
-      .from('clients')
-      .select('*')
-      .in('id', clientIds);
-    
-    if (clientError) throw clientError;
-    return clients || [];
-  },
+        .from("client_group_members")
+        .select(`
+            client_id,
+            clients (*)
+        `)
+        .eq("group_id", groupId.toString()); // 🔹 Certifique-se de que é string
+
+    if (error) {
+        console.error("Error fetching clients in group:", error);
+        throw error;
+    }
+
+    return data.map(item => item.clients ? item.clients : null).filter(Boolean) as Client[];
+};
 
   getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
     const { data, error } = await supabase
