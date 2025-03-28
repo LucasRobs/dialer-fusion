@@ -49,12 +49,10 @@ const CampaignControls = () => {
   
   const { toast } = useToast();
   
-  // Estado para controlar os assistentes personalizados
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   
   const { user } = useAuth();
   
-  // Add a query to fetch campaigns
   const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
     queryFn: async () => {
@@ -62,34 +60,28 @@ const CampaignControls = () => {
     }
   });
   
-  // Fetch assistants from the database for the current user
   const { data: customAssistants = [], isLoading: isLoadingAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: () => assistantService.getAllAssistants(user?.id),
     enabled: !!user?.id
   });
   
-  // Add refetch function for assistants
   const { refetch: refetchAssistants } = useQuery({
     queryKey: ['assistants-refetch', user?.id],
     queryFn: () => assistantService.getAllAssistants(user?.id),
     enabled: false
   });
   
-  // Carregar assistentes personalizados
   useEffect(() => {
     if (customAssistants.length > 0) {
-      // Verificar se há um assistente selecionado no localStorage
       try {
         const storedAssistant = localStorage.getItem('selected_assistant');
         if (storedAssistant) {
           const assistant = JSON.parse(storedAssistant);
           setSelectedAssistant(assistant);
         } else if (customAssistants.length > 0) {
-          // Filter out pending assistants
           const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
           if (readyAssistants.length > 0) {
-            // Selecionar o primeiro assistente pronto por padrão
             setSelectedAssistant(readyAssistants[0]);
             localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
           }
@@ -100,22 +92,18 @@ const CampaignControls = () => {
     }
   }, [customAssistants]);
   
-  // Fetch real client groups from supabase but without using group()
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
-        // Get total count
         const { count: totalCount } = await supabase
           .from('clients')
           .select('*', { count: 'exact', head: true });
         
-        // Get counts by status - we need to fetch all clients and count manually
         const { data: clientsData } = await supabase
           .from('clients')
           .select('status');
         
-        // Count clients by status manually
         const statusCounts = {};
         if (clientsData) {
           clientsData.forEach(client => {
@@ -124,12 +112,10 @@ const CampaignControls = () => {
           });
         }
         
-        // Format for UI
         const formattedGroups = [
           { id: 'all', name: 'All Clients', count: totalCount || 0 }
         ];
         
-        // Add status groups
         Object.keys(statusCounts).forEach(status => {
           formattedGroups.push({
             id: status,
@@ -148,11 +134,9 @@ const CampaignControls = () => {
     }
   });
   
-  // Using custom assistants instead of fixed profiles
   const { data: aiProfiles = [] } = useQuery({
     queryKey: ['aiProfiles', customAssistants.length],
     queryFn: () => {
-      // Only use assistants with ready status
       const readyAssistants = customAssistants.filter(assistant => 
         assistant.status === 'ready' || !assistant.status
       );
@@ -204,7 +188,6 @@ const CampaignControls = () => {
           start_date: new Date().toISOString()
         });
         
-        // Determinar qual assistente de IA usar
         const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
         let assistantName = '';
         
@@ -214,7 +197,6 @@ const CampaignControls = () => {
           assistantName = selectedAssistant.name;
         }
         
-        // Simply send the assistant name to the webhook
         await webhookService.triggerCallWebhook({
           action: 'start_campaign',
           campaign_id: campaign.id,
@@ -361,7 +343,6 @@ const CampaignControls = () => {
     const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
     const clientCount = selectedGroup ? selectedGroup.count : 0;
     
-    // Get the assistant details from the selected profile
     const selectedAssistantProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
     
     if (!selectedAssistantProfile) {
@@ -373,7 +354,6 @@ const CampaignControls = () => {
       return;
     }
     
-    // Save selected assistant to localStorage
     const assistantToStore = {
       id: selectedAssistantProfile.id,
       name: selectedAssistantProfile.name,
@@ -392,7 +372,6 @@ const CampaignControls = () => {
         end_date: null
       });
       
-      // Send the assistant name and ID to the webhook
       await webhookService.triggerCallWebhook({
         action: 'create_campaign',
         campaign_id: createdCampaign.id,
@@ -633,27 +612,28 @@ const CampaignControls = () => {
                   <p className="text-xs text-muted-foreground mt-1">
                     {newCampaign.aiProfile && 
                       aiProfiles.find(p => p.id.toString() === newCampaign.aiProfile)?.description}
-                  {aiProfiles.length === 0 && (
+                    {aiProfiles.length === 0 && (
                       <span className="text-amber-500">
                         Você precisa criar um assistente na seção de Treinamento antes de criar uma campanha.
                       </span>
                     )}
-                </p>
-              </div>
-              
-              <div className="pt-4">
-                <Button 
-                  type="submit" 
-                  className="w-full"
-                  disabled={aiProfiles.length === 0}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Create Campaign
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                  </p>
+                </div>
+                
+                <div className="pt-4">
+                  <Button 
+                    type="submit" 
+                    className="w-full"
+                    disabled={aiProfiles.length === 0}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Create Campaign
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
