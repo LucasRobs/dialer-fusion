@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -25,7 +26,10 @@ import {
   Trash2, 
   Phone,
   Check, 
-  X 
+  X,
+  Filter,
+  FileUp,
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -33,13 +37,24 @@ import { clientService } from '@/services/clientService';
 import { webhookService } from '@/services/webhookService';
 import { supabase } from '@/lib/supabase';
 import ClientGroupRelation from './ClientGroupRelation';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { clientGroupService } from '@/services/clientGroupService';
+import ImportClientsSheet from './ImportClientsSheet';
 
 export default function ClientList() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
   const [showEditClientDialog, setShowEditClientDialog] = useState(false);
   const [showDeleteClientDialog, setShowDeleteClientDialog] = useState(false);
-  const [selectedClient, setSelectedClient] = useState(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -48,14 +63,29 @@ export default function ClientList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // Buscar todos os grupos do cliente
+  const { 
+    data: clientGroups = [], 
+    isLoading: isLoadingGroups
+  } = useQuery({
+    queryKey: ['clientGroups'],
+    queryFn: () => clientGroupService.getClientGroups(),
+  });
+  
+  // Buscar todos os clientes ou clientes de um grupo específico
   const { 
     data: clients = [], 
     isLoading, 
     error, 
     refetch 
   } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => clientService.getClients(),
+    queryKey: ['clients', selectedGroupId],
+    queryFn: () => {
+      if (selectedGroupId) {
+        return clientService.getClientsByGroupId(selectedGroupId);
+      }
+      return clientService.getClients();
+    },
   });
   
   const addClientMutation = useMutation({
@@ -126,31 +156,38 @@ export default function ClientList() {
     client.email.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
   
-  const handleNew = () => {
+  const handleNew = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setShowNewClientDialog(true);
   };
   
-  const handleEdit = (client: any) => {
+  const handleEdit = (e: React.MouseEvent, client: any) => {
+    e.stopPropagation();
+    e.preventDefault();
     setSelectedClient(client);
     setName(client.name);
     setPhone(client.phone);
-    setEmail(client.email);
-    setStatus(client.status);
+    setEmail(client.email || '');
+    setStatus(client.status || 'Active');
     setShowEditClientDialog(true);
   };
   
-  const handleDelete = (client: any) => {
+  const handleDelete = (e: React.MouseEvent, client: any) => {
+    e.stopPropagation();
+    e.preventDefault();
     setSelectedClient(client);
     setShowDeleteClientDialog(true);
   };
   
   const handleSubmitNew = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     addClientMutation.mutate({ name, phone, email, status });
   };
   
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (selectedClient) {
       updateClientMutation.mutate({ 
         id: selectedClient.id, 
@@ -159,7 +196,9 @@ export default function ClientList() {
     }
   };
   
-  const confirmDelete = async () => {
+  const confirmDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (selectedClient) {
       deleteClientMutation.mutate(selectedClient.id);
     }
@@ -173,7 +212,9 @@ export default function ClientList() {
     setSelectedClient(null);
   };
 
-  const handleCall = async (client: any) => {
+  const handleCall = async (e: React.MouseEvent, client: any) => {
+    e.stopPropagation();
+    e.preventDefault();
     try {
       const { data } = await supabase.auth.getUser();
       const userId = data.user?.id;
@@ -214,24 +255,72 @@ export default function ClientList() {
     }
   };
 
+  const handleImportClients = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowImportDialog(true);
+  };
+
+  const handleGroupFilterChange = (value: string) => {
+    setSelectedGroupId(value);
+  };
+
   return (
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Clientes</h1>
-        <Button onClick={() => setShowNewClientDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar Cliente
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleImportClients}>
+            <FileUp className="h-4 w-4 mr-2" />
+            Importar Clientes
+          </Button>
+          <Button onClick={handleNew}>
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar Cliente
+          </Button>
+        </div>
       </div>
       
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-        <Input 
-          placeholder="Buscar clientes..." 
-          className="pl-10" 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <Input 
+            placeholder="Buscar clientes..." 
+            className="pl-10" 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        
+        <div className="w-full md:w-64">
+          <Select
+            value={selectedGroupId}
+            onValueChange={handleGroupFilterChange}
+          >
+            <SelectTrigger className="w-full">
+              <div className="flex items-center">
+                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Filtrar por grupo" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos os clientes</SelectItem>
+              {clientGroups.map((group) => (
+                <SelectItem key={group.id} value={group.id}>
+                  {group.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={() => refetch()}
+          title="Atualizar lista"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </Button>
       </div>
       
       {isLoading ? (
@@ -247,11 +336,22 @@ export default function ClientList() {
         </div>
       ) : clients.length === 0 ? (
         <div className="text-center p-8 border rounded-lg">
-          <p className="text-lg text-muted-foreground mb-4">Nenhum cliente encontrado</p>
-          <Button onClick={() => setShowNewClientDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar seu primeiro cliente
-          </Button>
+          <p className="text-lg text-muted-foreground mb-4">
+            {selectedGroupId 
+              ? "Este grupo não possui clientes" 
+              : "Nenhum cliente encontrado"
+            }
+          </p>
+          {!selectedGroupId && (
+            <Button onClick={handleNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar seu primeiro cliente
+            </Button>
+          )}
+        </div>
+      ) : filteredClients.length === 0 ? (
+        <div className="text-center p-8 border rounded-lg">
+          <p className="text-lg text-muted-foreground">Nenhum cliente correspondente à pesquisa</p>
         </div>
       ) : (
         <div className="rounded-md border overflow-hidden">
@@ -270,7 +370,7 @@ export default function ClientList() {
                 <TableRow key={client.id}>
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>{client.phone}</TableCell>
-                  <TableCell>{client.email}</TableCell>
+                  <TableCell>{client.email || '-'}</TableCell>
                   <TableCell>
                     <Badge variant={client.status === 'Active' ? 'default' : 'secondary'}>
                       {client.status}
@@ -282,23 +382,23 @@ export default function ClientList() {
                       <Button 
                         size="sm" 
                         variant="outline"
-                        onClick={() => handleCall(client)}
+                        onClick={(e) => handleCall(e, client)}
                         title="Ligar para cliente"
                       >
                         <Phone className="h-4 w-4" />
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(client)}>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem onClick={(e) => handleEdit(e, client)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(client)}>
+                          <DropdownMenuItem onClick={(e) => handleDelete(e, client)}>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Excluir
                           </DropdownMenuItem>
@@ -313,8 +413,11 @@ export default function ClientList() {
         </div>
       )}
       
-      <Dialog open={showNewClientDialog} onOpenChange={setShowNewClientDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showNewClientDialog} onOpenChange={(open) => {
+        if (!open) clearForm();
+        setShowNewClientDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Adicionar Novo Cliente</DialogTitle>
           </DialogHeader>
@@ -325,6 +428,7 @@ export default function ClientList() {
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
                 required 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -333,6 +437,7 @@ export default function ClientList() {
                 value={phone} 
                 onChange={(e) => setPhone(e.target.value)} 
                 required 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -341,6 +446,7 @@ export default function ClientList() {
                 type="email" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -348,13 +454,14 @@ export default function ClientList() {
                 className="w-full border rounded-md py-2 px-3"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
               >
                 <option value="Active">Ativo</option>
                 <option value="Inactive">Inativo</option>
               </select>
             </div>
             <DialogFooter>
-              <Button type="submit">
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Plus className="h-4 w-4 mr-2" />
                 Adicionar
               </Button>
@@ -363,8 +470,11 @@ export default function ClientList() {
         </DialogContent>
       </Dialog>
       
-      <Dialog open={showEditClientDialog} onOpenChange={setShowEditClientDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showEditClientDialog} onOpenChange={(open) => {
+        if (!open) clearForm();
+        setShowEditClientDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Editar Cliente</DialogTitle>
           </DialogHeader>
@@ -375,6 +485,7 @@ export default function ClientList() {
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
                 required 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -383,6 +494,7 @@ export default function ClientList() {
                 value={phone} 
                 onChange={(e) => setPhone(e.target.value)} 
                 required 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -391,6 +503,7 @@ export default function ClientList() {
                 type="email" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -398,13 +511,14 @@ export default function ClientList() {
                 className="w-full border rounded-md py-2 px-3"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
               >
                 <option value="Active">Ativo</option>
                 <option value="Inactive">Inativo</option>
               </select>
             </div>
             <DialogFooter>
-              <Button type="submit">
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Salvar
               </Button>
@@ -413,8 +527,11 @@ export default function ClientList() {
         </DialogContent>
       </Dialog>
       
-      <Dialog open={showDeleteClientDialog} onOpenChange={setShowDeleteClientDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showDeleteClientDialog} onOpenChange={(open) => {
+        if (!open) setSelectedClient(null);
+        setShowDeleteClientDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Excluir Cliente</DialogTitle>
           </DialogHeader>
@@ -422,7 +539,10 @@ export default function ClientList() {
             <p>Tem certeza de que deseja excluir este cliente?</p>
           </div>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setShowDeleteClientDialog(false)}>
+            <Button variant="secondary" onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteClientDialog(false);
+            }}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
@@ -432,6 +552,11 @@ export default function ClientList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportClientsSheet 
+        isOpen={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+      />
     </div>
   );
 }

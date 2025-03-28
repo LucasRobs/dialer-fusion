@@ -50,8 +50,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
-        if (!user?.id) return [];
-        return await clientGroupService.getClientGroups(user.id);
+        return await clientGroupService.getClientGroups();
       } catch (error) {
         console.error('Error fetching client groups:', error);
         return [];
@@ -87,6 +86,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
+      queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
       toast.success('Cliente adicionado ao grupo');
       setShowAddToGroupDialog(false);
       setSelectedGroupId('');
@@ -103,6 +103,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
+      queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
       toast.success('Cliente removido do grupo');
     },
     onError: (error: Error) => {
@@ -152,7 +153,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
           <DropdownMenuItem onClick={handleOpenDialog}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Adicionar a um grupo
@@ -180,8 +181,11 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
         </DropdownMenuContent>
       </DropdownMenu>
       
-      <Dialog open={showAddToGroupDialog} onOpenChange={setShowAddToGroupDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showAddToGroupDialog} onOpenChange={(open) => {
+        if (!open) setSelectedGroupId('');
+        setShowAddToGroupDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Adicionar Cliente ao Grupo</DialogTitle>
           </DialogHeader>
@@ -191,7 +195,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
                 value={selectedGroupId}
                 onValueChange={setSelectedGroupId}
               >
-                <SelectTrigger>
+                <SelectTrigger onClick={(e) => e.stopPropagation()}>
                   <SelectValue placeholder="Selecione um grupo" />
                 </SelectTrigger>
                 <SelectContent onClick={(e) => e.stopPropagation()}>

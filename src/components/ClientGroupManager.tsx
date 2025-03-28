@@ -28,26 +28,21 @@ import {
   Plus, 
   Pencil, 
   Trash2, 
-  Users 
+  Users,
+  Eye
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-
-export interface ClientGroup {
-  id: string;
-  name: string;
-  description?: string;
-  client_count: number;
-  created_at: string;
-  user_id: string;
-}
+import { ClientGroup, clientGroupService } from '@/services/clientGroupService';
+import GroupClientsList from './GroupClientsList';
 
 const ClientGroupManager = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showClientsDialog, setShowClientsDialog] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<ClientGroup | null>(null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
@@ -60,12 +55,7 @@ const ClientGroupManager = () => {
     queryFn: async () => {
       try {
         // First, get the groups
-        const { data: groups, error } = await supabase
-          .from('client_groups')
-          .select('*')
-          .eq('user_id', user?.id);
-          
-        if (error) throw error;
+        const groups = await clientGroupService.getClientGroups();
           
         // Then get the count of clients in each group
         const groupsWithCounts = await Promise.all(
@@ -93,19 +83,11 @@ const ClientGroupManager = () => {
   
   const createGroupMutation = useMutation({
     mutationFn: async (groupData: { name: string; description: string }) => {
-      const { data, error } = await supabase
-        .from('client_groups')
-        .insert([
-          { 
-            name: groupData.name,
-            description: groupData.description,
-            user_id: user?.id
-          }
-        ])
-        .select();
-        
-      if (error) throw error;
-      return data[0];
+      return await clientGroupService.createClientGroup({ 
+        name: groupData.name,
+        description: groupData.description,
+        user_id: user?.id || ''
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
@@ -120,17 +102,10 @@ const ClientGroupManager = () => {
   
   const updateGroupMutation = useMutation({
     mutationFn: async (groupData: { id: string; name: string; description: string }) => {
-      const { data, error } = await supabase
-        .from('client_groups')
-        .update({ 
-          name: groupData.name,
-          description: groupData.description
-        })
-        .eq('id', groupData.id)
-        .select();
-        
-      if (error) throw error;
-      return data[0];
+      return await clientGroupService.updateClientGroup(groupData.id, { 
+        name: groupData.name,
+        description: groupData.description
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
@@ -145,22 +120,7 @@ const ClientGroupManager = () => {
   
   const deleteGroupMutation = useMutation({
     mutationFn: async (id: string) => {
-      // First delete all client-group relationships
-      const { error: relationshipError } = await supabase
-        .from('client_group_members')
-        .delete()
-        .eq('group_id', id);
-        
-      if (relationshipError) throw relationshipError;
-      
-      // Then delete the group
-      const { error } = await supabase
-        .from('client_groups')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
-      return id;
+      return await clientGroupService.deleteClientGroup(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
@@ -174,13 +134,16 @@ const ClientGroupManager = () => {
   
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     createGroupMutation.mutate({ 
       name: groupName, 
       description: groupDescription 
     });
   };
   
-  const handleEdit = (group: ClientGroup) => {
+  const handleEdit = (e: React.MouseEvent, group: ClientGroup) => {
+    e.preventDefault();
+    e.stopPropagation();
     setSelectedGroup(group);
     setGroupName(group.name);
     setGroupDescription(group.description || '');
@@ -189,6 +152,7 @@ const ClientGroupManager = () => {
   
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (selectedGroup) {
       updateGroupMutation.mutate({
         id: selectedGroup.id,
@@ -198,15 +162,26 @@ const ClientGroupManager = () => {
     }
   };
   
-  const handleDelete = (group: ClientGroup) => {
+  const handleDelete = (e: React.MouseEvent, group: ClientGroup) => {
+    e.preventDefault();
+    e.stopPropagation();
     setSelectedGroup(group);
     setShowDeleteDialog(true);
   };
   
-  const confirmDelete = () => {
+  const confirmDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (selectedGroup) {
       deleteGroupMutation.mutate(selectedGroup.id);
     }
+  };
+
+  const handleShowClients = (e: React.MouseEvent, group: ClientGroup) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedGroup(group);
+    setShowClientsDialog(true);
   };
   
   const clearForm = () => {
@@ -220,7 +195,10 @@ const ClientGroupManager = () => {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Grupos de Clientes</CardTitle>
-          <Button onClick={() => setShowCreateDialog(true)}>
+          <Button onClick={(e) => {
+            e.stopPropagation();
+            setShowCreateDialog(true);
+          }}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Grupo
           </Button>
@@ -234,7 +212,10 @@ const ClientGroupManager = () => {
             <div className="text-center p-8 border rounded-lg">
               <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-lg text-muted-foreground mb-4">Nenhum grupo criado</p>
-              <Button onClick={() => setShowCreateDialog(true)}>
+              <Button onClick={(e) => {
+                e.stopPropagation();
+                setShowCreateDialog(true);
+              }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Criar meu primeiro grupo
               </Button>
@@ -253,7 +234,11 @@ const ClientGroupManager = () => {
                 </TableHeader>
                 <TableBody>
                   {clientGroups.map((group) => (
-                    <TableRow key={group.id}>
+                    <TableRow 
+                      key={group.id}
+                      className="cursor-pointer hover:bg-accent/50"
+                      onClick={(e) => handleShowClients(e, group)}
+                    >
                       <TableCell className="font-medium">{group.name}</TableCell>
                       <TableCell>{group.description || '-'}</TableCell>
                       <TableCell>
@@ -265,15 +250,25 @@ const ClientGroupManager = () => {
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => handleEdit(group)}
+                            onClick={(e) => handleShowClients(e, group)}
+                            title="Ver clientes"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={(e) => handleEdit(e, group)}
+                            title="Editar grupo"
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => handleDelete(group)}
+                            onClick={(e) => handleDelete(e, group)}
                             className="text-destructive hover:text-destructive"
+                            title="Excluir grupo"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -289,8 +284,11 @@ const ClientGroupManager = () => {
       </Card>
       
       {/* Create Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showCreateDialog} onOpenChange={(open) => {
+        if (!open) clearForm();
+        setShowCreateDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Criar Novo Grupo</DialogTitle>
           </DialogHeader>
@@ -301,6 +299,7 @@ const ClientGroupManager = () => {
                 value={groupName} 
                 onChange={(e) => setGroupName(e.target.value)} 
                 required 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -308,10 +307,11 @@ const ClientGroupManager = () => {
                 placeholder="Descrição (opcional)" 
                 value={groupDescription} 
                 onChange={(e) => setGroupDescription(e.target.value)} 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <DialogFooter>
-              <Button type="submit">
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Plus className="h-4 w-4 mr-2" />
                 Criar Grupo
               </Button>
@@ -321,8 +321,11 @@ const ClientGroupManager = () => {
       </Dialog>
       
       {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        if (!open) clearForm();
+        setShowEditDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Editar Grupo</DialogTitle>
           </DialogHeader>
@@ -333,6 +336,7 @@ const ClientGroupManager = () => {
                 value={groupName} 
                 onChange={(e) => setGroupName(e.target.value)} 
                 required 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div>
@@ -340,10 +344,11 @@ const ClientGroupManager = () => {
                 placeholder="Descrição (opcional)" 
                 value={groupDescription} 
                 onChange={(e) => setGroupDescription(e.target.value)} 
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <DialogFooter>
-              <Button type="submit">
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Salvar
               </Button>
@@ -353,14 +358,17 @@ const ClientGroupManager = () => {
       </Dialog>
       
       {/* Delete Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => {
+        if (!open) setSelectedGroup(null);
+        setShowDeleteDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Excluir Grupo</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <p>Tem certeza de que deseja excluir este grupo?</p>
-            {selectedGroup && selectedGroup.client_count > 0 && (
+            {selectedGroup && selectedGroup.client_count && selectedGroup.client_count > 0 && (
               <p className="text-amber-500 mt-2">
                 Atenção: Este grupo contém {selectedGroup.client_count} clientes. 
                 A exclusão do grupo não excluirá os clientes.
@@ -368,7 +376,10 @@ const ClientGroupManager = () => {
             )}
           </div>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setShowDeleteDialog(false)}>
+            <Button variant="secondary" onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteDialog(false);
+            }}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
@@ -378,6 +389,16 @@ const ClientGroupManager = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Clients in Group Dialog */}
+      {selectedGroup && (
+        <GroupClientsList 
+          groupId={selectedGroup.id}
+          groupName={selectedGroup.name}
+          isOpen={showClientsDialog}
+          onClose={() => setShowClientsDialog(false)}
+        />
+      )}
     </div>
   );
 };
