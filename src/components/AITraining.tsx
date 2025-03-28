@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
@@ -26,14 +25,12 @@ const AITraining = () => {
   const [webhookResponse, setWebhookResponse] = useState<any>(null);
   const [isAsyncProcess, setIsAsyncProcess] = useState(false);
 
-  // Fetch existing assistants
   const { data: assistants = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['assistants'],
     queryFn: assistantService.getAllAssistants
   });
 
   useEffect(() => {
-    // Clear error after 10 seconds
     if (error) {
       const timer = setTimeout(() => {
         setError(null);
@@ -72,23 +69,19 @@ const AITraining = () => {
     try {
       console.log("Iniciando criação do assistente:", aiName);
       
-      // Send data to webhook service
       const response = await webhookService.createAssistant({
         assistant_name: aiName,
         first_message: firstMessage,
         system_prompt: systemPrompt
       });
       
-      // Store the webhook response for debugging
       setWebhookResponse(response);
       console.log("Resposta do webhook:", response);
       
       if (response.success) {
         if (response.data && response.data.isAsync) {
-          // Se o processo é assíncrono
           setIsAsyncProcess(true);
           
-          // Salvar como "pendente" no banco de dados
           try {
             const tempAssistantId = response.data.assistant_id || `pending_${Date.now()}`;
             
@@ -106,28 +99,23 @@ const AITraining = () => {
               description: "Seu assistente foi enviado para processamento e será disponibilizado em breve.",
             });
             
-            // Reset form
             setAiName('');
             setFirstMessage('');
             setSystemPrompt('');
             
-            // Refresh assistants list
             queryClient.invalidateQueries({ queryKey: ['assistants'] });
           } catch (saveError) {
             console.error("Erro ao salvar assistente temporário:", saveError);
-            // Falha ao salvar não deve interromper o fluxo, apenas informar
             toast({
               title: "Aviso",
               description: "Assistente em processamento, mas não foi possível registrá-lo localmente.",
-              variant: "warning"
+              variant: "destructive"
             });
           }
         } else if (response.data && response.data.assistant_id) {
-          // Caso normal - assistente criado com ID
           console.log("Assistant ID recebido:", response.data.assistant_id);
           
           try {
-            // Save assistant to database
             const savedAssistant = await assistantService.saveAssistant({
               name: aiName,
               assistant_id: response.data.assistant_id,
@@ -144,12 +132,10 @@ const AITraining = () => {
               description: "Seu assistente de IA foi criado e configurado.",
             });
             
-            // Reset form
             setAiName('');
             setFirstMessage('');
             setSystemPrompt('');
             
-            // Refresh assistants list
             queryClient.invalidateQueries({ queryKey: ['assistants'] });
           } catch (saveError) {
             console.error("Erro ao salvar assistente:", saveError);
@@ -161,16 +147,25 @@ const AITraining = () => {
             });
           }
         } else {
-          // Resposta de sucesso inválida
-          setError("Resposta do servidor incompleta. Tente novamente.");
+          let errorMsg = 'Erro desconhecido';
+          
+          if (response.error) {
+            errorMsg = response.error;
+          } else if (response.data && response.data.error) {
+            errorMsg = response.data.error;
+          } else if (!response.success) {
+            errorMsg = 'Erro na comunicação com o servidor';
+          }
+          
+          setError(`Erro na resposta do webhook: ${errorMsg}`);
           toast({
-            title: "Erro ao processar resposta",
-            description: "A resposta do servidor está incompleta. Por favor, tente novamente.",
+            title: "Erro ao criar assistente",
+            description: errorMsg,
             variant: "destructive"
           });
+          console.error('Erro na resposta do webhook:', response);
         }
       } else {
-        // Better error handling
         let errorMsg = 'Erro desconhecido';
         
         if (response.error) {
@@ -201,7 +196,7 @@ const AITraining = () => {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleDelete = async (assistant: Assistant) => {
     if (!assistant.assistant_id) return;
     
@@ -215,7 +210,6 @@ const AITraining = () => {
           description: `O assistente "${assistant.name}" foi excluído com sucesso.`,
         });
         
-        // Refresh assistants list
         queryClient.invalidateQueries({ queryKey: ['assistants'] });
       } else {
         toast({
@@ -262,7 +256,6 @@ const AITraining = () => {
         </Alert>
       )}
       
-      {/* Debug information panel - visible only when there's a webhook response with an error */}
       {webhookResponse && !webhookResponse.success && (
         <Alert className="mb-6 bg-orange-50 border-orange-200">
           <AlertTitle className="text-orange-700">Detalhes técnicos do erro</AlertTitle>
@@ -277,7 +270,6 @@ const AITraining = () => {
         </Alert>
       )}
       
-      {/* Lista de assistentes existentes */}
       {assistants.length > 0 && (
         <Card className="mb-8">
           <CardHeader>
@@ -315,7 +307,6 @@ const AITraining = () => {
         </Card>
       )}
       
-      {/* Formulário para criar novo assistente */}
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Configurar Assistente Virtual</CardTitle>
