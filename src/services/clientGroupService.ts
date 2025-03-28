@@ -154,8 +154,10 @@ export const clientGroupService = {
       throw error;
     }
     
-    // Extract clients from the nested structure
-    return data.map(item => item.clients) as Client[];
+    // Properly extract and transform the nested clients data
+    const clients = data.map(item => item.clients as Client);
+    
+    return clients;
   },
   
   // Get all groups a client belongs to
@@ -173,7 +175,9 @@ export const clientGroupService = {
       throw error;
     }
     
-    // Transform the nested data to match the ClientGroup type
-    return data.map(item => item.client_groups) as ClientGroup[];
+    // Properly extract and transform the nested groups data
+    const groups = data.map(item => item.client_groups as ClientGroup);
+    
+    return groups;
   }
 };

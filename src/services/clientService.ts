@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 export type Client = {
@@ -122,10 +121,10 @@ export const clientService = {
     
     if (error) throw error;
     
-    // Extract clients from the nested structure
-    const clients = data.map(item => item.clients);
+    // Properly extract and transform the nested clients data
+    const clients = data.map(item => item.clients as Client);
     
-    return clients as Client[];
+    return clients;
   },
 
   // Importar clientes de uma planilha
