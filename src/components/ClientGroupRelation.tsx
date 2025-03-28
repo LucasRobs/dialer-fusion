@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -50,8 +50,13 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
-        if (!user?.id) return [];
-        return await clientGroupService.getClientGroups(user.id);
+        const { data, error } = await supabase
+          .from('client_groups')
+          .select('*')
+          .eq('user_id', user?.id);
+          
+        if (error) throw error;
+        return data;
       } catch (error) {
         console.error('Error fetching client groups:', error);
         return [];
@@ -64,14 +69,25 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     queryKey: ['clientGroupMemberships', client.id],
     queryFn: async () => {
       try {
-        if (!client.id) return [];
-        const groups = await clientGroupService.getClientGroupsByClientId(client.id);
+        const { data, error } = await supabase
+          .from('client_group_members')
+          .select(`
+            group_id,
+            client_groups (
+              id,
+              name
+            )
+          `)
+          .eq('client_id', client.id);
+          
+        if (error) throw error;
         
-        // Map the groups to the expected format
-        return groups.map(group => ({
-          groupId: group.id,
-          groupName: group.name
+        // Properly map and type the response
+        return data.map((item: any) => ({
+          groupId: item.group_id,
+          groupName: item.client_groups.name
         })) as GroupMembership[];
+        
       } catch (error) {
         console.error('Error fetching client group memberships:', error);
         return [] as GroupMembership[];
@@ -81,15 +97,43 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   });
   
   const addToGroupMutation = useMutation({
-    mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      return await clientGroupService.addClientToGroup(clientId, groupId);
+    mutationFn: async (data: { clientId: number, groupId: string }) => {
+      // Check if relationship already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('client_group_members')
+        .select('*')
+        .eq('client_id', data.clientId)
+        .eq('group_id', data.groupId)
+        .single();
+        
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
+      
+      if (existing) {
+        // Relationship already exists
+        return existing;
+      }
+      
+      // Add new relationship
+      const { data: result, error } = await supabase
+        .from('client_group_members')
+        .insert([
+          { 
+            client_id: data.clientId,
+            group_id: data.groupId
+          }
+        ])
+        .select();
+        
+      if (error) throw error;
+      return result[0];
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
       toast.success('Cliente adicionado ao grupo');
       setShowAddToGroupDialog(false);
-      setSelectedGroupId('');
     },
     onError: (error: Error) => {
       toast.error(`Erro ao adicionar cliente ao grupo: ${error.message}`);
@@ -97,8 +141,15 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   });
   
   const removeFromGroupMutation = useMutation({
-    mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      return await clientGroupService.removeClientFromGroup(clientId, groupId);
+    mutationFn: async (data: { clientId: number, groupId: string }) => {
+      const { error } = await supabase
+        .from('client_group_members')
+        .delete()
+        .eq('client_id', data.clientId)
+        .eq('group_id', data.groupId);
+        
+      if (error) throw error;
+      return { clientId: data.clientId, groupId: data.groupId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
@@ -110,10 +161,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     }
   });
   
-  const handleAddToGroup = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const handleAddToGroup = () => {
     if (selectedGroupId) {
       addToGroupMutation.mutate({ 
         clientId: client.id, 
@@ -122,27 +170,18 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     }
   };
   
-  const handleRemoveFromGroup = (e: React.MouseEvent, groupId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const handleRemoveFromGroup = (groupId: string) => {
     removeFromGroupMutation.mutate({ 
       clientId: client.id, 
       groupId: groupId 
     });
   };
   
-  const handleOpenDialog = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setShowAddToGroupDialog(true);
-  };
-  
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8" onClick={(e) => e.stopPropagation()}>
+          <Button variant="outline" size="sm" className="h-8">
             <Users className="h-4 w-4 mr-2" />
             Grupos
             {clientGroupMemberships.length > 0 && (
@@ -153,7 +192,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem onClick={handleOpenDialog}>
+          <DropdownMenuItem onClick={() => setShowAddToGroupDialog(true)}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Adicionar a um grupo
           </DropdownMenuItem>
@@ -164,14 +203,17 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
             </div>
           )}
           
-          {clientGroupMemberships.map((membership: GroupMembership) => (
+          {clientGroupMemberships.map(membership => (
             <DropdownMenuItem key={membership.groupId} className="flex justify-between items-center">
               <span>{membership.groupName}</span>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                onClick={(e) => handleRemoveFromGroup(e, membership.groupId)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveFromGroup(membership.groupId);
+                }}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -194,7 +236,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um grupo" />
                 </SelectTrigger>
-                <SelectContent onClick={(e) => e.stopPropagation()}>
+                <SelectContent>
                   {isLoadingGroups ? (
                     <SelectItem value="loading" disabled>
                       Carregando grupos...

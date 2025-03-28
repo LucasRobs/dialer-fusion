@@ -153,7 +153,8 @@ export const clientGroupService = {
       throw error;
     }
     
-    // Transform the nested data to match the ClientGroup type
-    return data.map(item => item.client_groups) as unknown as ClientGroup[];
+    // Fix the type mismatch by properly extracting the client_groups property
+    // The issue was that each item.client_groups is already a ClientGroup object
+    return data.map(item => item.client_groups);
   }
 };
