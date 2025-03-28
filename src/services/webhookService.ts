@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -6,7 +5,7 @@ import assistantService, { Assistant } from './assistantService';
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
 const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
 
-// Configure here your Vapi API credentials
+// Configure aqui suas credenciais da Vapi API
 const VAPI_API_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Vapi caller ID
 const VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Vapi Assistant ID
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd"; // Vapi API Key

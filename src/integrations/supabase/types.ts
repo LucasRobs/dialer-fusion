@@ -16,6 +16,7 @@ export type Database = {
           first_message: string | null
           id: string
           name: string
+          status: string | null
           system_prompt: string | null
           updated_at: string
           user_id: string | null
@@ -26,6 +27,7 @@ export type Database = {
           first_message?: string | null
           id?: string
           name: string
+          status?: string | null
           system_prompt?: string | null
           updated_at?: string
           user_id?: string | null
@@ -36,6 +38,7 @@ export type Database = {
           first_message?: string | null
           id?: string
           name?: string
+          status?: string | null
           system_prompt?: string | null
           updated_at?: string
           user_id?: string | null
