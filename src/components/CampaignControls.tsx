@@ -35,7 +35,6 @@ import { campaignService } from '@/services/campaignService';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import assistantService from '@/services/assistantService';
-import { useAuth } from '@/contexts/AuthContext';
 
 const CampaignControls = () => {
   const [campaigns, setCampaigns] = useState([]);
@@ -49,10 +48,10 @@ const CampaignControls = () => {
   
   const { toast } = useToast();
   
-  const { user } = useAuth();
-  
+  // Estado para controlar os assistentes personalizados
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   
+  // Add a query to fetch campaigns
   const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
     queryFn: async () => {
@@ -60,47 +59,28 @@ const CampaignControls = () => {
     }
   });
   
+  // Fetch assistants from the database
   const { data: customAssistants = [], refetch: refetchAssistants } = useQuery({
-    queryKey: ['assistants', user?.id],
-    queryFn: async () => {
-      if (user?.id) {
-        return await assistantService.getUserAssistants(user.id);
-      }
-      return await assistantService.getAllAssistants();
-    },
-    enabled: !!user
+    queryKey: ['assistants'],
+    queryFn: webhookService.getAllAssistants
   });
   
-  const { data: aiProfiles = [] } = useQuery({
-    queryKey: ['aiProfiles', customAssistants.length],
-    queryFn: () => {
-      return customAssistants.map(assistant => ({
-        id: assistant.assistant_id,
-        name: assistant.name,
-        description: `Assistente criado em ${assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'data desconhecida'}`
-      }));
-    }
-  });
-  
+  // Carregar assistentes personalizados
   useEffect(() => {
     if (customAssistants.length > 0) {
+      // Verificar se há um assistente selecionado no localStorage
       try {
         const storedAssistant = localStorage.getItem('selected_assistant');
         if (storedAssistant) {
           const assistant = JSON.parse(storedAssistant);
           setSelectedAssistant(assistant);
         } else if (customAssistants.length > 0) {
+          // Filter out pending assistants
           const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
           if (readyAssistants.length > 0) {
-            const firstAssistant = readyAssistants[0];
-            const assistantData = {
-              id: firstAssistant.assistant_id,
-              name: firstAssistant.name,
-              status: firstAssistant.status || 'ready'
-            };
-            
-            setSelectedAssistant(assistantData);
-            localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+            // Selecionar o primeiro assistente pronto por padrão
+            setSelectedAssistant(readyAssistants[0]);
+            localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
           }
         }
       } catch (error) {
@@ -109,18 +89,22 @@ const CampaignControls = () => {
     }
   }, [customAssistants]);
   
+  // Fetch real client groups from supabase but without using group()
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
+        // Get total count
         const { count: totalCount } = await supabase
           .from('clients')
           .select('*', { count: 'exact', head: true });
         
+        // Get counts by status - we need to fetch all clients and count manually
         const { data: clientsData } = await supabase
           .from('clients')
           .select('status');
         
+        // Count clients by status manually
         const statusCounts = {};
         if (clientsData) {
           clientsData.forEach(client => {
@@ -129,10 +113,12 @@ const CampaignControls = () => {
           });
         }
         
+        // Format for UI
         const formattedGroups = [
           { id: 'all', name: 'All Clients', count: totalCount || 0 }
         ];
         
+        // Add status groups
         Object.keys(statusCounts).forEach(status => {
           formattedGroups.push({
             id: status,
@@ -151,6 +137,42 @@ const CampaignControls = () => {
     }
   });
   
+  // Using custom assistants instead of fixed profiles
+  const { data: aiProfiles = [] } = useQuery({
+    queryKey: ['aiProfiles', customAssistants.length],
+    queryFn: () => {
+      // Simpler approach: just use assistant names for selection
+      return customAssistants.map(assistant => ({
+        id: assistant.id,
+        name: assistant.name,
+        description: `Assistant created on ${assistant.date ? new Date(assistant.date).toLocaleDateString() : 'unknown date'}`
+      }));
+    }
+  });
+  
+  useEffect(() => {
+    if (supabaseCampaignsData) {
+      const formattedCampaigns = supabaseCampaignsData.map(campaign => ({
+        id: campaign.id,
+        name: campaign.name || 'Untitled Campaign',
+        status: campaign.status || 'draft',
+        progress: campaign.total_calls > 0 
+          ? Math.round((campaign.answered_calls / campaign.total_calls) * 100) 
+          : 0,
+        clientGroup: 'Active Clients',
+        clientCount: campaign.total_calls || 0,
+        completedCalls: campaign.answered_calls || 0,
+        aiProfile: 'Sales Assistant',
+        startDate: campaign.start_date 
+          ? new Date(campaign.start_date).toLocaleDateString() 
+          : new Date().toLocaleDateString()
+      }));
+      
+      setCampaigns(formattedCampaigns);
+      setIsLoading(false);
+    }
+  }, [supabaseCampaignsData]);
+  
   const handleStartCampaign = async (id: number) => {
     try {
       setCampaigns(campaigns.map(campaign => 
@@ -165,6 +187,7 @@ const CampaignControls = () => {
           start_date: new Date().toISOString()
         });
         
+        // Determinar qual assistente de IA usar
         const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
         let assistantName = '';
         
@@ -174,6 +197,7 @@ const CampaignControls = () => {
           assistantName = selectedAssistant.name;
         }
         
+        // Simply send the assistant name to the webhook
         await webhookService.triggerCallWebhook({
           action: 'start_campaign',
           campaign_id: campaign.id,
@@ -320,9 +344,11 @@ const CampaignControls = () => {
     const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
     const clientCount = selectedGroup ? selectedGroup.count : 0;
     
+    // Get the assistant name from the selected profile
     const selectedAssistant = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
     const assistantName = selectedAssistant ? selectedAssistant.name : "Default Assistant";
     
+    // Save selected assistant to localStorage
     if (selectedAssistant) {
       localStorage.setItem('selected_assistant', JSON.stringify({
         id: selectedAssistant.id,
@@ -340,6 +366,7 @@ const CampaignControls = () => {
         end_date: null
       });
       
+      // Send only the assistant name to the webhook
       await webhookService.triggerCallWebhook({
         action: 'create_campaign',
         campaign_id: createdCampaign.id,

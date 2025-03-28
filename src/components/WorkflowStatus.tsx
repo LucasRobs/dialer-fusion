@@ -1,18 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RotateCw, CheckCircle, AlertCircle, Phone, Settings, Info } from 'lucide-react';
 import { webhookService, WebhookData } from '@/services/webhookService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import assistantService from '@/services/assistantService';
-import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
 
 interface WorkflowStatusProps {
   campaignId?: number;
@@ -43,16 +38,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     assistantId: "" // Will be populated from localStorage if available
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [selectedAssistant, setSelectedAssistant] = useState<string>('');
   const { toast } = useToast();
-  const { user } = useAuth();
-  
-  // Fetch user's assistants
-  const { data: assistants = [] } = useQuery({
-    queryKey: ['assistants'],
-    queryFn: assistantService.getAllAssistants,
-    enabled: !!user
-  });
   
   const loadData = async () => {
     if (!campaignId) {
@@ -88,81 +74,21 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     return () => clearInterval(interval);
   }, [refreshInterval]);
   
-  useEffect(() => {
-    // Check for selected assistant in local storage
-    const storedAssistant = localStorage.getItem('selected_assistant');
-    if (storedAssistant) {
-      try {
-        const assistantData = JSON.parse(storedAssistant);
-        if (assistantData && assistantData.id) {
-          setSelectedAssistant(assistantData.id);
-          
-          // Also update Vapi settings
-          setVapiSettings(prev => ({
-            ...prev,
-            assistantId: assistantData.id
-          }));
-        }
-      } catch (e) {
-        console.error("Erro ao carregar dados do assistente:", e);
-      }
-    }
-    
-    // Load Vapi settings from localStorage if available
-    const savedSettings = localStorage.getItem('vapi_settings');
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        setVapiSettings(prev => ({
-          ...parsed,
-          callerId: parsed.callerId || prev.callerId
-        }));
-      } catch (e) {
-        console.error("Erro ao carregar configurações Vapi:", e);
-      }
-    }
-  }, []);
-  
-  const handleAssistantChange = (assistantId: string) => {
-    setSelectedAssistant(assistantId);
-    
-    // Find the assistant data
-    const assistant = assistants.find(a => a.assistant_id === assistantId);
-    if (assistant) {
-      // Save to local storage
-      localStorage.setItem('selected_assistant', JSON.stringify({
-        id: assistant.assistant_id,
-        name: assistant.name
-      }));
-      
-      toast({
-        description: `Assistente "${assistant.name}" selecionado para uso.`,
-      });
-    }
-  };
-  
   const testWebhook = async () => {
     try {
-      // Get the selected assistant name
       let assistantName = "Default Assistant";
       
-      const assistant = assistants.find(a => a.assistant_id === selectedAssistant);
-      if (assistant) {
-        assistantName = assistant.name;
-      } else {
-        // Fallback to localStorage
-        try {
-          const storedAssistant = localStorage.getItem('selected_assistant');
-          if (storedAssistant) {
-            const assistantData = JSON.parse(storedAssistant);
-            if (assistantData && assistantData.name) {
-              assistantName = assistantData.name;
-              console.log('Using stored assistant name for test call:', assistantName);
-            }
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          const assistantData = JSON.parse(storedAssistant);
+          if (assistantData && assistantData.name) {
+            assistantName = assistantData.name;
+            console.log('Using stored assistant name for test call:', assistantName);
           }
-        } catch (e) {
-          console.error('Error parsing stored assistant data:', e);
         }
+      } catch (e) {
+        console.error('Error parsing stored assistant data:', e);
       }
       
       const testData: Omit<WebhookData, 'timestamp'> = {
@@ -208,6 +134,36 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     });
     setSettingsOpen(false);
   };
+  
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('vapi_settings');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setVapiSettings(prev => ({
+          ...parsed,
+          callerId: parsed.callerId || prev.callerId
+        }));
+      } catch (e) {
+        console.error("Erro ao carregar configurações Vapi:", e);
+      }
+    }
+    
+    const storedAssistant = localStorage.getItem('vapi_assistant');
+    if (storedAssistant) {
+      try {
+        const assistantData = JSON.parse(storedAssistant);
+        if (assistantData && assistantData.id) {
+          setVapiSettings(prev => ({
+            ...prev,
+            assistantId: assistantData.id
+          }));
+        }
+      } catch (e) {
+        console.error("Erro ao carregar dados do assistente:", e);
+      }
+    }
+  }, []);
 
   const renderEmptyState = () => (
     <div className="py-8 text-center space-y-4">
@@ -279,28 +235,18 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="assistantSelect">Assistente Vapi</Label>
-              <Select value={selectedAssistant} onValueChange={handleAssistantChange}>
-                <SelectTrigger id="assistantSelect">
-                  <SelectValue placeholder="Selecione um assistente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {assistants.length === 0 ? (
-                    <SelectItem value="none" disabled>Nenhum assistente disponível</SelectItem>
-                  ) : (
-                    assistants.map((assistant) => (
-                      <SelectItem key={assistant.assistant_id} value={assistant.assistant_id}>
-                        {assistant.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {selectedAssistant ? 
-                  `Usando ${assistants.find(a => a.assistant_id === selectedAssistant)?.name || "assistente personalizado"}` : 
-                  "Selecione um assistente para usar nas ligações"}
-              </p>
+              <Label htmlFor="assistantId">ID do Assistente Vapi</Label>
+              <Input
+                id="assistantId"
+                value={vapiSettings.assistantId || "Assistente personalizado será usado. Crie um na aba de AI Training"}
+                onChange={(e) => setVapiSettings({...vapiSettings, assistantId: e.target.value})}
+                readOnly
+              />
+              {vapiSettings.assistantId ? (
+                <p className="text-xs text-secondary">Você está usando um assistente personalizado.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Crie um assistente personalizado na aba AI Training.</p>
+              )}
             </div>
             
             <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>

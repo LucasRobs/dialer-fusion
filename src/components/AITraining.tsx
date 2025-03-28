@@ -71,12 +71,6 @@ const AITraining = () => {
           
           // Refresh assistants list
           queryClient.invalidateQueries({ queryKey: ['assistants'] });
-
-          // Também salva no localStorage para uso imediato
-          localStorage.setItem('selected_assistant', JSON.stringify({
-            id: savedAssistant.assistant_id,
-            name: savedAssistant.name
-          }));
         } else {
           toast({
             title: "Erro ao salvar assistente",

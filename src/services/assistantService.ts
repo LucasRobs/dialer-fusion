@@ -1,21 +1,19 @@
 
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Interface for the Assistant data
 export interface Assistant {
-  id?: number;
+  id: string;
   name: string;
   assistant_id: string;
   system_prompt?: string;
   first_message?: string;
-  user_id?: string;
   created_at?: string;
-  status?: string;
+  user_id?: string;
+  status?: 'pending' | 'ready' | 'failed';
 }
 
-// Service for managing AI assistants
 const assistantService = {
-  // Get all assistants
   async getAllAssistants(): Promise<Assistant[]> {
     try {
       const { data, error } = await supabase
@@ -24,56 +22,81 @@ const assistantService = {
         .order('created_at', { ascending: false });
       
       if (error) {
-        throw error;
+        console.error('Error fetching assistants:', error);
+        return [];
       }
       
       return data || [];
     } catch (error) {
-      console.error('Error fetching assistants:', error);
+      console.error('Error in getAllAssistants:', error);
       return [];
     }
   },
   
-  // Get user's assistants
-  async getUserAssistants(userId: string): Promise<Assistant[]> {
+  async saveAssistant(assistant: Omit<Assistant, 'id' | 'created_at'>): Promise<Assistant | null> {
     try {
       const { data, error } = await supabase
         .from('assistants')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .insert(assistant)
+        .select()
+        .single();
       
       if (error) {
-        throw error;
+        console.error('Error saving assistant:', error);
+        return null;
       }
       
-      return data || [];
+      return data;
     } catch (error) {
-      console.error('Error fetching user assistants:', error);
-      return [];
+      console.error('Error in saveAssistant:', error);
+      return null;
     }
   },
-  
-  // Save a new assistant
-  async saveAssistant(assistant: Omit<Assistant, 'id'>): Promise<Assistant | null> {
+
+  async updateAssistant(assistantId: string, updates: Partial<Assistant>): Promise<Assistant | null> {
     try {
       const { data, error } = await supabase
         .from('assistants')
-        .insert([assistant])
-        .select();
+        .update(updates)
+        .eq('id', assistantId)
+        .select()
+        .single();
       
       if (error) {
-        throw error;
+        console.error('Error updating assistant:', error);
+        return null;
       }
       
-      return data && data.length > 0 ? data[0] : null;
+      return data;
     } catch (error) {
-      console.error('Error saving assistant:', error);
+      console.error('Error in updateAssistant:', error);
       return null;
     }
   },
   
-  // Get assistant by ID
+  async selectAssistant(assistantId: string): Promise<Assistant | null> {
+    try {
+      const { data, error } = await supabase
+        .from('assistants')
+        .select('*')
+        .eq('assistant_id', assistantId)
+        .single();
+      
+      if (error) {
+        console.error('Error selecting assistant:', error);
+        return null;
+      }
+      
+      // Save to localStorage for compatibility with existing code
+      localStorage.setItem('selected_assistant', JSON.stringify(data));
+      
+      return data;
+    } catch (error) {
+      console.error('Error in selectAssistant:', error);
+      return null;
+    }
+  },
+  
   async getAssistantById(assistantId: string): Promise<Assistant | null> {
     try {
       const { data, error } = await supabase
@@ -83,42 +106,13 @@ const assistantService = {
         .single();
       
       if (error) {
-        throw error;
+        console.error('Error getting assistant by ID:', error);
+        return null;
       }
       
       return data;
     } catch (error) {
-      console.error('Error fetching assistant by id:', error);
-      return null;
-    }
-  },
-  
-  // Get assistant by name
-  async getAssistantByName(name: string): Promise<Assistant | null> {
-    try {
-      const { data, error } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('name', name)
-        .single();
-      
-      if (error) {
-        throw error;
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error fetching assistant by name:', error);
-      return null;
-    }
-  },
-  
-  // Select an assistant (in this implementation, we'll just return the assistant)
-  async selectAssistant(assistantId: string): Promise<Assistant | null> {
-    try {
-      return await this.getAssistantById(assistantId);
-    } catch (error) {
-      console.error('Error selecting assistant:', error);
+      console.error('Error in getAssistantById:', error);
       return null;
     }
   }
