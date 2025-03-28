@@ -10,7 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
@@ -57,13 +57,15 @@ const CampaignControls = () => {
     queryKey: ['campaigns'],
     queryFn: async () => {
       return await campaignService.getCampaigns();
-    }
+    },
+    staleTime: 0
   });
   
   const { data: customAssistants = [], isLoading: isLoadingAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
-    queryFn: () => webhookService.getAllAssistants(user?.id),
-    enabled: !!user?.id
+    queryFn: () => assistantService.getAllAssistants(user?.id),
+    enabled: !!user?.id,
+    staleTime: 0
   });
   
   const { refetch: refetchAssistants } = useQuery({
@@ -138,7 +140,8 @@ const CampaignControls = () => {
     queryKey: ['aiProfiles', customAssistants.length],
     queryFn: () => {
       const readyAssistants = customAssistants.filter(assistant => 
-        assistant.status === 'ready' || !assistant.status
+        (assistant.status === 'ready' || !assistant.status) && 
+        (assistant.user_id === user?.id || !assistant.user_id)
       );
       
       return readyAssistants.map(assistant => ({
@@ -150,7 +153,8 @@ const CampaignControls = () => {
                        'unknown date'}`
       }));
     },
-    enabled: customAssistants.length > 0
+    enabled: customAssistants.length > 0,
+    staleTime: 0
   });
   
   useEffect(() => {
@@ -185,46 +189,60 @@ const CampaignControls = () => {
       const campaign = campaigns.find(c => c.id === id);
       
       if (campaign) {
-        await campaignService.updateCampaign(id, {
-          status: 'active',
-          start_date: new Date().toISOString()
-        });
+        const { data: existingCampaign } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('id', id)
+          .single();
         
-        const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
-        let assistantName = '';
-        let assistantId = '';
-        
-        if (assistantProfile) {
-          assistantName = assistantProfile.name;
-          assistantId = assistantProfile.assistant_id || assistantProfile.id;
-        } else if (selectedAssistant) {
-          assistantName = selectedAssistant.name;
-          assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
-        }
-        
-        await webhookService.triggerCallWebhook({
-          action: 'start_campaign',
-          campaign_id: campaign.id,
-          additional_data: {
-            campaign_name: campaign.name,
-            client_count: campaign.clientCount,
-            assistant_name: assistantName,
-            assistant_id: assistantId,
-            ai_profile: assistantName || 'Default Assistant',
-          }
-        });
-        
-        const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
-        
-        if (result.success) {
-          toast({
-            title: "Campanha Iniciada",
-            description: `${result.successfulCalls} ligações foram enviadas com sucesso (${result.failedCalls} falhas).`,
+        if (existingCampaign) {
+          await campaignService.updateCampaign(id, {
+            status: 'active',
+            start_date: new Date().toISOString()
           });
+          
+          const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
+          let assistantName = '';
+          let assistantId = '';
+          
+          if (assistantProfile) {
+            assistantName = assistantProfile.name;
+            assistantId = assistantProfile.assistant_id || assistantProfile.id;
+          } else if (selectedAssistant) {
+            assistantName = selectedAssistant.name;
+            assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
+          }
+          
+          await webhookService.triggerCallWebhook({
+            action: 'start_campaign',
+            campaign_id: campaign.id,
+            additional_data: {
+              campaign_name: campaign.name,
+              client_count: campaign.clientCount,
+              assistant_name: assistantName,
+              assistant_id: assistantId,
+              ai_profile: assistantName || 'Default Assistant',
+            }
+          });
+          
+          const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
+          
+          if (result && result.success) {
+            toast({
+              title: "Campanha Iniciada",
+              description: `${result.successfulCalls} ligações foram enviadas com sucesso (${result.failedCalls} falhas).`,
+            });
+          } else {
+            toast({
+              title: "Campanha Iniciada Parcialmente",
+              description: "Alguns clientes não puderam ser contactados. Verifique os logs.",
+              variant: "destructive"
+            });
+          }
         } else {
           toast({
-            title: "Campanha Iniciada Parcialmente",
-            description: "Alguns clientes não puderam ser contactados. Verifique os logs.",
+            title: "Erro",
+            description: "Campanha não encontrada. Por favor, atualize a página e tente novamente.",
             variant: "destructive"
           });
         }
@@ -363,7 +381,8 @@ const CampaignControls = () => {
     const assistantToStore = {
       id: selectedAssistantProfile.id,
       name: selectedAssistantProfile.name,
-      assistant_id: selectedAssistantProfile.assistant_id || selectedAssistantProfile.id
+      assistant_id: selectedAssistantProfile.assistant_id || selectedAssistantProfile.id,
+      user_id: user?.id
     };
     
     localStorage.setItem('selected_assistant', JSON.stringify(assistantToStore));
@@ -375,7 +394,8 @@ const CampaignControls = () => {
         total_calls: clientCount,
         answered_calls: 0,
         start_date: null,
-        end_date: null
+        end_date: null,
+        user_id: user?.id
       });
       
       await webhookService.triggerCallWebhook({

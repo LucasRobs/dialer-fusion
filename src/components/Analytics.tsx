@@ -1,30 +1,146 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageSquare, BarChart3, FileBarChart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
-import { campaignService } from '@/services/campaignService';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+
+interface AnalyticsData {
+  totalCalls: number;
+  callsChangePercentage: number;
+  avgCallDuration: string;
+  durationChangePercentage: number;
+  conversionRate: number;
+  conversionChangePercentage: number;
+  callsData: {
+    name: string;
+    calls: number;
+    cost: number;
+  }[];
+  campaignData: {
+    name: string;
+    value: number;
+  }[];
+}
 
 const Analytics = () => {
   const { user } = useAuth();
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch analytics data
-  const { data: analyticsData, isLoading } = useQuery({
-    queryKey: ['analyticsData'],
-    queryFn: async () => {
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
       try {
-        // This would fetch real analytics data
-        return await campaignService.getAnalyticsData();
+        setIsLoading(true);
+        
+        // Fetch calls data from Supabase
+        const { data: callsData, error: callsError } = await supabase
+          .from('calls')
+          .select('*, clients(name), campaigns(name)')
+          .order('call_start', { ascending: false });
+        
+        if (callsError) {
+          console.error("Error fetching calls:", callsError);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Fetch campaigns data
+        const { data: campaignsData, error: campaignsError } = await supabase
+          .from('campaigns')
+          .select('*')
+          .order('created_at', { ascending: false });
+          
+        if (campaignsError) {
+          console.error("Error fetching campaigns:", campaignsError);
+        }
+        
+        // Calculate analytics metrics
+        const formattedCalls = callsData || [];
+        const completedCalls = formattedCalls.filter(call => 
+          call.status === 'completed' || call.status === 'answered'
+        );
+        
+        const totalCallDuration = formattedCalls.reduce(
+          (sum, call) => sum + (call.duration || 0), 0
+        );
+        
+        const avgDuration = formattedCalls.length > 0 
+          ? totalCallDuration / formattedCalls.length 
+          : 0;
+          
+        const minutes = Math.floor(avgDuration / 60);
+        const seconds = Math.floor(avgDuration % 60);
+        
+        // Group calls by month
+        const callsByMonth: Record<string, { calls: number, cost: number }> = {};
+        formattedCalls.forEach(call => {
+          const date = new Date(call.call_start);
+          const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+          
+          if (!callsByMonth[monthYear]) {
+            callsByMonth[monthYear] = { calls: 0, cost: 0 };
+          }
+          
+          callsByMonth[monthYear].calls += 1;
+          callsByMonth[monthYear].cost += (call.duration || 0) * 0.01; // Example cost calculation
+        });
+        
+        const monthlyCallsData = Object.entries(callsByMonth).map(([name, data]) => ({
+          name,
+          calls: data.calls,
+          cost: parseFloat(data.cost.toFixed(2))
+        }));
+        
+        // Group calls by campaign
+        const callsByCampaign: Record<string, number> = {};
+        formattedCalls.forEach(call => {
+          if (!call.campaign_id) return;
+          
+          const campaignName = call.campaigns?.name || `Campaign ${call.campaign_id}`;
+          
+          if (!callsByCampaign[campaignName]) {
+            callsByCampaign[campaignName] = 0;
+          }
+          
+          callsByCampaign[campaignName] += 1;
+        });
+        
+        const campaignCallsData = Object.entries(callsByCampaign).map(([name, value]) => ({
+          name,
+          value
+        }));
+        
+        // Prepare the analytics data
+        const data: AnalyticsData = {
+          totalCalls: formattedCalls.length,
+          callsChangePercentage: 10, // Placeholder
+          avgCallDuration: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+          durationChangePercentage: 5, // Placeholder
+          conversionRate: formattedCalls.length > 0 
+            ? Math.round((completedCalls.length / formattedCalls.length) * 100) 
+            : 0,
+          conversionChangePercentage: 2, // Placeholder
+          callsData: monthlyCallsData,
+          campaignData: campaignCallsData
+        };
+        
+        setAnalyticsData(data);
       } catch (error) {
         console.error("Error fetching analytics data:", error);
-        return null;
+      } finally {
+        setIsLoading(false);
       }
+    };
+    
+    if (user) {
+      fetchAnalyticsData();
     }
-  });
+  }, [user]);
 
   // Check if user has any data to display
   const hasData = analyticsData && 
@@ -57,7 +173,11 @@ const Analytics = () => {
         </TabsList>
         
         <TabsContent value="overview" className="space-y-4">
-          {!hasData ? renderEmptyState() : (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : !hasData ? renderEmptyState() : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <Card className="card-hover">
@@ -130,7 +250,11 @@ const Analytics = () => {
         </TabsContent>
 
         <TabsContent value="campaigns" className="space-y-4">
-          {!hasData ? renderEmptyState() : (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : !hasData ? renderEmptyState() : (
             <Card className="card-hover">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold">Taxas de Sucesso de Campanhas</CardTitle>
@@ -178,7 +302,11 @@ const Analytics = () => {
         </TabsContent>
 
         <TabsContent value="client-engagement" className="space-y-4">
-          {!hasData ? renderEmptyState() : (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : !hasData ? renderEmptyState() : (
             <Card className="card-hover">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold">Análise de Interação com Clientes</CardTitle>

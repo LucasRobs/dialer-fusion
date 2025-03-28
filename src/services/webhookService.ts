@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -37,6 +38,7 @@ export interface VapiAssistant {
   created_at?: string;
   date?: string;
   status?: string;
+  user_id?: string;
 }
 
 // Interface para o log do webhook
@@ -77,7 +79,8 @@ export const webhookService = {
               name: vapiAssistant.name,
               assistant_id: vapiAssistant.id,
               date: new Date().toISOString(),
-              status: 'ready'
+              status: 'ready',
+              user_id: userId
             }));
             
             // Update local database with latest data from Vapi
@@ -110,7 +113,8 @@ export const webhookService = {
         name: assistant.name,
         assistant_id: assistant.assistant_id,
         date: assistant.created_at,
-        status: assistant.status || 'ready'
+        status: assistant.status || 'ready',
+        user_id: assistant.user_id
       }));
     } catch (error) {
       console.error('Error getting assistants:', error);
@@ -120,7 +124,8 @@ export const webhookService = {
         id: 'default-assistant',
         name: 'Default Assistant',
         date: new Date().toISOString(),
-        status: 'ready'
+        status: 'ready',
+        user_id: userId
       }];
     }
   },
@@ -252,7 +257,13 @@ export const webhookService = {
         body: JSON.stringify(webhookData),
       });
       
-      const responseData = await response.json();
+      let responseData = {};
+      try {
+        responseData = await response.json();
+      } catch (e) {
+        console.log('No JSON response from assistant webhook');
+      }
+      
       console.log('Resposta do webhook de assistente:', responseData);
       
       // Registra a chamada no histórico
@@ -402,7 +413,49 @@ export const webhookService = {
     try {
       console.log(`Preparing bulk calls for campaign ID: ${campaignId}`);
       
-      // Busca clientes diretos da tabela de clientes como solução alternativa
+      // Try to get clients linked to the campaign first
+      try {
+        const { data: campaignClients, error: campaignError } = await supabase
+          .from('campaign_clients')
+          .select('client_id')
+          .eq('campaign_id', campaignId)
+          .eq('status', 'pending');
+          
+        if (campaignError) {
+          console.error(`Error fetching campaign clients: ${campaignError.message}`);
+          throw new Error(`Error fetching campaign clients: ${campaignError.message}`);
+        }
+        
+        if (campaignClients && campaignClients.length > 0) {
+          console.log(`Found ${campaignClients.length} pending clients for campaign`);
+          
+          // Fetch clients data
+          const clientIds = campaignClients.map(cc => cc.client_id);
+          const { data: clientsData, error: clientsError } = await supabase
+            .from('clients')
+            .select('*')
+            .in('id', clientIds);
+            
+          if (clientsError) {
+            console.error(`Error fetching clients data: ${clientsError.message}`);
+            throw new Error(`Error fetching clients data: ${clientsError.message}`);
+          }
+          
+          if (clientsData && clientsData.length > 0) {
+            await this.processBulkCalls(clientsData, campaignId);
+            return {
+              success: true,
+              totalCalls: clientsData.length,
+              successfulCalls: clientsData.length,
+              failedCalls: 0
+            };
+          }
+        }
+      } catch (e) {
+        console.log('No campaign clients found, falling back to all clients');
+      }
+      
+      // Fallback: Busca clientes diretos da tabela de clientes
       const { data: allClients, error } = await supabase
         .from('clients')
         .select('*')
@@ -422,70 +475,76 @@ export const webhookService = {
           successfulCalls: 0,
           failedCalls: 0,
           message: 'No clients found'
-        }
-      }
-      
-      // Get selected assistant name from localStorage
-      let assistantName = "Default Assistant";
-      let assistantId = "";
-      
-      try {
-        const storedAssistant = localStorage.getItem('selected_assistant');
-        if (storedAssistant) {
-          const assistantData = JSON.parse(storedAssistant);
-          if (assistantData && assistantData.name) {
-            assistantName = assistantData.name;
-            assistantId = assistantData.assistant_id || assistantData.id || "";
-            console.log('Using stored assistant name for bulk calls:', assistantName);
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing stored assistant data:', e);
-      }
-      
-      // Prepara os dados para o webhook - validando cada cliente
-      const bulkCallData = allClients.map(client => {
-        const callData = {
-          action: 'start_call',
-          campaign_id: campaignId,
-          client_id: client.id,
-          client_name: client.name || 'Cliente Sem Nome',
-          client_phone: client.phone || 'Telefone Não Informado',
-          additional_data: {
-            assistant_name: assistantName,
-            assistant_id: assistantId,
-            call_type: 'bulk_campaign',
-            client_details: true
-          }
         };
-        
-        console.log(`Prepared webhook data for client ${client.id}:`, {
-          name: callData.client_name,
-          phone: callData.client_phone
-        });
-        
-        return callData;
-      });
+      }
       
-      console.log(`Sending ${bulkCallData.length} calls to webhook`);
+      return await this.processBulkCalls(allClients, campaignId);
       
-      // Envia os dados para o webhook
-      const results = await Promise.all(
-        bulkCallData.map(callData => this.triggerCallWebhook(callData))
-      );
-      
-      const successCount = results.filter(r => r.success).length;
-      console.log(`Successfully sent ${successCount} out of ${results.length} calls`);
-      
-      return {
-        success: results.some(r => r.success),
-        totalCalls: results.length,
-        successfulCalls: successCount,
-        failedCalls: results.filter(r => !r.success).length
-      };
     } catch (error) {
       console.error('Erro ao preparar lote de ligações:', error);
       throw error;
     }
+  },
+  
+  // Helper function to process bulk calls
+  async processBulkCalls(clients: any[], campaignId: number) {
+    // Get selected assistant name from localStorage
+    let assistantName = "Default Assistant";
+    let assistantId = "";
+    
+    try {
+      const storedAssistant = localStorage.getItem('selected_assistant');
+      if (storedAssistant) {
+        const assistantData = JSON.parse(storedAssistant);
+        if (assistantData && assistantData.name) {
+          assistantName = assistantData.name;
+          assistantId = assistantData.assistant_id || assistantData.id || "";
+          console.log('Using stored assistant name for bulk calls:', assistantName);
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing stored assistant data:', e);
+    }
+    
+    // Prepara os dados para o webhook - validando cada cliente
+    const bulkCallData = clients.map(client => {
+      const callData = {
+        action: 'start_call',
+        campaign_id: campaignId,
+        client_id: client.id,
+        client_name: client.name || 'Cliente Sem Nome',
+        client_phone: client.phone || 'Telefone Não Informado',
+        additional_data: {
+          assistant_name: assistantName,
+          assistant_id: assistantId,
+          call_type: 'bulk_campaign',
+          client_details: true
+        }
+      };
+      
+      console.log(`Prepared webhook data for client ${client.id}:`, {
+        name: callData.client_name,
+        phone: callData.client_phone
+      });
+      
+      return callData;
+    });
+    
+    console.log(`Sending ${bulkCallData.length} calls to webhook`);
+    
+    // Envia os dados para o webhook
+    const results = await Promise.all(
+      bulkCallData.map(callData => this.triggerCallWebhook(callData))
+    );
+    
+    const successCount = results.filter(r => r.success).length;
+    console.log(`Successfully sent ${successCount} out of ${results.length} calls`);
+    
+    return {
+      success: results.some(r => r.success),
+      totalCalls: results.length,
+      successfulCalls: successCount,
+      failedCalls: results.filter(r => !r.success).length
+    };
   }
 };
