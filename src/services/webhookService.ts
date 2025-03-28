@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -172,24 +171,43 @@ export const webhookService = {
       webhookData.additional_data.assistant_id = assistantId;
     }
     
-    // Garanta que client_name e client_phone estejam incluídos no payload principal
-    if (webhookData.client_id && (!webhookData.client_name || !webhookData.client_phone)) {
+    // Fetch client details from Supabase if client_id is provided
+    if (webhookData.client_id) {
       try {
-        const { data: clientData } = await supabase
+        console.log(`Fetching client data for ID: ${webhookData.client_id}`);
+        
+        const { data: clientData, error } = await supabase
           .from('clients')
           .select('name, phone')
           .eq('id', webhookData.client_id)
           .single();
-          
+        
+        if (error) {
+          console.error('Error fetching client data:', error);
+        }
+        
         if (clientData) {
+          console.log('Client data fetched successfully:', clientData);
           webhookData.client_name = clientData.name;
           webhookData.client_phone = clientData.phone;
-          console.log('Added client details to webhook payload:', clientData.name, clientData.phone);
+        } else {
+          console.log('No client data found for ID:', webhookData.client_id);
         }
       } catch (error) {
-        console.error('Erro ao obter dados do cliente para webhook:', error);
+        console.error('Exception when fetching client data:', error);
       }
     }
+    
+    // Ensure client_name and client_phone are set, even if just with placeholder values
+    if (!webhookData.client_name) {
+      webhookData.client_name = webhookData.client_name || 'Unknown Client';
+    }
+    
+    if (!webhookData.client_phone) {
+      webhookData.client_phone = webhookData.client_phone || 'No Phone';
+    }
+    
+    console.log('Final webhook payload:', webhookData);
     
     try {
       // Envia requisição para o webhook
@@ -379,20 +397,23 @@ export const webhookService = {
     }
   },
   
-  // Nova função para preparar um lote de ligações para uma campanha
+  // Função para preparar um lote de ligações para uma campanha
   async prepareBulkCallsForCampaign(campaignId: number) {
     try {
-      // Busca clientes diretos da tabela de clientes como solução alternativa já que campaign_clients tem problemas
+      console.log(`Preparing bulk calls for campaign ID: ${campaignId}`);
+      
+      // Busca clientes diretos da tabela de clientes como solução alternativa
       const { data: allClients, error } = await supabase
         .from('clients')
         .select('*')
         .limit(10);  // Limitar a 10 clientes para teste
       
       if (error) {
+        console.error(`Error fetching clients: ${error.message}`);
         throw new Error(`Error fetching clients: ${error.message}`);
       }
       
-      console.log('Clients fetched directly from clients table:', allClients);
+      console.log(`Clients fetched from clients table: ${allClients?.length || 0}`);
       
       if (!allClients || allClients.length === 0) {
         return {
@@ -422,32 +443,44 @@ export const webhookService = {
         console.error('Error parsing stored assistant data:', e);
       }
       
-      // Prepara os dados para o webhook - garantindo que nome e telefone do cliente sejam incluídos
-      const bulkCallData = allClients.map(client => ({
-        action: 'start_call',
-        campaign_id: campaignId,
-        client_id: client.id,
-        client_name: client.name || 'Cliente Sem Nome',
-        client_phone: client.phone || 'Telefone Não Informado',
-        additional_data: {
-          assistant_name: assistantName,
-          assistant_id: assistantId,
-          call_type: 'bulk_campaign',
-          client_details: true
-        }
-      }));
+      // Prepara os dados para o webhook - validando cada cliente
+      const bulkCallData = allClients.map(client => {
+        const callData = {
+          action: 'start_call',
+          campaign_id: campaignId,
+          client_id: client.id,
+          client_name: client.name || 'Cliente Sem Nome',
+          client_phone: client.phone || 'Telefone Não Informado',
+          additional_data: {
+            assistant_name: assistantName,
+            assistant_id: assistantId,
+            call_type: 'bulk_campaign',
+            client_details: true
+          }
+        };
+        
+        console.log(`Prepared webhook data for client ${client.id}:`, {
+          name: callData.client_name,
+          phone: callData.client_phone
+        });
+        
+        return callData;
+      });
       
-      console.log('Prepared webhook data for bulk calls:', bulkCallData);
+      console.log(`Sending ${bulkCallData.length} calls to webhook`);
       
       // Envia os dados para o webhook
       const results = await Promise.all(
         bulkCallData.map(callData => this.triggerCallWebhook(callData))
       );
       
+      const successCount = results.filter(r => r.success).length;
+      console.log(`Successfully sent ${successCount} out of ${results.length} calls`);
+      
       return {
         success: results.some(r => r.success),
         totalCalls: results.length,
-        successfulCalls: results.filter(r => r.success).length,
+        successfulCalls: successCount,
         failedCalls: results.filter(r => !r.success).length
       };
     } catch (error) {
