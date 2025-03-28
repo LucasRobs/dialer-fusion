@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import { Client } from './clientService';
 
@@ -19,27 +18,20 @@ export interface ClientGroupMember {
 }
 
 export const clientGroupService = {
-  // Get all client groups for a user
   getClientGroups: async (): Promise<ClientGroup[]> => {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
-
     if (!userId) return [];
     
     const { data, error } = await supabase
       .from('client_groups')
       .select('*')
       .eq('user_id', userId);
-      
-    if (error) {
-      console.error('Error fetching client groups:', error);
-      throw error;
-    }
     
+    if (error) throw error;
     return data || [];
   },
-  
-  // Create a new client group
+
   createClientGroup: async (group: Omit<ClientGroup, 'id' | 'created_at'>) => {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
@@ -48,16 +40,11 @@ export const clientGroupService = {
       .from('client_groups')
       .insert([{ ...group, user_id: userId }])
       .select();
-      
-    if (error) {
-      console.error('Error creating client group:', error);
-      throw error;
-    }
     
+    if (error) throw error;
     return data[0];
   },
-  
-  // Update a client group
+
   updateClientGroup: async (id: string, updates: Partial<ClientGroup>) => {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
@@ -66,122 +53,85 @@ export const clientGroupService = {
       .from('client_groups')
       .update(updates)
       .eq('id', id)
-      .eq('user_id', userId)  // Garantir que o grupo pertence ao usuário atual
+      .eq('user_id', userId)
       .select();
-      
-    if (error) {
-      console.error('Error updating client group:', error);
-      throw error;
-    }
     
+    if (error) throw error;
     return data[0];
   },
-  
-  // Delete a client group
+
   deleteClientGroup: async (id: string) => {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
     
-    // First delete all client-group relationships
-    const { error: relationshipError } = await supabase
-      .from('client_group_members')
-      .delete()
-      .eq('group_id', id);
-      
-    if (relationshipError) {
-      console.error('Error deleting client group memberships:', relationshipError);
-      throw relationshipError;
-    }
+    await supabase.from('client_group_members').delete().eq('group_id', id);
     
-    // Then delete the group
     const { error } = await supabase
       .from('client_groups')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId);  // Garantir que o grupo pertence ao usuário atual
-      
-    if (error) {
-      console.error('Error deleting client group:', error);
-      throw error;
-    }
+      .eq('user_id', userId);
     
+    if (error) throw error;
     return { success: true };
   },
-  
-  // Add a client to a group
+
   addClientToGroup: async (clientId: number, groupId: string) => {
     const { data, error } = await supabase
       .from('client_group_members')
       .insert([{ client_id: clientId, group_id: groupId }])
       .select();
-      
-    if (error) {
-      console.error('Error adding client to group:', error);
-      throw error;
-    }
     
+    if (error) throw error;
     return data[0];
   },
-  
-  // Remove a client from a group
+
   removeClientFromGroup: async (clientId: number, groupId: string) => {
     const { error } = await supabase
       .from('client_group_members')
       .delete()
       .eq('client_id', clientId)
       .eq('group_id', groupId);
-      
-    if (error) {
-      console.error('Error removing client from group:', error);
-      throw error;
-    }
     
+    if (error) throw error;
     return { success: true };
   },
-  
-  // Get all clients in a group
+
   getClientsInGroup: async (groupId: string): Promise<Client[]> => {
     const { data, error } = await supabase
       .from('client_group_members')
-      .select(`
-        client_id,
-        clients:client_id (*)
-      `)
+      .select('client_id')
       .eq('group_id', groupId);
-      
-    if (error) {
-      console.error('Error fetching clients in group:', error);
-      throw error;
-    }
-  
-    // Extraindo corretamente os clientes
-    const clients = data.map(item => item.clients).filter(Boolean) as Client[];
-  
-    return clients;
+    
+    if (error) throw error;
+    if (!data.length) return [];
+    
+    const clientIds = data.map(({ client_id }) => client_id);
+    const { data: clients, error: clientError } = await supabase
+      .from('clients')
+      .select('*')
+      .in('id', clientIds);
+    
+    if (clientError) throw clientError;
+    return clients || [];
   },
-  
-  // Get all groups a client belongs to
+
   getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
     const { data, error } = await supabase
       .from('client_group_members')
-      .select(`
-        group_id,
-        client_groups (*)
-      `)
+      .select('group_id')
       .eq('client_id', clientId);
-      
-    if (error) {
-      console.error('Error fetching client groups for client:', error);
-      throw error;
-    }
     
-    // Properly extract and transform the nested groups data
-    // Each item.client_groups is an object, not an array
-    const groups = data.map(item => {
-      if (!item.client_groups) return null;
-      return item.client_groups as unknown as ClientGroup;
-    }).filter(Boolean) as ClientGroup[];
+    if (error) throw error;
+    if (!data.length) return [];
     
-    return groups;
+    const groupIds = data.map(({ group_id }) => group_id);
+    const { data: groups, error: groupError } = await supabase
+      .from('client_groups')
+      .select('*')
+      .in('id', groupIds);
+    
+    if (groupError) throw groupError;
+    return groups || [];
   }
 };
