@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -47,10 +48,10 @@ interface WebhookLog {
 // Serviço para gerenciar webhooks
 export const webhookService = {
   // Função para buscar todos os assistentes do usuário
-  async getAllAssistants(): Promise<VapiAssistant[]> {
+  async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
     try {
-      const { user } = useAuth();
-      const assistants = await assistantService.getAllAssistants(user?.id);
+      // Use the userId parameter instead of trying to get it from useAuth
+      const assistants = await assistantService.getAllAssistants(userId);
       return assistants.map(assistant => ({
         id: assistant.id,
         name: assistant.name,
@@ -334,3 +335,4 @@ export const webhookService = {
     }
   }
 };
+
