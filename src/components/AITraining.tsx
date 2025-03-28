@@ -7,13 +7,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { webhookService } from '@/services/webhookService';
+import assistantService from '@/services/assistantService';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const AITraining = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiName, setAiName] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+
+  // Fetch existing assistants
+  const { data: assistants = [], isLoading } = useQuery({
+    queryKey: ['assistants'],
+    queryFn: assistantService.getAllAssistants
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,15 +49,35 @@ const AITraining = () => {
       });
       
       if (response.success && response.data && response.data.assistant_id) {
-        toast({
-          title: "Assistente criado com sucesso",
-          description: "Seu assistente de IA foi criado e configurado.",
+        // Salvar assistente no banco de dados
+        const savedAssistant = await assistantService.saveAssistant({
+          name: aiName,
+          assistant_id: response.data.assistant_id,
+          system_prompt: systemPrompt,
+          first_message: firstMessage,
+          user_id: user?.id
         });
         
-        // Reset form
-        setAiName('');
-        setFirstMessage('');
-        setSystemPrompt('');
+        if (savedAssistant) {
+          toast({
+            title: "Assistente criado com sucesso",
+            description: "Seu assistente de IA foi criado e configurado.",
+          });
+          
+          // Reset form
+          setAiName('');
+          setFirstMessage('');
+          setSystemPrompt('');
+          
+          // Refresh assistants list
+          queryClient.invalidateQueries({ queryKey: ['assistants'] });
+        } else {
+          toast({
+            title: "Erro ao salvar assistente",
+            description: "O assistente foi criado na Vapi, mas não foi possível salvá-lo no banco de dados.",
+            variant: "destructive"
+          });
+        }
       } else {
         toast({
           title: "Erro ao criar assistente",
@@ -76,6 +107,31 @@ const AITraining = () => {
         </p>
       </div>
       
+      {/* Lista de assistentes existentes */}
+      {assistants.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Assistentes Criados</CardTitle>
+            <CardDescription>
+              Assistentes de IA que você já configurou
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {assistants.map(assistant => (
+                <div key={assistant.id} className="p-4 border rounded-md">
+                  <div className="font-medium">{assistant.name}</div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Formulário para criar novo assistente */}
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Configurar Assistente Virtual</CardTitle>

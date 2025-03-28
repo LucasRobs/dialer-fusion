@@ -1,5 +1,5 @@
-
 import { supabase } from '@/lib/supabase';
+import assistantService from './assistantService';
 
 // URL do webhook corrigida para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
@@ -50,44 +50,23 @@ interface WebhookLog {
 // Serviço para gerenciar webhooks
 export const webhookService = {
   // Função para buscar todos os assistentes do usuário
-  getAllAssistants(): VapiAssistant[] {
+  async getAllAssistants(): Promise<VapiAssistant[]> {
     try {
-      const storedAssistantsStr = localStorage.getItem('vapi_assistants');
-      if (storedAssistantsStr) {
-        return JSON.parse(storedAssistantsStr);
-      }
+      const assistants = await assistantService.getAllAssistants();
+      return assistants.map(assistant => ({
+        id: assistant.assistant_id,
+        name: assistant.name,
+        date: assistant.created_at
+      }));
     } catch (error) {
-      console.error('Error parsing assistants from localStorage:', error);
-    }
-    
-    // Default assistant sempre disponível
-    return [{
-      id: VAPI_ASSISTANT_ID,
-      name: 'Default Vapi Assistant',
-      date: new Date().toISOString()
-    }];
-  },
-  
-  // Função para salvar um novo assistente
-  saveAssistant(assistant: VapiAssistant) {
-    try {
-      const currentAssistants = this.getAllAssistants();
+      console.error('Error getting assistants:', error);
       
-      // Verifica se o assistente já existe
-      const exists = currentAssistants.some(a => a.id === assistant.id);
-      
-      if (!exists) {
-        // Adiciona o novo assistente à lista
-        const updatedAssistants = [...currentAssistants, {
-          ...assistant,
-          date: new Date().toISOString()
-        }];
-        
-        // Salva a lista atualizada
-        localStorage.setItem('vapi_assistants', JSON.stringify(updatedAssistants));
-      }
-    } catch (error) {
-      console.error('Error saving assistant to localStorage:', error);
+      // Default assistant sempre disponível
+      return [{
+        id: VAPI_ASSISTANT_ID,
+        name: 'Default Vapi Assistant',
+        date: new Date().toISOString()
+      }];
     }
   },
   
@@ -180,26 +159,6 @@ export const webhookService = {
       // Registra a chamada no histórico
       await this.logWebhookCall(webhookData, response.ok, 'create_assistant');
       
-      // Se a criação foi bem-sucedida e temos um ID no retorno, salva o assistente
-      if (response.ok && responseData && responseData.assistant_id) {
-        // Salva no localStorage para uso posterior
-        const newAssistant: VapiAssistant = {
-          id: responseData.assistant_id,
-          name: data.assistant_name,
-          date: new Date().toISOString()
-        };
-        
-        // Salva como assistente atual
-        localStorage.setItem('selected_assistant', JSON.stringify(newAssistant));
-        
-        // Adiciona à lista de assistentes
-        this.saveAssistant(newAssistant);
-        
-        console.log('Assistente salvo com sucesso:', newAssistant);
-      } else {
-        console.error('Resposta inválida do webhook ou falta assistant_id', responseData);
-      }
-      
       return { 
         success: response.ok, 
         status: response.status,
@@ -213,18 +172,10 @@ export const webhookService = {
   },
   
   // Função para selecionar um assistente para uso
-  selectAssistant(assistantId: string) {
+  async selectAssistant(assistantId: string) {
     try {
-      const assistants = this.getAllAssistants();
-      const assistant = assistants.find(a => a.id === assistantId);
-      
-      if (assistant) {
-        localStorage.setItem('selected_assistant', JSON.stringify(assistant));
-        console.log('Assistente selecionado:', assistant.name);
-        return true;
-      }
-      
-      return false;
+      const assistant = await assistantService.selectAssistant(assistantId);
+      return !!assistant;
     } catch (error) {
       console.error('Erro ao selecionar assistente:', error);
       return false;

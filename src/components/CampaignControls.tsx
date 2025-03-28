@@ -31,9 +31,10 @@ import {
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService, VapiAssistant } from '@/services/webhookService';
-import { campaignService, Campaign } from '@/services/campaignService';
+import { campaignService } from '@/services/campaignService';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import assistantService from '@/services/assistantService';
 
 const CampaignControls = () => {
   const [campaigns, setCampaigns] = useState([]);
@@ -48,7 +49,6 @@ const CampaignControls = () => {
   const { toast } = useToast();
   
   // Estado para controlar os assistentes personalizados
-  const [customAssistants, setCustomAssistants] = useState<VapiAssistant[]>([]);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   
   // Add a query to fetch campaigns
@@ -59,22 +59,31 @@ const CampaignControls = () => {
     }
   });
   
+  // Fetch assistants from the database
+  const { data: customAssistants = [], refetch: refetchAssistants } = useQuery({
+    queryKey: ['assistants'],
+    queryFn: webhookService.getAllAssistants
+  });
+  
   // Carregar assistentes personalizados
   useEffect(() => {
-    const assistants = webhookService.getAllAssistants();
-    setCustomAssistants(assistants);
-    
-    // Verificar se há um assistente selecionado no localStorage
-    try {
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      if (storedAssistant) {
-        const assistant = JSON.parse(storedAssistant);
-        setSelectedAssistant(assistant);
+    if (customAssistants.length > 0) {
+      // Verificar se há um assistente selecionado no localStorage
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          const assistant = JSON.parse(storedAssistant);
+          setSelectedAssistant(assistant);
+        } else if (customAssistants.length > 0) {
+          // Selecionar o primeiro assistente por padrão
+          setSelectedAssistant(customAssistants[0]);
+          localStorage.setItem('selected_assistant', JSON.stringify(customAssistants[0]));
+        }
+      } catch (error) {
+        console.error('Error loading selected assistant:', error);
       }
-    } catch (error) {
-      console.error('Error loading selected assistant:', error);
     }
-  }, []);
+  }, [customAssistants]);
   
   // Fetch real client groups from supabase but without using group()
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
@@ -409,9 +418,9 @@ const CampaignControls = () => {
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold">Suas Campanhas</h2>
-            <Button size="sm">
+            <Button size="sm" onClick={() => refetchAssistants()}>
               <BarChart3 className="h-4 w-4 mr-2" />
-              Ver Relatórios
+              Atualizar Assistentes
             </Button>
           </div>
           
@@ -574,21 +583,36 @@ const CampaignControls = () => {
                       <SelectValue placeholder="Select an AI assistant" />
                     </SelectTrigger>
                     <SelectContent>
-                      {aiProfiles.map((profile) => (
-                        <SelectItem key={profile.id} value={profile.id.toString()}>
-                          {profile.name}
+                      {aiProfiles.length === 0 ? (
+                        <SelectItem value="no-assistants" disabled>
+                          No assistants available - create one in the Training section
                         </SelectItem>
-                      ))}
+                      ) : (
+                        aiProfiles.map((profile) => (
+                          <SelectItem key={profile.id} value={profile.id.toString()}>
+                            {profile.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
                     {newCampaign.aiProfile && 
                       aiProfiles.find(p => p.id.toString() === newCampaign.aiProfile)?.description}
+                    {aiProfiles.length === 0 && (
+                      <span className="text-amber-500">
+                        Você precisa criar um assistente na seção de Treinamento antes de criar uma campanha.
+                      </span>
+                    )}
                   </p>
                 </div>
                 
                 <div className="pt-4">
-                  <Button type="submit" className="w-full">
+                  <Button 
+                    type="submit" 
+                    className="w-full"
+                    disabled={aiProfiles.length === 0}
+                  >
                     <Save className="h-4 w-4 mr-2" />
                     Create Campaign
                   </Button>
