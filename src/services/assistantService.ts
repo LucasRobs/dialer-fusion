@@ -14,12 +14,19 @@ export interface Assistant {
 }
 
 const assistantService = {
-  async getAllAssistants(): Promise<Assistant[]> {
+  async getAllAssistants(userId?: string): Promise<Assistant[]> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('assistants')
         .select('*')
         .order('created_at', { ascending: false });
+      
+      // Filter by user_id if provided
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      
+      const { data, error } = await query;
       
       if (error) {
         console.error('Error fetching assistants:', error);

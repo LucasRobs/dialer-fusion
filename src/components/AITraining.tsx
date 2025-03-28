@@ -20,10 +20,11 @@ const AITraining = () => {
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
 
-  // Fetch existing assistants
+  // Fetch existing assistants for the current user
   const { data: assistants = [], isLoading } = useQuery({
-    queryKey: ['assistants'],
-    queryFn: assistantService.getAllAssistants
+    queryKey: ['assistants', user?.id],
+    queryFn: () => assistantService.getAllAssistants(user?.id),
+    enabled: !!user?.id
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +56,8 @@ const AITraining = () => {
           assistant_id: response.data.assistant_id,
           system_prompt: systemPrompt,
           first_message: firstMessage,
-          user_id: user?.id
+          user_id: user?.id,
+          status: 'ready'
         });
         
         if (savedAssistant) {

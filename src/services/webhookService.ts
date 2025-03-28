@@ -29,6 +29,7 @@ export interface AssistantWebhookData {
 export interface VapiAssistant {
   id: string;
   name: string;
+  assistant_id?: string;
   date?: string;
   status?: string;
 }
@@ -48,10 +49,12 @@ export const webhookService = {
   // Função para buscar todos os assistentes do usuário
   async getAllAssistants(): Promise<VapiAssistant[]> {
     try {
-      const assistants = await assistantService.getAllAssistants();
+      const { user } = useAuth();
+      const assistants = await assistantService.getAllAssistants(user?.id);
       return assistants.map(assistant => ({
-        id: assistant.assistant_id,
+        id: assistant.id,
         name: assistant.name,
+        assistant_id: assistant.assistant_id,
         date: assistant.created_at,
         status: assistant.status || 'ready'
       }));
@@ -83,20 +86,23 @@ export const webhookService = {
       webhookData.additional_data = {};
     }
     
-    // Get assistant name from localStorage if available
+    // Get assistant information from localStorage if available
     let assistantName = "Default Assistant";
+    let assistantId = "";
     
     try {
       // Se o additional_data já tiver um assistant_name, use-o
       if (webhookData.additional_data.assistant_name) {
         assistantName = webhookData.additional_data.assistant_name;
+        assistantId = webhookData.additional_data.assistant_id || "";
         console.log('Using provided assistant name:', assistantName);
       } 
       // Se não tiver, verifica se há um assistente selecionado no localStorage
       else if (localStorage.getItem('selected_assistant')) {
         const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
-        if (selectedAssistant && selectedAssistant.name) {
-          assistantName = selectedAssistant.name;
+        if (selectedAssistant) {
+          assistantName = selectedAssistant.name || "Default Assistant";
+          assistantId = selectedAssistant.assistant_id || "";
           console.log('Using selected assistant name from localStorage:', assistantName);
         }
       }
@@ -104,8 +110,11 @@ export const webhookService = {
       console.error('Error getting assistant name:', e);
     }
     
-    // Certifica que o assistant name está configurado
+    // Certifica que o assistant name e ID estão configurados
     webhookData.additional_data.assistant_name = assistantName;
+    if (assistantId) {
+      webhookData.additional_data.assistant_id = assistantId;
+    }
     
     try {
       // Envia requisição para o webhook
