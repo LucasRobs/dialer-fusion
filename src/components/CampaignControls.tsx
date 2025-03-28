@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -53,7 +52,7 @@ const CampaignControls = () => {
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   
   // Add a query to fetch campaigns
-  const { data: supabaseCampaigns, refetch: refetchCampaigns } = useQuery({
+  const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
     queryFn: async () => {
       return await campaignService.getCampaigns();
@@ -77,36 +76,43 @@ const CampaignControls = () => {
     }
   }, []);
   
-  // Fetch real client groups from supabase
+  // Fetch real client groups from supabase but without using group()
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
     queryFn: async () => {
       try {
-        // Get real count of clients per status
-        const { data: statusGroups } = await supabase
-          .from('clients')
-          .select('status, count(*)')
-          .group('status');
-          
         // Get total count
         const { count: totalCount } = await supabase
           .from('clients')
           .select('*', { count: 'exact', head: true });
-          
+        
+        // Get counts by status - we need to fetch all clients and count manually
+        const { data: clientsData } = await supabase
+          .from('clients')
+          .select('status');
+        
+        // Count clients by status manually
+        const statusCounts = {};
+        if (clientsData) {
+          clientsData.forEach(client => {
+            const status = client.status || 'undefined';
+            statusCounts[status] = (statusCounts[status] || 0) + 1;
+          });
+        }
+        
         // Format for UI
         const formattedGroups = [
           { id: 'all', name: 'All Clients', count: totalCount || 0 }
         ];
         
-        if (statusGroups) {
-          statusGroups.forEach((group) => {
-            formattedGroups.push({
-              id: group.status || 'undefined',
-              name: `${group.status || 'Undefined'} Clients`,
-              count: group.count || 0
-            });
+        // Add status groups
+        Object.keys(statusCounts).forEach(status => {
+          formattedGroups.push({
+            id: status,
+            name: `${status} Clients`,
+            count: statusCounts[status]
           });
-        }
+        });
         
         return formattedGroups;
       } catch (error) {
@@ -131,8 +137,8 @@ const CampaignControls = () => {
   });
   
   useEffect(() => {
-    if (supabaseCampaigns) {
-      const formattedCampaigns = supabaseCampaigns.map(campaign => ({
+    if (supabaseCampaignsData) {
+      const formattedCampaigns = supabaseCampaignsData.map(campaign => ({
         id: campaign.id,
         name: campaign.name || 'Untitled Campaign',
         status: campaign.status || 'draft',
@@ -151,7 +157,7 @@ const CampaignControls = () => {
       setCampaigns(formattedCampaigns);
       setIsLoading(false);
     }
-  }, [supabaseCampaigns]);
+  }, [supabaseCampaignsData]);
   
   const handleStartCampaign = async (id: number) => {
     try {

@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 
 // URL do webhook corrigida para o serviço de ligações
@@ -174,6 +175,7 @@ export const webhookService = {
       });
       
       const responseData = await response.json();
+      console.log('Resposta do webhook de assistente:', responseData);
       
       // Registra a chamada no histórico
       await this.logWebhookCall(webhookData, response.ok, 'create_assistant');
@@ -192,6 +194,10 @@ export const webhookService = {
         
         // Adiciona à lista de assistentes
         this.saveAssistant(newAssistant);
+        
+        console.log('Assistente salvo com sucesso:', newAssistant);
+      } else {
+        console.error('Resposta inválida do webhook ou falta assistant_id', responseData);
       }
       
       return { 

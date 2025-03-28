@@ -53,6 +53,7 @@ const AITraining = () => {
           description: "Ocorreu um erro ao criar seu assistente. Verifique os logs para mais detalhes.",
           variant: "destructive"
         });
+        console.error('Erro na resposta do webhook:', response);
       }
     } catch (error) {
       console.error('Error creating assistant:', error);
