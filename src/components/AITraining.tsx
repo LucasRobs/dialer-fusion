@@ -50,7 +50,7 @@ const AITraining = () => {
       });
       
       if (response.success && response.data && response.data.assistant_id) {
-        // Salvar assistente no banco de dados
+        // Salvar assistente no banco de dados com o user_id
         const savedAssistant = await assistantService.saveAssistant({
           name: aiName,
           assistant_id: response.data.assistant_id,

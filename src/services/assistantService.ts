@@ -1,6 +1,4 @@
-
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
 
 export interface Assistant {
   id: string;

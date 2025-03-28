@@ -291,6 +291,7 @@ export const webhookService = {
       
       // Get selected assistant name from localStorage
       let assistantName = "Default Assistant";
+      let assistantId = "";
       
       try {
         const storedAssistant = localStorage.getItem('selected_assistant');
@@ -298,6 +299,7 @@ export const webhookService = {
           const assistantData = JSON.parse(storedAssistant);
           if (assistantData && assistantData.name) {
             assistantName = assistantData.name;
+            assistantId = assistantData.assistant_id || "";
             console.log('Using stored assistant name for bulk calls:', assistantName);
           }
         }
@@ -314,6 +316,7 @@ export const webhookService = {
         client_phone: client.clients?.phone,
         additional_data: {
           assistant_name: assistantName,
+          assistant_id: assistantId,
           call_type: 'bulk_campaign'
         }
       }));
@@ -335,4 +338,3 @@ export const webhookService = {
     }
   }
 };
-
