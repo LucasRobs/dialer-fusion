@@ -5,11 +5,6 @@ import assistantService, { Assistant } from './assistantService';
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
 const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
 
-// Configure aqui suas credenciais da Vapi API
-const VAPI_API_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Vapi caller ID
-const VAPI_ASSISTANT_ID = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Vapi Assistant ID
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd"; // Vapi API Key
-
 // Interface para os dados do webhook
 export interface WebhookData {
   action: string;
@@ -65,8 +60,8 @@ export const webhookService = {
       
       // Default assistant sempre disponível
       return [{
-        id: VAPI_ASSISTANT_ID,
-        name: 'Default Vapi Assistant',
+        id: 'default-assistant',
+        name: 'Default Assistant',
         date: new Date().toISOString(),
         status: 'ready'
       }];
@@ -83,52 +78,34 @@ export const webhookService = {
       timestamp: new Date().toISOString()
     };
     
-    // Adiciona o assistant ID nas informações adicionais se não existir
+    // Adiciona o assistant name nas informações adicionais se não existir
     if (!webhookData.additional_data) {
       webhookData.additional_data = {};
     }
     
-    // Check if we have a custom assistant ID specified
-    let assistantId = VAPI_ASSISTANT_ID;
-    let assistantName = "Default Vapi Assistant";
+    // Get assistant name from localStorage if available
+    let assistantName = "Default Assistant";
     
-    // Se o additional_data já tiver um assistantId, use-o
-    if (webhookData.additional_data.vapi_assistant_id) {
-      assistantId = webhookData.additional_data.vapi_assistant_id;
-      console.log('Using provided Vapi assistant ID:', assistantId);
-      
-      // Try to get the assistant name if available
-      try {
-        const assistant = await assistantService.getAssistantById(assistantId);
-        if (assistant) {
-          assistantName = assistant.name;
-          webhookData.additional_data.assistant_name = assistantName;
-        }
-      } catch (e) {
-        console.error('Error getting assistant details:', e);
-      }
-    } 
-    // Se não tiver, verifica se há um assistente selecionado no localStorage
-    else if (localStorage.getItem('selected_assistant')) {
-      try {
+    try {
+      // Se o additional_data já tiver um assistant_name, use-o
+      if (webhookData.additional_data.assistant_name) {
+        assistantName = webhookData.additional_data.assistant_name;
+        console.log('Using provided assistant name:', assistantName);
+      } 
+      // Se não tiver, verifica se há um assistente selecionado no localStorage
+      else if (localStorage.getItem('selected_assistant')) {
         const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
-        if (selectedAssistant && selectedAssistant.assistant_id) {
-          assistantId = selectedAssistant.assistant_id;
-          assistantName = selectedAssistant.name || "Selected Assistant";
-          webhookData.additional_data.assistant_name = assistantName;
-          console.log('Using selected Vapi assistant ID:', assistantId, 'with name:', assistantName);
+        if (selectedAssistant && selectedAssistant.name) {
+          assistantName = selectedAssistant.name;
+          console.log('Using selected assistant name from localStorage:', assistantName);
         }
-      } catch (e) {
-        console.error('Error parsing selected assistant data:', e);
       }
+    } catch (e) {
+      console.error('Error getting assistant name:', e);
     }
     
-    // Certifica que o assistant ID está configurado
-    webhookData.additional_data.vapi_assistant_id = assistantId;
+    // Certifica que o assistant name está configurado
     webhookData.additional_data.assistant_name = assistantName;
-    
-    // Adiciona a API key da Vapi
-    webhookData.additional_data.vapi_api_key = VAPI_API_KEY;
     
     try {
       // Envia requisição para o webhook
@@ -302,30 +279,20 @@ export const webhookService = {
       
       const campaignClients = await response.json();
       
-      // Check if we have a custom assistant ID and name in localStorage
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      let assistantId = VAPI_ASSISTANT_ID;
-      let assistantName = "Default Vapi Assistant";
+      // Get selected assistant name from localStorage
+      let assistantName = "Default Assistant";
       
-      if (storedAssistant) {
-        try {
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
           const assistantData = JSON.parse(storedAssistant);
-          if (assistantData) {
-            if (assistantData.assistant_id) {
-              assistantId = assistantData.assistant_id;
-            } else if (assistantData.id) {
-              assistantId = assistantData.id;
-            }
-            
-            if (assistantData.name) {
-              assistantName = assistantData.name;
-            }
-            
-            console.log('Using custom Vapi assistant for bulk calls:', assistantName, 'with ID:', assistantId);
+          if (assistantData && assistantData.name) {
+            assistantName = assistantData.name;
+            console.log('Using stored assistant name for bulk calls:', assistantName);
           }
-        } catch (e) {
-          console.error('Error parsing stored assistant data:', e);
         }
+      } catch (e) {
+        console.error('Error parsing stored assistant data:', e);
       }
       
       // Prepara os dados para o webhook
@@ -336,8 +303,6 @@ export const webhookService = {
         client_name: client.clients?.name,
         client_phone: client.clients?.phone,
         additional_data: {
-          vapi_caller_id: VAPI_API_CALLER_ID,
-          vapi_assistant_id: assistantId,
           assistant_name: assistantName,
           call_type: 'bulk_campaign'
         }

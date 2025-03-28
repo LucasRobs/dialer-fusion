@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -105,33 +104,28 @@ const VapiAssistantTransfer = () => {
     setIsTransferring(true);
     
     try {
-      // This is a mock for demonstration - in a real implementation 
-      // this would call a backend API to create the assistant in Vapi
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Generate a dummy Vapi assistant ID
-      const mockAssistantId = `vapi_assist_${Date.now()}`;
+      const mockAssistantId = `assistant_${Date.now()}`;
       setVapiAssistantId(mockAssistantId);
       
-      // Store in localStorage for later use in the app
-      localStorage.setItem('vapi_assistant', JSON.stringify({
+      localStorage.setItem('selected_assistant', JSON.stringify({
         id: mockAssistantId,
         name: assistantData.name,
-        description: assistantData.description,
         voice: assistantData.voice
       }));
       
       setTransferComplete(true);
       
       toast({
-        title: "Assistant transferred",
-        description: "Your virtual assistant has been successfully transferred to Vapi."
+        title: "Assistant created",
+        description: "Your virtual assistant has been saved and will be used for your campaigns."
       });
     } catch (error) {
-      console.error('Error transferring assistant to Vapi:', error);
+      console.error('Error creating assistant:', error);
       toast({
-        title: "Transfer failed",
-        description: "There was an error transferring your assistant. Please try again.",
+        title: "Creation failed",
+        description: "There was an error creating your assistant. Please try again.",
         variant: "destructive"
       });
     } finally {

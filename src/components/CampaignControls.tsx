@@ -141,9 +141,8 @@ const CampaignControls = () => {
   const { data: aiProfiles = [] } = useQuery({
     queryKey: ['aiProfiles', customAssistants.length],
     queryFn: () => {
-      // Filter out pending assistants for the dropdown selection
-      const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
-      return readyAssistants.map(assistant => ({
+      // Simpler approach: just use assistant names for selection
+      return customAssistants.map(assistant => ({
         id: assistant.id,
         name: assistant.name,
         description: `Assistant created on ${assistant.date ? new Date(assistant.date).toLocaleDateString() : 'unknown date'}`
@@ -190,19 +189,15 @@ const CampaignControls = () => {
         
         // Determinar qual assistente de IA usar
         const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
-        let vapiAssistantId = '';
         let assistantName = '';
         
         if (assistantProfile) {
-          vapiAssistantId = assistantProfile.id;
           assistantName = assistantProfile.name;
-          // Também seleciona o assistente para uso geral
-          webhookService.selectAssistant(vapiAssistantId);
         } else if (selectedAssistant) {
-          vapiAssistantId = selectedAssistant.id;
           assistantName = selectedAssistant.name;
         }
         
+        // Simply send the assistant name to the webhook
         await webhookService.triggerCallWebhook({
           action: 'start_campaign',
           campaign_id: campaign.id,
@@ -210,13 +205,10 @@ const CampaignControls = () => {
             campaign_name: campaign.name,
             client_count: campaign.clientCount,
             assistant_name: assistantName,
-            ai_profile: assistantProfile ? assistantProfile.name : (assistantName || 'Default Assistant'),
-            vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
-            vapi_assistant_id: vapiAssistantId
+            ai_profile: assistantName || 'Default Assistant',
           }
         });
         
-        // Buscar os dados de todos os clientes para esta campanha
         const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
         
         if (result.success) {
@@ -352,12 +344,16 @@ const CampaignControls = () => {
     const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
     const clientCount = selectedGroup ? selectedGroup.count : 0;
     
-    // Seleciona o assistente IA e obtém seus detalhes
+    // Get the assistant name from the selected profile
     const selectedAssistant = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
+    const assistantName = selectedAssistant ? selectedAssistant.name : "Default Assistant";
     
+    // Save selected assistant to localStorage
     if (selectedAssistant) {
-      // Salva o assistente selecionado para uso posterior
-      webhookService.selectAssistant(selectedAssistant.id);
+      localStorage.setItem('selected_assistant', JSON.stringify({
+        id: selectedAssistant.id,
+        name: assistantName
+      }));
     }
     
     try {
@@ -370,17 +366,16 @@ const CampaignControls = () => {
         end_date: null
       });
       
+      // Send only the assistant name to the webhook
       await webhookService.triggerCallWebhook({
         action: 'create_campaign',
         campaign_id: createdCampaign.id,
         additional_data: {
           campaign_name: createdCampaign.name,
           client_count: clientCount,
-          assistant_name: selectedAssistant ? selectedAssistant.name : 'Default Assistant',
-          ai_profile: selectedAssistant ? selectedAssistant.name : 'Default Assistant',
-          client_group: selectedGroup?.name,
-          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
-          vapi_assistant_id: selectedAssistant ? selectedAssistant.id : undefined
+          assistant_name: assistantName,
+          ai_profile: assistantName,
+          client_group: selectedGroup?.name
         }
       });
       
@@ -395,7 +390,6 @@ const CampaignControls = () => {
         aiProfile: '',
       });
       
-      // Recarregar campanhas
       await refetchCampaigns();
     } catch (error) {
       console.error('Erro ao criar campanha:', error);

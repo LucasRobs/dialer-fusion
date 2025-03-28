@@ -41,15 +41,12 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const { toast } = useToast();
   
   const loadData = async () => {
-    // For new users, we don't load anything until they have campaigns
     if (!campaignId) {
-      // Leave status as idle and logs empty for new users
       return;
     }
     
     setLoading(true);
     try {
-      // We'll keep it empty data for new users
       setWorkflowStatus({
         status: 'idle',
         completedTasks: 0,
@@ -57,7 +54,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         lastUpdated: new Date().toISOString()
       });
       
-      // Clear any logs for new users
       setLogs([]);
     } catch (error) {
       console.error('Erro ao carregar dados de status:', error);
@@ -80,22 +76,19 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   
   const testWebhook = async () => {
     try {
-      // Get assistant ID from localStorage or use default
-      const storedAssistant = localStorage.getItem('vapi_assistant');
-      let assistantId = "01646bac-c486-455b-bbc4-a2bc5a1da47c"; // Default Vapi Assistant ID
       let assistantName = "Default Assistant";
       
-      if (storedAssistant) {
-        try {
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
           const assistantData = JSON.parse(storedAssistant);
-          if (assistantData && assistantData.id) {
-            assistantId = assistantData.id;
-            assistantName = assistantData.name || "Custom Assistant";
-            console.log('Using custom Vapi assistant for test call:', assistantData);
+          if (assistantData && assistantData.name) {
+            assistantName = assistantData.name;
+            console.log('Using stored assistant name for test call:', assistantName);
           }
-        } catch (e) {
-          console.error('Error parsing stored assistant data:', e);
         }
+      } catch (e) {
+        console.error('Error parsing stored assistant data:', e);
       }
       
       const testData: Omit<WebhookData, 'timestamp'> = {
@@ -106,8 +99,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         additional_data: {
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
-          vapi_caller_id: vapiSettings.callerId,
-          vapi_assistant_id: assistantId
+          assistant_name: assistantName
         }
       };
       
@@ -157,7 +149,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       }
     }
     
-    // Check for the assistant ID from localStorage
     const storedAssistant = localStorage.getItem('vapi_assistant');
     if (storedAssistant) {
       try {
@@ -262,7 +253,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           </div>
         )}
         
-        {/* Always render empty state for new users */}
         {renderEmptyState()}
       </CardContent>
       
