@@ -171,6 +171,25 @@ export const webhookService = {
       webhookData.additional_data.assistant_id = assistantId;
     }
     
+    // Garanta que client_name e client_phone estejam incluídos no payload principal
+    if (webhookData.client_id && !webhookData.client_name || !webhookData.client_phone) {
+      try {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('name, phone')
+          .eq('id', webhookData.client_id)
+          .single();
+          
+        if (clientData) {
+          webhookData.client_name = clientData.name;
+          webhookData.client_phone = clientData.phone;
+          console.log('Added client details to webhook payload:', clientData.name, clientData.phone);
+        }
+      } catch (error) {
+        console.error('Erro ao obter dados do cliente para webhook:', error);
+      }
+    }
+    
     try {
       // Envia requisição para o webhook
       const response = await fetch(WEBHOOK_URL, {
