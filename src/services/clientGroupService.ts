@@ -145,7 +145,7 @@ export const clientGroupService = {
       .from('client_group_members')
       .select(`
         client_id,
-        clients (*)
+        clients:client_id (*)
       `)
       .eq('group_id', groupId);
       
@@ -153,14 +153,10 @@ export const clientGroupService = {
       console.error('Error fetching clients in group:', error);
       throw error;
     }
-    
-    // Properly extract and transform the nested clients data
-    // Each item.clients is an object, not an array
-    const clients = data.map(item => {
-      if (!item.clients) return null;
-      return item.clients as unknown as Client;
-    }).filter(Boolean) as Client[];
-    
+  
+    // Extraindo corretamente os clientes
+    const clients = data.map(item => item.clients).filter(Boolean) as Client[];
+  
     return clients;
   },
   
