@@ -4,7 +4,8 @@ import assistantService, { Assistant } from './assistantService';
 // URL do webhook corrigida para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
 const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
-const VAPI_GET_ASSISTANTS_URL = 'https://primary-production-31de.up.railway.app/webhook/getassistants';
+const VAPI_API_URL = 'https://api.vapi.ai/assistant';
+const VAPI_API_KEY = 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd';
 
 // Interface para os dados do webhook
 export interface WebhookData {
@@ -51,29 +52,34 @@ export const webhookService = {
   // Função para buscar todos os assistentes do usuário
   async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
     try {
-      // First try to get assistants from Vapi through n8n
+      // First try to get assistants directly from Vapi API
       console.log('Buscando assistentes do usuário:', userId);
       try {
-        const response = await fetch(VAPI_GET_ASSISTANTS_URL, {
-          method: 'POST',
+        const response = await fetch(VAPI_API_URL, {
+          method: 'GET',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd'
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            timestamp: new Date().toISOString()
-          }),
+            'Authorization': VAPI_API_KEY
+          }
         });
         
         if (response.ok) {
           const data = await response.json();
-          console.log('Resposta completa do webhook getassistants:', data);
+          console.log('Resposta completa da API Vapi:', data);
           
-          if (data && data.assistants && Array.isArray(data.assistants)) {
-            console.log('Successfully retrieved assistants from Vapi:', data.assistants);
+          if (data && Array.isArray(data)) {
+            console.log('Successfully retrieved assistants from Vapi:', data);
+            
+            // Convert Vapi format to our application format
+            const assistants = data.map(vapiAssistant => ({
+              id: vapiAssistant.id,
+              name: vapiAssistant.name,
+              assistant_id: vapiAssistant.id,
+              date: new Date().toISOString(),
+              status: 'ready'
+            }));
+            
             // Update local database with latest data from Vapi
-            data.assistants.forEach(async (vapiAssistant: any) => {
+            assistants.forEach(async (vapiAssistant) => {
               const existingAssistant = await assistantService.getAssistantById(vapiAssistant.assistant_id);
               if (!existingAssistant && vapiAssistant.assistant_id) {
                 await assistantService.saveAssistant({
@@ -84,13 +90,14 @@ export const webhookService = {
                 });
               }
             });
-            return data.assistants;
+            
+            return assistants;
           }
         } else {
-          console.error('Erro na resposta do webhook getassistants:', await response.text());
+          console.error('Erro na resposta da API Vapi:', await response.text());
         }
       } catch (vapiError) {
-        console.error('Error fetching assistants from Vapi:', vapiError);
+        console.error('Error fetching assistants from Vapi API:', vapiError);
         // Continue with local data if Vapi fails
       }
       
@@ -147,8 +154,9 @@ export const webhookService = {
         const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
         if (selectedAssistant) {
           assistantName = selectedAssistant.name || "Default Assistant";
-          assistantId = selectedAssistant.assistant_id || "";
+          assistantId = selectedAssistant.assistant_id || selectedAssistant.id || "";
           console.log('Using selected assistant name from localStorage:', assistantName);
+          console.log('Using selected assistant ID from localStorage:', assistantId);
         }
       }
     } catch (e) {
@@ -167,6 +175,7 @@ export const webhookService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': VAPI_API_KEY
         },
         body: JSON.stringify(webhookData),
       });
@@ -198,7 +207,7 @@ export const webhookService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd'
+          'Authorization': VAPI_API_KEY
         },
         body: JSON.stringify(webhookData),
       });
@@ -221,25 +230,20 @@ export const webhookService = {
     }
   },
   
-  // Função para obter assistentes do Vapi via webhook
-  async getAssistantsFromVapi(userId?: string) {
-    console.log('Buscando assistentes do Vapi para usuário:', userId);
+  // Função para obter assistentes diretamente da API Vapi
+  async getAssistantsFromVapi() {
+    console.log('Buscando assistentes diretamente da API Vapi');
     
     try {
-      const response = await fetch(VAPI_GET_ASSISTANTS_URL, {
-        method: 'POST',
+      const response = await fetch(VAPI_API_URL, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd'
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          timestamp: new Date().toISOString()
-        }),
+          'Authorization': VAPI_API_KEY
+        }
       });
       
       if (!response.ok) {
-        console.error('Erro na resposta do webhook getassistants:', response.status, await response.text());
+        console.error('Erro na resposta da API Vapi:', response.status, await response.text());
         return { 
           success: false, 
           status: response.status,
@@ -250,25 +254,13 @@ export const webhookService = {
       const responseData = await response.json();
       console.log('Assistentes obtidos do Vapi:', responseData);
       
-      // Log da chamada bem-sucedida
-      await this.logWebhookCall({
-        action: 'get_assistants',
-        timestamp: new Date().toISOString(),
-        user_id: userId
-      }, true);
-      
       return { 
         success: true, 
         status: response.status,
         data: responseData
       };
     } catch (error) {
-      console.error('Erro ao buscar assistentes do Vapi:', error);
-      await this.logWebhookCall({
-        action: 'get_assistants',
-        timestamp: new Date().toISOString(),
-        user_id: userId
-      }, false);
+      console.error('Erro ao buscar assistentes da API Vapi:', error);
       return { success: false, error };
     }
   },
@@ -287,9 +279,7 @@ export const webhookService = {
   // Função para registrar a chamada do webhook no histórico
   async logWebhookCall(data: WebhookData | AssistantWebhookData, success: boolean, action?: string | any, error?: any) {
     try {
-      const webhookUrl = 'action' in data ? WEBHOOK_URL : 
-                         action === 'get_assistants' ? VAPI_GET_ASSISTANTS_URL : 
-                         VAPI_ASSISTANT_WEBHOOK_URL;
+      const webhookUrl = 'action' in data ? WEBHOOK_URL : VAPI_ASSISTANT_WEBHOOK_URL;
       
       const actionValue = 'action' in data ? data.action : (action || 'create_assistant');
       

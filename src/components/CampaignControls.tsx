@@ -62,7 +62,7 @@ const CampaignControls = () => {
   
   const { data: customAssistants = [], isLoading: isLoadingAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
-    queryFn: () => assistantService.getAllAssistants(user?.id),
+    queryFn: () => webhookService.getAllAssistants(user?.id),
     enabled: !!user?.id
   });
   
@@ -190,11 +190,14 @@ const CampaignControls = () => {
         
         const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
         let assistantName = '';
+        let assistantId = '';
         
         if (assistantProfile) {
           assistantName = assistantProfile.name;
+          assistantId = assistantProfile.assistant_id || assistantProfile.id;
         } else if (selectedAssistant) {
           assistantName = selectedAssistant.name;
+          assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
         }
         
         await webhookService.triggerCallWebhook({
@@ -204,6 +207,7 @@ const CampaignControls = () => {
             campaign_name: campaign.name,
             client_count: campaign.clientCount,
             assistant_name: assistantName,
+            assistant_id: assistantId,
             ai_profile: assistantName || 'Default Assistant',
           }
         });
@@ -357,7 +361,7 @@ const CampaignControls = () => {
     const assistantToStore = {
       id: selectedAssistantProfile.id,
       name: selectedAssistantProfile.name,
-      assistant_id: selectedAssistantProfile.assistant_id
+      assistant_id: selectedAssistantProfile.assistant_id || selectedAssistantProfile.id
     };
     
     localStorage.setItem('selected_assistant', JSON.stringify(assistantToStore));
@@ -379,7 +383,7 @@ const CampaignControls = () => {
           campaign_name: createdCampaign.name,
           client_count: clientCount,
           assistant_name: selectedAssistantProfile.name,
-          assistant_id: selectedAssistantProfile.assistant_id,
+          assistant_id: assistantToStore.assistant_id,
           ai_profile: selectedAssistantProfile.name,
           client_group: selectedGroup?.name
         }

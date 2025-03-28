@@ -38,6 +38,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     assistantId: "" // Will be populated from localStorage if available
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assistants, setAssistants] = useState<any[]>([]);
   const { toast } = useToast();
   
   const loadData = async () => {
@@ -55,6 +56,12 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       });
       
       setLogs([]);
+      
+      // Load assistants from Vapi
+      const assistantsResult = await webhookService.getAssistantsFromVapi();
+      if (assistantsResult.success && assistantsResult.data) {
+        setAssistants(assistantsResult.data);
+      }
     } catch (error) {
       console.error('Erro ao carregar dados de status:', error);
       toast({
@@ -164,7 +171,23 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       }
     }
   }, []);
-
+  
+  useEffect(() => {
+    const loadAssistants = async () => {
+      try {
+        const result = await webhookService.getAssistantsFromVapi();
+        if (result.success && result.data) {
+          setAssistants(result.data);
+          console.log('Loaded assistants:', result.data);
+        }
+      } catch (error) {
+        console.error('Error loading assistants:', error);
+      }
+    };
+    
+    loadAssistants();
+  }, []);
+  
   const renderEmptyState = () => (
     <div className="py-8 text-center space-y-4">
       <Info className="h-12 w-12 mx-auto text-muted-foreground" />

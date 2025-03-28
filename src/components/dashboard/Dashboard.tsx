@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +9,7 @@ import { campaignService } from '@/services/campaignService';
 import { clientService } from '@/services/clientService';
 import { toast } from 'sonner';
 import assistantService from '@/services/assistantService';
+import { webhookService } from '@/services/webhookService';
 
 const Dashboard = () => {
   const [activeCampaign, setActiveCampaign] = useState<any | null>(null);
@@ -33,7 +33,7 @@ const Dashboard = () => {
     queryKey: ['assistants'],
     queryFn: async () => {
       try {
-        return await assistantService.getAllAssistants();
+        return await webhookService.getAllAssistants(user?.id);
       } catch (error) {
         console.error("Erro ao buscar assistentes:", error);
         return [];
