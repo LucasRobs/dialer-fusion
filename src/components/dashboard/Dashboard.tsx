@@ -9,9 +9,11 @@ import QuickActions from './QuickActions';
 import { campaignService } from '@/services/campaignService';
 import { clientService } from '@/services/clientService';
 import { toast } from 'sonner';
+import assistantService from '@/services/assistantService';
 
 const Dashboard = () => {
   const [activeCampaign, setActiveCampaign] = useState<any | null>(null);
+  const [selectedAssistant, setSelectedAssistant] = useState<any | null>(null);
   
   // Buscar campanhas ativas
   const { data: activeCampaigns, isLoading: loadingCampaigns, error: campaignsError, refetch: refetchCampaigns } = useQuery({
@@ -25,6 +27,38 @@ const Dashboard = () => {
       }
     }
   });
+  
+  // Buscar assistente selecionado
+  const { data: assistants } = useQuery({
+    queryKey: ['assistants'],
+    queryFn: async () => {
+      try {
+        return await assistantService.getAllAssistants();
+      } catch (error) {
+        console.error("Erro ao buscar assistentes:", error);
+        return [];
+      }
+    }
+  });
+  
+  // Load selected assistant from localStorage
+  useEffect(() => {
+    try {
+      const storedAssistant = localStorage.getItem('selected_assistant');
+      if (storedAssistant) {
+        setSelectedAssistant(JSON.parse(storedAssistant));
+      } else if (assistants && assistants.length > 0) {
+        // Filter out pending assistants
+        const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
+        if (readyAssistants.length > 0) {
+          setSelectedAssistant(readyAssistants[0]);
+          localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao carregar assistente selecionado:", error);
+    }
+  }, [assistants]);
   
   // Buscar estatísticas dos clientes
   const { data: clientStats, isLoading: loadingClientStats } = useQuery({
@@ -68,12 +102,13 @@ const Dashboard = () => {
         startTime: campaign.start_date ? new Date(campaign.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00',
         callsMade: campaign.answered_calls || 0,
         callsRemaining: (campaign.total_calls || 0) - (campaign.answered_calls || 0),
-        active: true
+        active: true,
+        assistantName: selectedAssistant?.name || 'Default Assistant'
       });
     } else {
       setActiveCampaign(null);
     }
-  }, [activeCampaigns]);
+  }, [activeCampaigns, selectedAssistant]);
   
   const handleCampaignStopped = async () => {
     if (activeCampaign) {

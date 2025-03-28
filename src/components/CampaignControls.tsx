@@ -75,9 +75,13 @@ const CampaignControls = () => {
           const assistant = JSON.parse(storedAssistant);
           setSelectedAssistant(assistant);
         } else if (customAssistants.length > 0) {
-          // Selecionar o primeiro assistente por padrão
-          setSelectedAssistant(customAssistants[0]);
-          localStorage.setItem('selected_assistant', JSON.stringify(customAssistants[0]));
+          // Filter out pending assistants
+          const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
+          if (readyAssistants.length > 0) {
+            // Selecionar o primeiro assistente pronto por padrão
+            setSelectedAssistant(readyAssistants[0]);
+            localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
+          }
         }
       } catch (error) {
         console.error('Error loading selected assistant:', error);
@@ -137,7 +141,9 @@ const CampaignControls = () => {
   const { data: aiProfiles = [] } = useQuery({
     queryKey: ['aiProfiles', customAssistants.length],
     queryFn: () => {
-      return customAssistants.map(assistant => ({
+      // Filter out pending assistants for the dropdown selection
+      const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
+      return readyAssistants.map(assistant => ({
         id: assistant.id,
         name: assistant.name,
         description: `Assistant created on ${assistant.date ? new Date(assistant.date).toLocaleDateString() : 'unknown date'}`
@@ -185,13 +191,16 @@ const CampaignControls = () => {
         // Determinar qual assistente de IA usar
         const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
         let vapiAssistantId = '';
+        let assistantName = '';
         
         if (assistantProfile) {
           vapiAssistantId = assistantProfile.id;
+          assistantName = assistantProfile.name;
           // Também seleciona o assistente para uso geral
           webhookService.selectAssistant(vapiAssistantId);
         } else if (selectedAssistant) {
           vapiAssistantId = selectedAssistant.id;
+          assistantName = selectedAssistant.name;
         }
         
         await webhookService.triggerCallWebhook({
@@ -200,7 +209,8 @@ const CampaignControls = () => {
           additional_data: {
             campaign_name: campaign.name,
             client_count: campaign.clientCount,
-            ai_profile: assistantProfile ? assistantProfile.name : 'Default Assistant',
+            assistant_name: assistantName,
+            ai_profile: assistantProfile ? assistantProfile.name : (assistantName || 'Default Assistant'),
             vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
             vapi_assistant_id: vapiAssistantId
           }
@@ -366,6 +376,7 @@ const CampaignControls = () => {
         additional_data: {
           campaign_name: createdCampaign.name,
           client_count: clientCount,
+          assistant_name: selectedAssistant ? selectedAssistant.name : 'Default Assistant',
           ai_profile: selectedAssistant ? selectedAssistant.name : 'Default Assistant',
           client_group: selectedGroup?.name,
           vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",

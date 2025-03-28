@@ -10,6 +10,7 @@ export interface Assistant {
   first_message?: string;
   created_at?: string;
   user_id?: string;
+  status?: 'pending' | 'ready' | 'failed';
 }
 
 const assistantService = {
@@ -48,6 +49,27 @@ const assistantService = {
       return data;
     } catch (error) {
       console.error('Error in saveAssistant:', error);
+      return null;
+    }
+  },
+
+  async updateAssistant(assistantId: string, updates: Partial<Assistant>): Promise<Assistant | null> {
+    try {
+      const { data, error } = await supabase
+        .from('assistants')
+        .update(updates)
+        .eq('id', assistantId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating assistant:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in updateAssistant:', error);
       return null;
     }
   },

@@ -1,5 +1,6 @@
+
 import { supabase } from '@/lib/supabase';
-import assistantService from './assistantService';
+import assistantService, { Assistant } from './assistantService';
 
 // URL do webhook corrigida para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
@@ -35,6 +36,7 @@ export interface VapiAssistant {
   id: string;
   name: string;
   date?: string;
+  status?: string;
 }
 
 // Interface para o log do webhook
@@ -56,7 +58,8 @@ export const webhookService = {
       return assistants.map(assistant => ({
         id: assistant.assistant_id,
         name: assistant.name,
-        date: assistant.created_at
+        date: assistant.created_at,
+        status: assistant.status || 'ready'
       }));
     } catch (error) {
       console.error('Error getting assistants:', error);
@@ -65,7 +68,8 @@ export const webhookService = {
       return [{
         id: VAPI_ASSISTANT_ID,
         name: 'Default Vapi Assistant',
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        status: 'ready'
       }];
     }
   },
@@ -87,19 +91,33 @@ export const webhookService = {
     
     // Check if we have a custom assistant ID specified
     let assistantId = VAPI_ASSISTANT_ID;
+    let assistantName = "Default Vapi Assistant";
     
     // Se o additional_data já tiver um assistantId, use-o
     if (webhookData.additional_data.vapi_assistant_id) {
       assistantId = webhookData.additional_data.vapi_assistant_id;
       console.log('Using provided Vapi assistant ID:', assistantId);
+      
+      // Try to get the assistant name if available
+      try {
+        const assistant = await assistantService.getAssistantById(assistantId);
+        if (assistant) {
+          assistantName = assistant.name;
+          webhookData.additional_data.assistant_name = assistantName;
+        }
+      } catch (e) {
+        console.error('Error getting assistant details:', e);
+      }
     } 
     // Se não tiver, verifica se há um assistente selecionado no localStorage
     else if (localStorage.getItem('selected_assistant')) {
       try {
         const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
-        if (selectedAssistant && selectedAssistant.id) {
-          assistantId = selectedAssistant.id;
-          console.log('Using selected Vapi assistant ID:', assistantId);
+        if (selectedAssistant && selectedAssistant.assistant_id) {
+          assistantId = selectedAssistant.assistant_id;
+          assistantName = selectedAssistant.name || "Selected Assistant";
+          webhookData.additional_data.assistant_name = assistantName;
+          console.log('Using selected Vapi assistant ID:', assistantId, 'with name:', assistantName);
         }
       } catch (e) {
         console.error('Error parsing selected assistant data:', e);
@@ -108,6 +126,7 @@ export const webhookService = {
     
     // Certifica que o assistant ID está configurado
     webhookData.additional_data.vapi_assistant_id = assistantId;
+    webhookData.additional_data.assistant_name = assistantName;
     
     // Adiciona a API key da Vapi
     webhookData.additional_data.vapi_api_key = VAPI_API_KEY;
@@ -284,16 +303,26 @@ export const webhookService = {
       
       const campaignClients = await response.json();
       
-      // Check if we have a custom assistant ID in localStorage
-      const storedAssistant = localStorage.getItem('vapi_assistant');
+      // Check if we have a custom assistant ID and name in localStorage
+      const storedAssistant = localStorage.getItem('selected_assistant');
       let assistantId = VAPI_ASSISTANT_ID;
+      let assistantName = "Default Vapi Assistant";
       
       if (storedAssistant) {
         try {
           const assistantData = JSON.parse(storedAssistant);
-          if (assistantData && assistantData.id) {
-            assistantId = assistantData.id;
-            console.log('Using custom Vapi assistant ID for bulk calls:', assistantId);
+          if (assistantData) {
+            if (assistantData.assistant_id) {
+              assistantId = assistantData.assistant_id;
+            } else if (assistantData.id) {
+              assistantId = assistantData.id;
+            }
+            
+            if (assistantData.name) {
+              assistantName = assistantData.name;
+            }
+            
+            console.log('Using custom Vapi assistant for bulk calls:', assistantName, 'with ID:', assistantId);
           }
         } catch (e) {
           console.error('Error parsing stored assistant data:', e);
@@ -310,6 +339,7 @@ export const webhookService = {
         additional_data: {
           vapi_caller_id: VAPI_API_CALLER_ID,
           vapi_assistant_id: assistantId,
+          assistant_name: assistantName,
           call_type: 'bulk_campaign'
         }
       }));

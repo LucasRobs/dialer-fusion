@@ -1,570 +1,541 @@
 import { supabase } from '@/lib/supabase';
 
-export type Campaign = {
+export interface Campaign {
   id: number;
   name: string;
   status: 'draft' | 'active' | 'paused' | 'completed' | 'stopped';
-  start_date?: string;
-  end_date?: string;
-  created_at?: string;
-  updated_at?: string;
   total_calls: number;
   answered_calls: number;
-  average_duration?: number;
-  user_id?: string;
-};
+  start_date: string | null;
+  end_date: string | null;
+  created_at?: string;
+}
 
-export type CampaignClient = {
+export interface CampaignClient {
   id: number;
   campaign_id: number;
   client_id: number;
-  status: 'pending' | 'called' | 'answered' | 'failed';
-  call_duration?: number;
-  call_timestamp?: string;
+  status: 'pending' | 'calling' | 'completed' | 'failed';
   created_at?: string;
-  updated_at?: string;
-};
+}
+
+export interface Client {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  status: string;
+  created_at?: string;
+}
 
 export const campaignService = {
-  // Buscar todas as campanhas
-  async getCampaigns() {
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data as Campaign[];
-  },
-
-  // Buscar campanhas ativas
-  async getActiveCampaigns() {
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('*')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data as Campaign[];
-  },
-
-  // Buscar uma campanha por ID
-  async getCampaignById(id: number) {
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    if (error) throw error;
-    return data as Campaign;
-  },
-
-  // Criar uma nova campanha
-  async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('campaigns')
-      .insert([{ ...campaign, user_id: (await supabase.auth.getUser()).data.user?.id }])
-      .select();
-    
-    if (error) throw error;
-    return data[0] as Campaign;
-  },
-
-  // Atualizar uma campanha
-  async updateCampaign(id: number, campaign: Partial<Campaign>) {
-    const { data, error } = await supabase
-      .from('campaigns')
-      .update(campaign)
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    return data[0] as Campaign;
-  },
-
-  // Delete a campaign
-  async deleteCampaign(id: number) {
-    // First delete all associated campaign_clients records
-    const { error: clientsError } = await supabase
-      .from('campaign_clients')
-      .delete()
-      .eq('campaign_id', id);
-    
-    if (clientsError) throw clientsError;
-    
-    // Then delete the campaign itself
-    const { error } = await supabase
-      .from('campaigns')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
-    return true;
-  },
-
-  // Adicionar clientes a uma campanha
-  async addClientsToCampaign(campaignId: number, clientIds: number[]) {
-    const campaignClients = clientIds.map(clientId => ({
-      campaign_id: campaignId,
-      client_id: clientId,
-      status: 'pending'
-    }));
-
-    const { data, error } = await supabase
-      .from('campaign_clients')
-      .insert(campaignClients)
-      .select();
-    
-    if (error) throw error;
-    return data as CampaignClient[];
-  },
-
-  // Buscar clientes de uma campanha
-  async getCampaignClients(campaignId: number) {
-    const { data, error } = await supabase
-      .from('campaign_clients')
-      .select(`
-        *,
-        clients:client_id(id, name, phone, email, status)
-      `)
-      .eq('campaign_id', campaignId);
-    
-    if (error) throw error;
-    
-    // Count actual clients in the campaign
-    const clientCount = data ? data.length : 0;
-    
-    // Update the campaign with the actual client count
-    if (clientCount > 0) {
-      await supabase
-        .from('campaigns')
-        .update({ total_calls: clientCount })
-        .eq('id', campaignId);
-    }
-    
-    return data;
-  },
-
-  // Atualizar o status de um cliente na campanha
-  async updateCampaignClientStatus(id: number, status: CampaignClient['status'], callDuration?: number) {
-    const { data, error } = await supabase
-      .from('campaign_clients')
-      .update({
-        status,
-        call_duration: callDuration,
-        call_timestamp: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    return data[0] as CampaignClient;
-  },
-  
-  // Obter estatísticas de campanhas
-  async getCampaignStats() {
-    // Estatísticas de ligações recentes
-    const { data: campaignData, error: campaignError } = await supabase
-      .from('campaigns')
-      .select(`
-        id,
-        total_calls,
-        answered_calls,
-        average_duration,
-        status
-      `);
-    
-    if (campaignError) throw campaignError;
-    
-    // Total de ligações feitas
-    const totalCalls = campaignData?.reduce((acc, campaign) => acc + (campaign.total_calls || 0), 0) || 0;
-    
-    // Ligações atendidas
-    const answeredCalls = campaignData?.reduce((acc, campaign) => acc + (campaign.answered_calls || 0), 0) || 0;
-    
-    // Calcular duração média
-    const totalDuration = campaignData?.reduce((acc, campaign) => {
-      if (campaign.average_duration && campaign.answered_calls) {
-        return acc + (campaign.average_duration * campaign.answered_calls);
-      }
-      return acc;
-    }, 0) || 0;
-    
-    const avgDuration = answeredCalls > 0 ? totalDuration / answeredCalls : 0;
-    
-    // Formatar para minutos:segundos
-    const minutes = Math.floor(avgDuration / 60);
-    const seconds = Math.floor(avgDuration % 60);
-    const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    
-    // Calcular ligações de hoje
-    const today = new Date().toISOString().split('T')[0];
-    const { data: todayCalls, error: todayError } = await supabase
-      .from('campaign_clients')
-      .select('id')
-      .gte('call_timestamp', `${today}T00:00:00`);
-    
-    if (todayError) throw todayError;
-    
-    const callsToday = todayCalls?.length || 0;
-    
-    // Taxa de conclusão
-    const completionRate = totalCalls > 0 ? 
-      `${Math.round((answeredCalls / totalCalls) * 100)}%` : '0%';
-    
-    return {
-      recentCalls: answeredCalls,
-      avgCallDuration: formattedDuration,
-      callsToday,
-      completionRate
-    };
-  },
-
-  // Return empty call history data for new users
-  getCallHistory: async () => {
-    const { data: user } = await supabase.auth.getUser();
-    
-    if (!user || !user.user) {
-      // Return empty array for new users
-      return [];
-    }
-    
-    const { data, error } = await supabase
-      .from('campaign_clients')
-      .select(`
-        id,
-        call_timestamp,
-        call_duration,
-        status,
-        clients!inner(name, phone, email),
-        campaigns!inner(name)
-      `)
-      .eq('campaigns.user_id', user.user.id)
-      .order('call_timestamp', { ascending: false });
-    
-    if (error) {
-      console.error("Error fetching call history:", error);
-      return [];
-    }
-    
-    // Return empty array if no data
-    if (!data || data.length === 0) {
-      return [];
-    }
-    
-    // Format the data to match the expected structure in the UI
-    return data.map(item => ({
-      id: item.id,
-      clientName: item.clients?.name || 'Unknown',
-      phone: item.clients?.phone || 'N/A',
-      campaign: item.campaigns?.name || 'Unknown Campaign',
-      date: item.call_timestamp ? new Date(item.call_timestamp).toISOString().split('T')[0] : 'N/A',
-      time: item.call_timestamp ? new Date(item.call_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-      duration: item.call_duration ? `${Math.floor(item.call_duration / 60)}:${String(Math.floor(item.call_duration % 60)).padStart(2, '0')}` : '0:00',
-      status: item.status || 'Unknown',
-      outcome: determineOutcome(item.status),
-      notes: 'Auto-generated call log.'
-    }));
-  },
-  
-  // Return empty analytics data for new users
-  getAnalyticsData: async () => {
-    const { data: user } = await supabase.auth.getUser();
-    
-    if (!user || !user.user) {
-      // Return empty data for new users
-      return {
-        totalCalls: 0,
-        callsChangePercentage: 0,
-        avgCallDuration: '0:00',
-        durationChangePercentage: 0,
-        conversionRate: 0,
-        conversionChangePercentage: 0,
-        callsToday: 0,
-        callsData: getEmptyMonthData(),
-        campaignData: []
-      };
-    }
-    
-    // Get calls from the last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    // Get all calls
-    const { data: calls, error: callsError } = await supabase
-      .from('campaign_clients')
-      .select(`
-        id,
-        call_timestamp,
-        call_duration,
-        status,
-        campaigns!inner(name)
-      `)
-      .eq('campaigns.user_id', user.user.id)
-      .gte('call_timestamp', thirtyDaysAgo.toISOString());
-    
-    if (callsError) {
-      console.error("Error fetching call analytics:", callsError);
-      return {
-        totalCalls: 0,
-        callsChangePercentage: 0,
-        avgCallDuration: '0:00',
-        durationChangePercentage: 0,
-        conversionRate: 0,
-        conversionChangePercentage: 0,
-        callsToday: 0,
-        callsData: getEmptyMonthData(),
-        campaignData: []
-      };
-    }
-    
-    // If no data, return empty stats
-    if (!calls || calls.length === 0) {
-      return {
-        totalCalls: 0,
-        callsChangePercentage: 0,
-        avgCallDuration: '0:00',
-        durationChangePercentage: 0,
-        conversionRate: 0,
-        conversionChangePercentage: 0,
-        callsToday: 0,
-        callsData: getEmptyMonthData(),
-        campaignData: []
-      };
-    }
-    
-    // Get calls from today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const callsToday = calls.filter(call => new Date(call.call_timestamp) >= today) || [];
-    
-    // Get all campaign data
-    const { data: campaigns, error: campaignsError } = await supabase
-      .from('campaigns')
-      .select('*')
-      .eq('user_id', user.user.id);
-    
-    if (campaignsError) {
-      console.error("Error fetching campaign analytics:", campaignsError);
-      return {
-        totalCalls: 0,
-        callsChangePercentage: 0,
-        avgCallDuration: '0:00',
-        durationChangePercentage: 0,
-        conversionRate: 0,
-        conversionChangePercentage: 0,
-        callsToday: 0,
-        callsData: getEmptyMonthData(),
-        campaignData: []
-      };
-    }
-    
-    // Calculate call metrics
-    const totalCalls = calls.length || 0;
-    const completedCalls = calls.filter(call => call.status === 'Completed').length || 0;
-    const avgDuration = calls.reduce((sum, call) => sum + (call.call_duration || 0), 0) / (totalCalls || 1);
-    
-    // Campaign data for pie chart
-    const campaignData = campaigns?.map(campaign => ({
-      name: campaign.name,
-      value: campaign.total_calls || 0
-    })) || [];
-    
-    // Return the analytics data
-    return {
-      totalCalls,
-      callsChangePercentage: 0, // Would calculate from previous period in a real implementation
-      avgCallDuration: formatDuration(avgDuration),
-      durationChangePercentage: 0,
-      conversionRate: totalCalls ? Math.round((completedCalls / totalCalls) * 100) : 0,
-      conversionChangePercentage: 0,
-      callsToday: callsToday.length,
-      callsData: getMonthData(),
-      campaignData
-    };
-  },
-
-  async getClientDataForCampaign(campaignId: number) {
+  async getCampaigns(): Promise<Campaign[]> {
     try {
       const { data, error } = await supabase
-        .from('campaign_clients')
-        .select(`
-          client_id,
-          clients (id, name, phone, email),
-          call_timestamp,
-          call_duration,
-          status
-        `)
-        .eq('campaign_id', campaignId);
+        .from('campaigns')
+        .select('*')
+        .order('created_at', { ascending: false });
       
-      if (error) throw error;
-      
-      // Extract client data from the nested structure
-      const clientData = data.map((item) => {
-        return {
-          id: item.client_id,
-          name: item.clients?.name || 'Desconhecido',
-          phone: item.clients?.phone || '(não informado)',
-          email: item.clients?.email || '(não informado)',
-          call_timestamp: item.call_timestamp,
-          call_duration: item.call_duration || 0,
-          status: item.status || 'pending'
-        };
-      });
-      
-      return clientData;
-    } catch (error) {
-      console.error('Erro ao buscar dados de clientes para a campanha:', error);
-      throw error;
-    }
-  },
-
-  async getClientsByIdsForCampaign(clientIds: number[]) {
-    try {
-      // If there are no client IDs, return an empty array
-      if (!clientIds || clientIds.length === 0) {
+      if (error) {
+        console.error('Error fetching campaigns:', error);
         return [];
       }
       
-      const clientIdsParam = clientIds.join(',');
-      const response = await fetch(
-        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/clients?id=in.(${clientIdsParam})&select=id,name,phone,email`,
-        {
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8`
-          }
-        }
-      );
+      return data || [];
+    } catch (error) {
+      console.error('Error in getCampaigns:', error);
+      return [];
+    }
+  },
+  
+  async getActiveCampaigns(): Promise<Campaign[]> {
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
       
-      if (!response.ok) {
-        throw new Error(`Error fetching clients: ${response.statusText}`);
+      if (error) {
+        console.error('Error fetching active campaigns:', error);
+        return [];
       }
       
-      const clients = await response.json();
-      return clients;
+      return data || [];
     } catch (error) {
-      console.error('Error fetching clients for campaign:', error);
+      console.error('Error in getActiveCampaigns:', error);
+      return [];
+    }
+  },
+  
+  async getCampaignById(campaignId: number): Promise<Campaign | null> {
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('id', campaignId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching campaign:', error);
+        return null;
+      }
+      
+      return data || null;
+    } catch (error) {
+      console.error('Error in getCampaignById:', error);
+      return null;
+    }
+  },
+  
+  async createCampaign(campaign: Omit<Campaign, 'id' | 'created_at'>): Promise<Campaign> {
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .insert([campaign])
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(`Error creating campaign: ${error.message}`);
+      }
+      
+      return data as Campaign;
+    } catch (error) {
+      console.error('Error in createCampaign:', error);
       throw error;
     }
   },
-
-  async exportCampaignClientsToCsv(campaignId: number) {
+  
+  async updateCampaign(campaignId: number, updates: Partial<Campaign>): Promise<Campaign | null> {
     try {
-      // Get campaign details
-      const campaign = await this.getCampaignById(campaignId);
+      const { data, error } = await supabase
+        .from('campaigns')
+        .update(updates)
+        .eq('id', campaignId)
+        .select()
+        .single();
       
-      // Get the campaign clients with their details
-      const response = await fetch(
-        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/campaign_clients?select=client_id,status,clients(name,phone,email)&campaign_id=eq.${campaignId}`,
-        {
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8`
-          }
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`Error fetching campaign clients: ${response.statusText}`);
+      if (error) {
+        console.error('Error updating campaign:', error);
+        return null;
       }
       
-      const campaignClients = await response.json();
+      return data || null;
+    } catch (error) {
+      console.error('Error in updateCampaign:', error);
+      return null;
+    }
+  },
+  
+  async deleteCampaign(campaignId: number): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('campaigns')
+        .delete()
+        .eq('id', campaignId);
       
-      // Transform the data for CSV
-      const csvData = campaignClients.map((client: any) => ({
-        name: client.clients?.name || '',
-        phone: client.clients?.phone || '',
-        email: client.clients?.email || '',
-        status: client.status || 'pending'
-      }));
-      
-      // Generate CSV content
-      let csvContent = 'Name,Phone,Email,Status\n';
-      
-      csvData.forEach((row: any) => {
-        const formattedRow = `"${row.name}","${row.phone}","${row.email}","${row.status}"`;
-        csvContent += formattedRow + '\n';
-      });
-      
-      // Create a Blob with the CSV content
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      
-      // Trigger download
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `campaign_${campaignId}_${campaign?.name || 'export'}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (error) {
+        console.error('Error deleting campaign:', error);
+        return false;
+      }
       
       return true;
     } catch (error) {
-      console.error('Error exporting campaign clients to CSV:', error);
-      throw error;
+      console.error('Error in deleteCampaign:', error);
+      return false;
     }
-  }
+  },
+  
+  async getCampaignStats(): Promise<{
+    recentCalls: number;
+    avgCallDuration: string;
+    callsToday: number;
+    completionRate: string;
+  }> {
+    try {
+      // Implemente a lógica para buscar as estatísticas da campanha no Supabase
+      // Isso pode envolver a execução de consultas SQL personalizadas ou a utilização
+      // de funções do Supabase para agregar os dados.
+      
+      // Aqui está um exemplo de como você pode buscar o número de chamadas recentes:
+      const { data: recentCallsData, error: recentCallsError } = await supabase
+        .from('calls')
+        .select('id')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (recentCallsError) {
+        console.error('Error fetching recent calls:', recentCallsError);
+      }
+      
+      const recentCalls = recentCallsData ? recentCallsData.length : 0;
+      
+      // Aqui está um exemplo de como você pode buscar a duração média das chamadas:
+      const { data: avgCallDurationData, error: avgCallDurationError } = await supabase
+        .from('calls')
+        .select('duration')
+        .limit(100);
+      
+      if (avgCallDurationError) {
+        console.error('Error fetching average call duration:', avgCallDurationError);
+      }
+      
+      let totalDuration = 0;
+      if (avgCallDurationData) {
+        totalDuration = avgCallDurationData.reduce((sum, call) => sum + (call.duration || 0), 0);
+      }
+      
+      const avgCallDurationInSeconds = recentCalls > 0 ? totalDuration / recentCalls : 0;
+      const avgCallDuration = `${Math.floor(avgCallDurationInSeconds / 60)}:${Math.floor(avgCallDurationInSeconds % 60).toString().padStart(2, '0')}`;
+      
+      // Aqui está um exemplo de como você pode buscar o número de chamadas feitas hoje:
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data: callsTodayData, error: callsTodayError } = await supabase
+        .from('calls')
+        .select('id')
+        .gte('created_at', today.toISOString());
+      
+      if (callsTodayError) {
+        console.error('Error fetching calls made today:', callsTodayError);
+      }
+      
+      const callsToday = callsTodayData ? callsTodayData.length : 0;
+      
+      // Aqui está um exemplo de como você pode buscar a taxa de conclusão de chamadas:
+      const { data: totalCallsData, error: totalCallsError } = await supabase
+        .from('calls')
+        .select('id');
+      
+      if (totalCallsError) {
+        console.error('Error fetching total calls:', totalCallsError);
+      }
+      
+      const totalCalls = totalCallsData ? totalCallsData.length : 0;
+      const completionRate = totalCalls > 0 ? `${Math.round((callsToday / totalCalls) * 100)}%` : '0%';
+      
+      return {
+        recentCalls,
+        avgCallDuration,
+        callsToday,
+        completionRate,
+      };
+    } catch (error) {
+      console.error('Error in getCampaignStats:', error);
+      return {
+        recentCalls: 0,
+        avgCallDuration: '0:00',
+        callsToday: 0,
+        completionRate: '0%',
+      };
+    }
+  },
+  
+  async getAllCampaignClients(): Promise<CampaignClient[]> {
+    try {
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching campaign clients:', error);
+        return [];
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error in getAllCampaignClients:', error);
+      return [];
+    }
+  },
+  
+  async getCampaignClients(campaignId: number): Promise<CampaignClient[]> {
+    try {
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching campaign clients:', error);
+        return [];
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error in getCampaignClients:', error);
+      return [];
+    }
+  },
+  
+  async addClientToCampaign(campaignId: number, clientId: number): Promise<CampaignClient | null> {
+    try {
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .insert([{ campaign_id: campaignId, client_id: clientId, status: 'pending' }])
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding client to campaign:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in addClientToCampaign:', error);
+      return null;
+    }
+  },
+  
+  async removeClientFromCampaign(campaignId: number, clientId: number): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('campaign_clients')
+        .delete()
+        .eq('campaign_id', campaignId)
+        .eq('client_id', clientId);
+      
+      if (error) {
+        console.error('Error removing client from campaign:', error);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error in removeClientFromCampaign:', error);
+      return false;
+    }
+  },
+  
+  async updateCampaignClientStatus(campaignId: number, clientId: number, status: CampaignClient['status']): Promise<CampaignClient | null> {
+    try {
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .update({ status })
+        .eq('campaign_id', campaignId)
+        .eq('client_id', clientId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating campaign client status:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in updateCampaignClientStatus:', error);
+      return null;
+    }
+  },
+  
+  async getClients(): Promise<Client[]> {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching clients:', error);
+        return [];
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error in getClients:', error);
+      return [];
+    }
+  },
+  
+  async getClientById(clientId: number): Promise<Client | null> {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', clientId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching client:', error);
+        return null;
+      }
+      
+      return data || null;
+    } catch (error) {
+      console.error('Error in getClientById:', error);
+      return null;
+    }
+  },
+  
+  async createClient(client: Omit<Client, 'id' | 'created_at'>): Promise<Client | null> {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert([client])
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating client:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in createClient:', error);
+      return null;
+    }
+  },
+  
+  async updateClient(clientId: number, updates: Partial<Client>): Promise<Client | null> {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .update(updates)
+        .eq('id', clientId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating client:', error);
+        return null;
+      }
+      
+      return data || null;
+    } catch (error) {
+      console.error('Error in updateClient:', error);
+      return null;
+    }
+  },
+  
+  async deleteClient(clientId: number): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientId);
+      
+      if (error) {
+        console.error('Error deleting client:', error);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error in deleteClient:', error);
+      return false;
+    }
+  },
+  
+  async getClientStats(): Promise<{ totalClients: number; activeClients: number }> {
+    try {
+      const { count: totalClients, error: totalClientsError } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true });
+      
+      if (totalClientsError) {
+        console.error('Error fetching total clients count:', totalClientsError);
+      }
+      
+      const { count: activeClients, error: activeClientsError } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+      
+      if (activeClientsError) {
+        console.error('Error fetching active clients count:', activeClientsError);
+      }
+      
+      return {
+        totalClients: totalClients || 0,
+        activeClients: activeClients || 0,
+      };
+    } catch (error) {
+      console.error('Error in getClientStats:', error);
+      return { totalClients: 0, activeClients: 0 };
+    }
+  },
+  
+  async getAllCampaignsWithClients(): Promise<
+    {
+      id: number;
+      name: string;
+      status: 'draft' | 'active' | 'paused' | 'completed' | 'stopped';
+      total_calls: number;
+      answered_calls: number;
+      start_date: string | null;
+      end_date: string | null;
+      created_at?: string;
+      clients: {
+        id: number;
+        name: string;
+        phone: string;
+        email: string;
+        status: string;
+        created_at?: string;
+      }[];
+    }[]
+  > {
+    try {
+      const { data: campaigns, error: campaignsError } = await supabase
+        .from('campaigns')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (campaignsError) {
+        console.error('Error fetching campaigns:', campaignsError);
+        return [];
+      }
+      
+      if (Array.isArray(campaigns)) {
+        for (let i = 0; i < campaigns.length; i++) {
+          campaigns[i].name = campaigns[i].name || 'Untitled Campaign';
+        }
+      } else if (campaigns && typeof campaigns === 'object') {
+        campaigns.name = campaigns.name || 'Untitled Campaign';
+      }
+      
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (clientsError) {
+        console.error('Error fetching clients:', clientsError);
+        return [];
+      }
+      
+      if (Array.isArray(clients)) {
+        for (let i = 0; i < clients.length; i++) {
+          if (clients[i]) {
+            clients[i].name = clients[i].name || 'Unknown Client';
+            clients[i].phone = clients[i].phone || 'No Phone';
+            clients[i].email = clients[i].email || 'No Email';
+          }
+        }
+      } else if (clients && typeof clients === 'object') {
+        clients.name = clients.name || 'Unknown Client';
+        clients.phone = clients.phone || 'No Phone';
+        clients.email = clients.email || 'No Email';
+      }
+      
+      const campaignsWithClients = campaigns?.map((campaign) => ({
+        ...campaign,
+        clients: clients?.filter((client) =>
+          campaign.id === client.id
+        ) || [],
+      })) || [];
+      
+      return campaignsWithClients;
+    } catch (error) {
+      console.error('Error in getAllCampaignsWithClients:', error);
+      return [];
+    }
+  },
 };
-
-// Helper to format call duration
-function formatDuration(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${minutes}:${String(secs).padStart(2, '0')}`;
-}
-
-// Helper to determine call outcome based on status
-function determineOutcome(status) {
-  switch (status) {
-    case 'Completed':
-      return Math.random() > 0.5 ? 'Interested' : 'Conversion';
-    case 'No Answer':
-      return 'Follow-up Required';
-    case 'Voicemail':
-      return 'Message Left';
-    case 'Rejected':
-      return 'Not Interested';
-    default:
-      return 'N/A';
-  }
-}
-
-// Helper function to generate empty month data for charts
-function getEmptyMonthData() {
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const currentMonth = new Date().getMonth();
-  const last6Months = [];
-  
-  for (let i = 5; i >= 0; i--) {
-    const monthIndex = (currentMonth - i + 12) % 12;
-    last6Months.push(monthNames[monthIndex]);
-  }
-  
-  return last6Months.map(month => ({
-    name: month,
-    calls: 0,
-    cost: 0
-  }));
-}
-
-// Helper function to generate month data for charts with real data
-function getMonthData() {
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const currentMonth = new Date().getMonth();
-  const last6Months = [];
-  
-  for (let i = 5; i >= 0; i--) {
-    const monthIndex = (currentMonth - i + 12) % 12;
-    last6Months.push(monthNames[monthIndex]);
-  }
-  
-  return last6Months.map(month => ({
-    name: month,
-    calls: 0,
-    cost: 0
-  }));
-}
