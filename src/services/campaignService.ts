@@ -28,6 +28,37 @@ export interface Client {
   created_at?: string;
 }
 
+export interface CallHistoryItem {
+  id: number;
+  clientName: string;
+  phone: string;
+  campaign: string;
+  date: string;
+  time: string;
+  duration: string;
+  status: string;
+  outcome: string;
+  notes?: string;
+}
+
+export interface AnalyticsData {
+  totalCalls: number;
+  callsChangePercentage: number;
+  avgCallDuration: string;
+  durationChangePercentage: number;
+  conversionRate: number;
+  conversionChangePercentage: number;
+  callsData: {
+    name: string;
+    calls: number;
+    cost: number;
+  }[];
+  campaignData: {
+    name: string;
+    value: number;
+  }[];
+}
+
 export const campaignService = {
   async getCampaigns(): Promise<Campaign[]> {
     try {
@@ -472,14 +503,7 @@ export const campaignService = {
       start_date: string | null;
       end_date: string | null;
       created_at?: string;
-      clients: {
-        id: number;
-        name: string;
-        phone: string;
-        email: string;
-        status: string;
-        created_at?: string;
-      }[];
+      clients: Client[];
     }[]
   > {
     try {
@@ -493,12 +517,8 @@ export const campaignService = {
         return [];
       }
       
-      if (Array.isArray(campaigns)) {
-        for (let i = 0; i < campaigns.length; i++) {
-          campaigns[i].name = campaigns[i].name || 'Untitled Campaign';
-        }
-      } else if (campaigns && typeof campaigns === 'object') {
-        campaigns.name = campaigns.name || 'Untitled Campaign';
+      if (!campaigns || campaigns.length === 0) {
+        return [];
       }
       
       const { data: clients, error: clientsError } = await supabase
@@ -511,26 +531,32 @@ export const campaignService = {
         return [];
       }
       
-      if (Array.isArray(clients)) {
-        for (let i = 0; i < clients.length; i++) {
-          if (clients[i]) {
-            clients[i].name = clients[i].name || 'Unknown Client';
-            clients[i].phone = clients[i].phone || 'No Phone';
-            clients[i].email = clients[i].email || 'No Email';
-          }
-        }
-      } else if (clients && typeof clients === 'object') {
-        clients.name = clients.name || 'Unknown Client';
-        clients.phone = clients.phone || 'No Phone';
-        clients.email = clients.email || 'No Email';
+      if (!clients || clients.length === 0) {
+        return campaigns.map(campaign => ({
+          ...campaign,
+          clients: []
+        }));
       }
       
-      const campaignsWithClients = campaigns?.map((campaign) => ({
+      // Set default values for any undefined fields
+      const processedCampaigns = campaigns.map(campaign => ({
         ...campaign,
-        clients: clients?.filter((client) =>
+        name: campaign.name || 'Untitled Campaign'
+      }));
+      
+      const processedClients = clients.map(client => ({
+        ...client,
+        name: client.name || 'Unknown Client',
+        phone: client.phone || 'No Phone',
+        email: client.email || 'No Email'
+      }));
+      
+      const campaignsWithClients = processedCampaigns.map((campaign) => ({
+        ...campaign,
+        clients: processedClients.filter((client) =>
           campaign.id === client.id
         ) || [],
-      })) || [];
+      }));
       
       return campaignsWithClients;
     } catch (error) {
@@ -538,4 +564,131 @@ export const campaignService = {
       return [];
     }
   },
+  
+  // Add missing functions
+  
+  async getAnalyticsData(): Promise<AnalyticsData> {
+    try {
+      // Check if the calls table exists before querying
+      const { data: tableExists } = await supabase
+        .from('pg_tables')
+        .select('tablename')
+        .eq('tablename', 'calls')
+        .single();
+        
+      // If calls table doesn't exist, return mock data
+      if (!tableExists) {
+        console.log('Calls table does not exist, returning mock analytics data');
+        return {
+          totalCalls: 0,
+          callsChangePercentage: 0,
+          avgCallDuration: '0:00',
+          durationChangePercentage: 0,
+          conversionRate: 0,
+          conversionChangePercentage: 0,
+          callsData: [],
+          campaignData: []
+        };
+      }
+      
+      // Get campaign data for analytics (this would typically pull from the calls table)
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('*')
+        .limit(5);
+        
+      if (campaignError) {
+        console.error('Error fetching campaign data for analytics:', campaignError);
+        throw campaignError;
+      }
+      
+      // Format the data for display
+      const formattedCallsData = campaignData?.map(campaign => ({
+        name: campaign.name || 'Untitled',
+        calls: campaign.total_calls || 0,
+        cost: Math.round(Math.random() * 100) // Mock cost data
+      })) || [];
+      
+      const formattedCampaignData = campaignData?.map(campaign => ({
+        name: campaign.name || 'Untitled',
+        value: campaign.answered_calls || 0
+      })) || [];
+      
+      return {
+        totalCalls: campaignData?.reduce((sum, campaign) => sum + (campaign.total_calls || 0), 0) || 0,
+        callsChangePercentage: 5, // Mock percentage
+        avgCallDuration: '2:30', // Mock duration
+        durationChangePercentage: 10, // Mock percentage
+        conversionRate: 25, // Mock percentage
+        conversionChangePercentage: 2, // Mock percentage
+        callsData: formattedCallsData,
+        campaignData: formattedCampaignData
+      };
+    } catch (error) {
+      console.error('Error fetching analytics data:', error);
+      return {
+        totalCalls: 0,
+        callsChangePercentage: 0,
+        avgCallDuration: '0:00',
+        durationChangePercentage: 0,
+        conversionRate: 0,
+        conversionChangePercentage: 0,
+        callsData: [],
+        campaignData: []
+      };
+    }
+  },
+  
+  async getCallHistory(): Promise<CallHistoryItem[]> {
+    try {
+      // Check if the calls table exists before querying
+      const { data: tableExists } = await supabase
+        .from('pg_tables')
+        .select('tablename')
+        .eq('tablename', 'calls')
+        .single();
+        
+      // If calls table doesn't exist, return empty array
+      if (!tableExists) {
+        console.log('Calls table does not exist, returning empty call history');
+        return [];
+      }
+      
+      // Attempt to get call history from calls table
+      const { data: calls, error } = await supabase
+        .from('calls')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        console.error('Error fetching call history:', error);
+        // If there's an error (like table doesn't exist), return empty array
+        return [];
+      }
+      
+      // If no call data is available, return empty array
+      if (!calls || calls.length === 0) {
+        return [];
+      }
+      
+      // Process and format the call data
+      const callHistory = calls.map(call => ({
+        id: call.id,
+        clientName: call.client_name || 'Unknown Client',
+        phone: call.phone || 'No Phone',
+        campaign: call.campaign_name || 'Unknown Campaign',
+        date: new Date(call.created_at).toLocaleDateString(),
+        time: new Date(call.created_at).toLocaleTimeString(),
+        duration: call.duration ? `${Math.floor(call.duration / 60)}:${(call.duration % 60).toString().padStart(2, '0')}` : '0:00',
+        status: call.status || 'Unknown',
+        outcome: call.outcome || 'N/A',
+        notes: call.notes
+      }));
+      
+      return callHistory;
+    } catch (error) {
+      console.error('Error in getCallHistory:', error);
+      return [];
+    }
+  }
 };

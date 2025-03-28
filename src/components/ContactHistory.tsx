@@ -44,13 +44,13 @@ import {
   CardContent
 } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
-import { campaignService } from '@/services/campaignService';
+import { campaignService, CallHistoryItem } from '@/services/campaignService';
 import { useAuth } from '@/contexts/AuthContext';
 
 const ContactHistory = () => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedContact, setSelectedContact] = useState(null);
+  const [selectedContact, setSelectedContact] = useState<CallHistoryItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [outcomeFilter, setOutcomeFilter] = useState('all');
@@ -78,12 +78,12 @@ const ContactHistory = () => {
     toast("Exportação iniciada. Seu histórico de contatos está sendo exportado.");
   };
 
-  const viewContactDetails = (contact) => {
+  const viewContactDetails = (contact: CallHistoryItem) => {
     setSelectedContact(contact);
     setDialogOpen(true);
   };
 
-  const getStatusBadgeColor = (status) => {
+  const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'Completed':
         return 'bg-secondary text-white';
@@ -98,7 +98,7 @@ const ContactHistory = () => {
     }
   };
 
-  const getOutcomeBadgeColor = (outcome) => {
+  const getOutcomeBadgeColor = (outcome: string) => {
     switch (outcome) {
       case 'Interested':
         return 'bg-blue-500/80 text-white';
