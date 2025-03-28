@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -33,6 +32,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientService } from '@/services/clientService';
 import { webhookService } from '@/services/webhookService';
 import { supabase } from '@/lib/supabase';
+import ClientGroupRelation from './ClientGroupRelation';
 
 export default function ClientList() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
@@ -173,7 +173,6 @@ export default function ClientList() {
     setSelectedClient(null);
   };
 
-  // Função para iniciar chamada para um cliente
   const handleCall = async (client: any) => {
     try {
       const { data } = await supabase.auth.getUser();
@@ -215,7 +214,6 @@ export default function ClientList() {
     }
   };
 
-  // Renderização da tabela
   return (
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
@@ -280,6 +278,7 @@ export default function ClientList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      <ClientGroupRelation client={client} />
                       <Button 
                         size="sm" 
                         variant="outline"
