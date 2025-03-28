@@ -142,8 +142,8 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+          <Button variant="outline" size="sm" className="h-8">
             <Users className="h-4 w-4 mr-2" />
             Grupos
             {clientGroupMemberships.length > 0 && (
@@ -154,7 +154,10 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onClick={handleOpenDialog}>
+          <DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            handleOpenDialog(e);
+          }}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Adicionar a um grupo
           </DropdownMenuItem>
@@ -166,13 +169,20 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           )}
           
           {clientGroupMemberships.map((membership: GroupMembership) => (
-            <DropdownMenuItem key={membership.groupId} className="flex justify-between items-center">
+            <DropdownMenuItem 
+              key={membership.groupId} 
+              className="flex justify-between items-center"
+              onSelect={(e) => e.preventDefault()}
+            >
               <span>{membership.groupName}</span>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                onClick={(e) => handleRemoveFromGroup(e, membership.groupId)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveFromGroup(e, membership.groupId);
+                }}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -193,7 +203,9 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
             <div className="space-y-2">
               <Select
                 value={selectedGroupId}
-                onValueChange={setSelectedGroupId}
+                onValueChange={(value) => {
+                  setSelectedGroupId(value);
+                }}
               >
                 <SelectTrigger onClick={(e) => e.stopPropagation()}>
                   <SelectValue placeholder="Selecione um grupo" />
@@ -225,7 +237,10 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           <DialogFooter>
             <Button
               type="button"
-              onClick={handleAddToGroup}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddToGroup(e);
+              }}
               disabled={!selectedGroupId}
             >
               <Check className="h-4 w-4 mr-2" />
