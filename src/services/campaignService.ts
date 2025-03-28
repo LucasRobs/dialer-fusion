@@ -507,7 +507,90 @@ const campaignService = {
       throw error;
     }
   },
-  
+
+  // Função para obter dados para o gráfico da campanha
+  getCampaignGraphData: async (campaignId) => {
+    try {
+      console.log('Fetching graph data for campaign:', campaignId);
+      
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('name')
+        .eq('id', campaignId)
+        .single();
+        
+      if (campaignError) {
+        console.error('Error fetching campaign data:', campaignError);
+        return { labels: [], datasets: [] };
+      }
+      
+      const { data: clientData, error: clientError } = await supabase
+        .from('campaign_clients')
+        .select(`
+          client_id,
+          clients (
+            id, name, phone, email
+          )
+        `)
+        .eq('campaign_id', campaignId);
+        
+      if (clientError) {
+        console.error('Error fetching client data:', clientError);
+        return { labels: [], datasets: [] };
+      }
+      
+      // Fix: Properly extract the campaign name
+      const campaignName = campaignData?.name || 'Campaign';
+      
+      // Fix: Properly handle array access and check for existence of properties
+      const clientsWithData = clientData || [];
+      const clientNames = clientsWithData.map(record => {
+        const client = record.clients;
+        return client ? client.name : 'Unknown';
+      });
+      
+      const clientPhones = clientsWithData.map(record => {
+        const client = record.clients;
+        return client ? client.phone : 'N/A';
+      });
+      
+      const clientEmails = clientsWithData.map(record => {
+        const client = record.clients;
+        return client ? client.email : 'N/A';
+      });
+      
+      return {
+        labels: clientNames,
+        datasets: [
+          {
+            label: 'Client Name',
+            data: clientNames,
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1
+          },
+          {
+            label: 'Client Phone',
+            data: clientPhones,
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+          },
+          {
+            label: 'Client Email',
+            data: clientEmails,
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+          }
+        ]
+      };
+    } catch (error) {
+      console.error('Error in getCampaignGraphData:', error);
+      return { labels: [], datasets: [] };
+    }
+  },
+
   // Método para obter todas as campanhas (alias para getAllCampaigns para compatibilidade)
   async getCampaigns(): Promise<Campaign[]> {
     return this.getAllCampaigns();
