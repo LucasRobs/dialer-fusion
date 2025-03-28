@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService, VapiAssistant } from '@/services/webhookService';
-import { campaignService } from '@/services/campaignService';
+import campaignService from '@/services/campaignService';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import assistantService from '@/services/assistantService';

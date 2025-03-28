@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageSquare, BarChart3, FileBarChart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
-import { campaignService } from '@/services/campaignService';
+import campaignService from '@/services/campaignService';
 import { useAuth } from '@/contexts/AuthContext';
 
 const Analytics = () => {

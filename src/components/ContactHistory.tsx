@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -44,7 +45,7 @@ import {
   CardContent
 } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
-import { campaignService } from '@/services/campaignService';
+import campaignService from '@/services/campaignService';
 import { useAuth } from '@/contexts/AuthContext';
 
 const ContactHistory = () => {
