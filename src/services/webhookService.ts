@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -18,15 +17,6 @@ export interface WebhookData {
   timestamp: string;
   user_id?: string;
   additional_data?: Record<string, any>;
-}
-
-export interface AssistantWebhookData {
-  assistant_name: string;
-  first_message: string;
-  system_prompt: string;
-  timestamp?: string;
-  additional_data?: Record<string, any>;
-  user_id?: string;
 }
 
 // Interface para o assistente de IA - adicionando created_at
@@ -172,7 +162,7 @@ export const webhookService = {
     }
     
     // Garanta que client_name e client_phone estejam incluídos no payload principal
-    if (webhookData.client_id && !webhookData.client_name || !webhookData.client_phone) {
+    if (webhookData.client_id && (!webhookData.client_name || !webhookData.client_phone)) {
       try {
         const { data: clientData } = await supabase
           .from('clients')
@@ -383,7 +373,7 @@ export const webhookService = {
     try {
       // Busca todos os clientes associados à campanha
       const response = await fetch(
-        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/campaign_clients?select=client_id,clients(name,phone)&campaign_id=eq.${campaignId}&status=eq.pending`,
+        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/campaign_clients?select=client_id,clients(id,name,phone)&campaign_id=eq.${campaignId}&status=eq.pending`,
         {
           headers: {
             'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
@@ -397,6 +387,7 @@ export const webhookService = {
       }
       
       const campaignClients = await response.json();
+      console.log('Campaign clients fetched:', campaignClients);
       
       // Get selected assistant name from localStorage
       let assistantName = "Default Assistant";
@@ -408,7 +399,7 @@ export const webhookService = {
           const assistantData = JSON.parse(storedAssistant);
           if (assistantData && assistantData.name) {
             assistantName = assistantData.name;
-            assistantId = assistantData.assistant_id || "";
+            assistantId = assistantData.assistant_id || assistantData.id || "";
             console.log('Using stored assistant name for bulk calls:', assistantName);
           }
         }
@@ -416,19 +407,22 @@ export const webhookService = {
         console.error('Error parsing stored assistant data:', e);
       }
       
-      // Prepara os dados para o webhook
+      // Prepara os dados para o webhook - garantindo que nome e telefone do cliente sejam incluídos
       const bulkCallData: Omit<WebhookData, 'timestamp'>[] = campaignClients.map((client: any) => ({
         action: 'start_call',
         campaign_id: campaignId,
         client_id: client.client_id,
-        client_name: client.clients?.name,
-        client_phone: client.clients?.phone,
+        client_name: client.clients?.name || 'Cliente Sem Nome',
+        client_phone: client.clients?.phone || 'Telefone Não Informado',
         additional_data: {
           assistant_name: assistantName,
           assistant_id: assistantId,
-          call_type: 'bulk_campaign'
+          call_type: 'bulk_campaign',
+          client_details: true
         }
       }));
+      
+      console.log('Prepared webhook data for bulk calls:', bulkCallData);
       
       // Envia os dados para o webhook
       const results = await Promise.all(
