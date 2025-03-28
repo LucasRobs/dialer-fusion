@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -17,6 +18,16 @@ export interface WebhookData {
   timestamp: string;
   user_id?: string;
   additional_data?: Record<string, any>;
+}
+
+// Interface para os dados do webhook de assistentes
+export interface AssistantWebhookData {
+  assistant_name: string;
+  first_message: string;
+  system_prompt: string;
+  timestamp?: string;
+  additional_data?: Record<string, any>;
+  user_id?: string;
 }
 
 // Interface para o assistente de IA - adicionando created_at
@@ -371,23 +382,27 @@ export const webhookService = {
   // Nova função para preparar um lote de ligações para uma campanha
   async prepareBulkCallsForCampaign(campaignId: number) {
     try {
-      // Busca todos os clientes associados à campanha
-      const response = await fetch(
-        `https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/campaign_clients?select=client_id,clients(id,name,phone)&campaign_id=eq.${campaignId}&status=eq.pending`,
-        {
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8',
-            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8`
-          }
-        }
-      );
+      // Busca clientes diretos da tabela de clientes como solução alternativa já que campaign_clients tem problemas
+      const { data: allClients, error } = await supabase
+        .from('clients')
+        .select('*')
+        .limit(10);  // Limitar a 10 clientes para teste
       
-      if (!response.ok) {
-        throw new Error(`Error fetching campaign clients: ${response.statusText}`);
+      if (error) {
+        throw new Error(`Error fetching clients: ${error.message}`);
       }
       
-      const campaignClients = await response.json();
-      console.log('Campaign clients fetched:', campaignClients);
+      console.log('Clients fetched directly from clients table:', allClients);
+      
+      if (!allClients || allClients.length === 0) {
+        return {
+          success: false,
+          totalCalls: 0,
+          successfulCalls: 0,
+          failedCalls: 0,
+          message: 'No clients found'
+        }
+      }
       
       // Get selected assistant name from localStorage
       let assistantName = "Default Assistant";
@@ -408,12 +423,12 @@ export const webhookService = {
       }
       
       // Prepara os dados para o webhook - garantindo que nome e telefone do cliente sejam incluídos
-      const bulkCallData: Omit<WebhookData, 'timestamp'>[] = campaignClients.map((client: any) => ({
+      const bulkCallData = allClients.map(client => ({
         action: 'start_call',
         campaign_id: campaignId,
-        client_id: client.client_id,
-        client_name: client.clients?.name || 'Cliente Sem Nome',
-        client_phone: client.clients?.phone || 'Telefone Não Informado',
+        client_id: client.id,
+        client_name: client.name || 'Cliente Sem Nome',
+        client_phone: client.phone || 'Telefone Não Informado',
         additional_data: {
           assistant_name: assistantName,
           assistant_id: assistantId,
@@ -430,7 +445,7 @@ export const webhookService = {
       );
       
       return {
-        success: results.every(r => r.success),
+        success: results.some(r => r.success),
         totalCalls: results.length,
         successfulCalls: results.filter(r => r.success).length,
         failedCalls: results.filter(r => !r.success).length

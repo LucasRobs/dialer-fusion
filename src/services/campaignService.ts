@@ -138,24 +138,36 @@ export const campaignService = {
     }
   },
   
-  async updateCampaign(campaignId: number, updates: Partial<Campaign>): Promise<Campaign | null> {
+  async updateCampaign(id: number, data: Partial<Campaign>): Promise<Campaign> {
     try {
-      const { data, error } = await supabase
+      // Verify the campaign exists first
+      const { data: existingCampaign, error: checkError } = await supabase
         .from('campaigns')
-        .update(updates)
-        .eq('id', campaignId)
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (checkError || !existingCampaign) {
+        console.error('Campaign not found before update:', checkError);
+        throw new Error(checkError?.message || 'Campaign not found');
+      }
+      
+      const { data: updatedCampaign, error } = await supabase
+        .from('campaigns')
+        .update(data)
+        .eq('id', id)
         .select()
         .single();
       
       if (error) {
         console.error('Error updating campaign:', error);
-        return null;
+        throw error;
       }
       
-      return data || null;
+      return updatedCampaign;
     } catch (error) {
-      console.error('Error in updateCampaign:', error);
-      return null;
+      console.error('Error updating campaign:', error);
+      throw error;
     }
   },
   
@@ -564,8 +576,6 @@ export const campaignService = {
       return [];
     }
   },
-  
-  // Add missing functions
   
   async getAnalyticsData(): Promise<AnalyticsData> {
     try {
