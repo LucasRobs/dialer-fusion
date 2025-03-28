@@ -52,6 +52,32 @@ const assistantService = {
         return null;
       }
       
+      // After saving to our database, notify the user's Collowop webhook
+      try {
+        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'assistant_created',
+            assistant_id: data.assistant_id,
+            assistant_name: data.name,
+            timestamp: new Date().toISOString(),
+            user_id: data.user_id,
+            additional_data: {
+              is_ready: true,
+              system_prompt: data.system_prompt,
+              first_message: data.first_message
+            }
+          }),
+        });
+        console.log('Successfully notified Collowop webhook about new assistant');
+      } catch (webhookError) {
+        console.error('Error notifying Collowop webhook:', webhookError);
+        // Continue even if the notification fails
+      }
+      
       return data;
     } catch (error) {
       console.error('Error in saveAssistant:', error);

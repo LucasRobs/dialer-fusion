@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
@@ -22,8 +23,9 @@ export interface AssistantWebhookData {
   assistant_name: string;
   first_message: string;
   system_prompt: string;
-  timestamp: string;
+  timestamp?: string;
   additional_data?: Record<string, any>;
+  user_id?: string;
 }
 
 // Interface para o assistente de IA
