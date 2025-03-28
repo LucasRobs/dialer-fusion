@@ -61,6 +61,33 @@ const AITraining = () => {
         });
         
         if (savedAssistant) {
+          // Notify user's n8n workflow about the new assistant through their webhook
+          try {
+            // Using the users own collowop webhook to notify about the new assistant
+            await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'assistant_created',
+                assistant_id: savedAssistant.assistant_id,
+                assistant_name: savedAssistant.name,
+                timestamp: new Date().toISOString(),
+                user_id: savedAssistant.user_id,
+                additional_data: {
+                  is_ready: true,
+                  system_prompt_length: systemPrompt.length,
+                  first_message_preview: firstMessage.substring(0, 50) + (firstMessage.length > 50 ? '...' : '')
+                }
+              }),
+            });
+            console.log('Successfully notified n8n workflow about new assistant');
+          } catch (webhookError) {
+            console.error('Error notifying n8n workflow:', webhookError);
+            // Continue even if the notification fails
+          }
+          
           toast({
             title: "Assistente criado com sucesso",
             description: "Seu assistente de IA foi criado e configurado.",

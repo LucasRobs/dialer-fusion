@@ -1,10 +1,10 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService, { Assistant } from './assistantService';
 
 // URL do webhook corrigida para o serviço de ligações
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
 const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
+const VAPI_GET_ASSISTANTS_URL = 'https://primary-production-31de.up.railway.app/webhook/getassistants';
 
 // Interface para os dados do webhook
 export interface WebhookData {
@@ -50,7 +50,44 @@ export const webhookService = {
   // Função para buscar todos os assistentes do usuário
   async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
     try {
-      // Use the userId parameter instead of trying to get it from useAuth
+      // First try to get assistants from Vapi through n8n
+      try {
+        const response = await fetch(VAPI_GET_ASSISTANTS_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            timestamp: new Date().toISOString()
+          }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.assistants && Array.isArray(data.assistants)) {
+            console.log('Successfully retrieved assistants from Vapi:', data.assistants);
+            // Update local database with latest data from Vapi
+            data.assistants.forEach(async (vapiAssistant: any) => {
+              const existingAssistant = await assistantService.getAssistantById(vapiAssistant.assistant_id);
+              if (!existingAssistant && vapiAssistant.assistant_id) {
+                await assistantService.saveAssistant({
+                  name: vapiAssistant.name,
+                  assistant_id: vapiAssistant.assistant_id,
+                  user_id: userId,
+                  status: 'ready'
+                });
+              }
+            });
+            return data.assistants;
+          }
+        }
+      } catch (vapiError) {
+        console.error('Error fetching assistants from Vapi:', vapiError);
+        // Continue with local data if Vapi fails
+      }
+      
+      // Fallback to local database
       const assistants = await assistantService.getAllAssistants(userId);
       return assistants.map(assistant => ({
         id: assistant.id,
