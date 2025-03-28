@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Dialog, 
@@ -33,7 +32,6 @@ interface ClientGroupRelationProps {
   client: any;
 }
 
-// Define a type for the membership to ensure proper typing
 interface GroupMembership {
   groupId: string;
   groupName: string;
@@ -66,7 +64,6 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
         if (!client.id) return [];
         const groups = await clientGroupService.getClientGroupsByClientId(client.id);
         
-        // Map the groups to the expected format
         return groups.map(group => ({
           groupId: group.id,
           groupName: group.name
@@ -84,9 +81,10 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
       return await clientGroupService.addClientToGroup(clientId, groupId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
-      queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
-      queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
+      // More selective query invalidation
+      queryClient.invalidateQueries({ 
+        queryKey: ['clientGroupMemberships', client.id] 
+      });
       toast.success('Cliente adicionado ao grupo');
       setShowAddToGroupDialog(false);
       setSelectedGroupId('');
@@ -101,9 +99,10 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
       return await clientGroupService.removeClientFromGroup(clientId, groupId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
-      queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
-      queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
+      // More selective query invalidation
+      queryClient.invalidateQueries({ 
+        queryKey: ['clientGroupMemberships', client.id] 
+      });
       toast.success('Cliente removido do grupo');
     },
     onError: (error: Error) => {
@@ -111,10 +110,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     }
   });
   
-  const handleAddToGroup = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const handleAddToGroup = () => {
     if (selectedGroupId) {
       addToGroupMutation.mutate({ 
         clientId: client.id, 
@@ -123,26 +119,17 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     }
   };
   
-  const handleRemoveFromGroup = (e: React.MouseEvent, groupId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const handleRemoveFromGroup = (groupId: string) => {
     removeFromGroupMutation.mutate({ 
       clientId: client.id, 
       groupId: groupId 
     });
   };
-  
-  const handleOpenDialog = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setShowAddToGroupDialog(true);
-  };
-  
+
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="h-8">
             <Users className="h-4 w-4 mr-2" />
             Grupos
@@ -153,11 +140,8 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onClick={(e) => {
-            e.stopPropagation();
-            handleOpenDialog(e);
-          }}>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onSelect={() => setShowAddToGroupDialog(true)}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Adicionar a um grupo
           </DropdownMenuItem>
@@ -170,19 +154,16 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           
           {clientGroupMemberships.map((membership: GroupMembership) => (
             <DropdownMenuItem 
-              key={membership.groupId} 
+              key={membership.groupId}
               className="flex justify-between items-center"
-              onSelect={(e) => e.preventDefault()}
+              onSelect={() => {}}
             >
               <span>{membership.groupName}</span>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveFromGroup(e, membership.groupId);
-                }}
+                onClick={() => handleRemoveFromGroup(membership.groupId)}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -191,11 +172,14 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
         </DropdownMenuContent>
       </DropdownMenu>
       
-      <Dialog open={showAddToGroupDialog} onOpenChange={(open) => {
-        if (!open) setSelectedGroupId('');
-        setShowAddToGroupDialog(open);
-      }}>
-        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Dialog 
+        open={showAddToGroupDialog} 
+        onOpenChange={(open) => {
+          if (!open) setSelectedGroupId('');
+          setShowAddToGroupDialog(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Adicionar Cliente ao Grupo</DialogTitle>
           </DialogHeader>
@@ -203,14 +187,12 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
             <div className="space-y-2">
               <Select
                 value={selectedGroupId}
-                onValueChange={(value) => {
-                  setSelectedGroupId(value);
-                }}
+                onValueChange={(value) => setSelectedGroupId(value)}
               >
-                <SelectTrigger onClick={(e) => e.stopPropagation()}>
+                <SelectTrigger>
                   <SelectValue placeholder="Selecione um grupo" />
                 </SelectTrigger>
-                <SelectContent onClick={(e) => e.stopPropagation()}>
+                <SelectContent>
                   {isLoadingGroups ? (
                     <SelectItem value="loading">
                       Carregando grupos...
@@ -237,10 +219,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           <DialogFooter>
             <Button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAddToGroup(e);
-              }}
+              onClick={handleAddToGroup}
               disabled={!selectedGroupId}
             >
               <Check className="h-4 w-4 mr-2" />
