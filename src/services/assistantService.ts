@@ -10,6 +10,7 @@ export interface Assistant {
   first_message?: string;
   created_at?: string;
   user_id?: string;
+  status?: 'pending' | 'active' | 'failed';
 }
 
 const assistantService = {
@@ -41,6 +42,11 @@ const assistantService = {
       if (!assistant.user_id) {
         console.error('Error saving assistant: user_id is required');
         throw new Error('User ID is required to save an assistant');
+      }
+      
+      // Se não foi especificado um status, assume 'active'
+      if (!assistant.status) {
+        assistant.status = 'active';
       }
       
       const { data, error } = await supabase

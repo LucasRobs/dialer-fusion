@@ -210,6 +210,33 @@ export const webhookService = {
         responseData = await response.json();
         console.log('Resposta JSON do webhook:', responseData);
         
+        // Se a resposta contém uma mensagem de sucesso ou 'workflow was started'
+        if (responseData.message === "Workflow was started" || 
+            (responseData.message && responseData.message.includes("started"))) {
+          console.log('Fluxo de trabalho iniciado com sucesso');
+          
+          // Gerar um ID temporário para o assistente
+          const tempAssistantId = `temp_assistant_${Date.now()}`;
+          
+          await this.logWebhookCall(
+            webhookData, 
+            true, 
+            'create_assistant', 
+            null,
+            responseData
+          );
+          
+          return { 
+            success: true, 
+            status: response.status,
+            data: { 
+              message: responseData.message,
+              assistant_id: tempAssistantId,
+              isAsync: true // Indicação que o processo está rodando em segundo plano
+            }
+          };
+        }
+        
         // Verifica se a resposta contém um assistant_id
         if (!responseData.assistant_id) {
           console.error('Resposta não contém assistant_id', responseData);

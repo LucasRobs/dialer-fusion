@@ -24,6 +24,7 @@ const AITraining = () => {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [webhookResponse, setWebhookResponse] = useState<any>(null);
+  const [isAsyncProcess, setIsAsyncProcess] = useState(false);
 
   // Fetch existing assistants
   const { data: assistants = [], isLoading, isError, refetch } = useQuery({
@@ -45,6 +46,7 @@ const AITraining = () => {
     e.preventDefault();
     setError(null);
     setWebhookResponse(null);
+    setIsAsyncProcess(false);
     
     if (!aiName || !firstMessage || !systemPrompt) {
       toast({
@@ -81,39 +83,89 @@ const AITraining = () => {
       setWebhookResponse(response);
       console.log("Resposta do webhook:", response);
       
-      if (response.success && response.data && response.data.assistant_id) {
-        console.log("Assistant ID recebido:", response.data.assistant_id);
-        
-        try {
-          // Save assistant to database
-          const savedAssistant = await assistantService.saveAssistant({
-            name: aiName,
-            assistant_id: response.data.assistant_id,
-            system_prompt: systemPrompt,
-            first_message: firstMessage,
-            user_id: user.id
-          });
+      if (response.success) {
+        if (response.data && response.data.isAsync) {
+          // Se o processo é assíncrono
+          setIsAsyncProcess(true);
           
-          console.log("Assistente salvo com sucesso:", savedAssistant);
+          // Salvar como "pendente" no banco de dados
+          try {
+            const tempAssistantId = response.data.assistant_id || `pending_${Date.now()}`;
+            
+            const savedAssistant = await assistantService.saveAssistant({
+              name: aiName,
+              assistant_id: tempAssistantId,
+              system_prompt: systemPrompt,
+              first_message: firstMessage,
+              user_id: user.id,
+              status: 'pending'
+            });
+            
+            toast({
+              title: "Assistente em processamento",
+              description: "Seu assistente foi enviado para processamento e será disponibilizado em breve.",
+            });
+            
+            // Reset form
+            setAiName('');
+            setFirstMessage('');
+            setSystemPrompt('');
+            
+            // Refresh assistants list
+            queryClient.invalidateQueries({ queryKey: ['assistants'] });
+          } catch (saveError) {
+            console.error("Erro ao salvar assistente temporário:", saveError);
+            // Falha ao salvar não deve interromper o fluxo, apenas informar
+            toast({
+              title: "Aviso",
+              description: "Assistente em processamento, mas não foi possível registrá-lo localmente.",
+              variant: "warning"
+            });
+          }
+        } else if (response.data && response.data.assistant_id) {
+          // Caso normal - assistente criado com ID
+          console.log("Assistant ID recebido:", response.data.assistant_id);
           
+          try {
+            // Save assistant to database
+            const savedAssistant = await assistantService.saveAssistant({
+              name: aiName,
+              assistant_id: response.data.assistant_id,
+              system_prompt: systemPrompt,
+              first_message: firstMessage,
+              user_id: user.id,
+              status: 'active'
+            });
+            
+            console.log("Assistente salvo com sucesso:", savedAssistant);
+            
+            toast({
+              title: "Assistente criado com sucesso",
+              description: "Seu assistente de IA foi criado e configurado.",
+            });
+            
+            // Reset form
+            setAiName('');
+            setFirstMessage('');
+            setSystemPrompt('');
+            
+            // Refresh assistants list
+            queryClient.invalidateQueries({ queryKey: ['assistants'] });
+          } catch (saveError) {
+            console.error("Erro ao salvar assistente:", saveError);
+            setError(`Erro ao salvar assistente: ${saveError instanceof Error ? saveError.message : 'Erro desconhecido'}`);
+            toast({
+              title: "Erro ao salvar assistente",
+              description: "O assistente foi criado na API, mas não foi possível salvá-lo no banco de dados.",
+              variant: "destructive"
+            });
+          }
+        } else {
+          // Resposta de sucesso inválida
+          setError("Resposta do servidor incompleta. Tente novamente.");
           toast({
-            title: "Assistente criado com sucesso",
-            description: "Seu assistente de IA foi criado e configurado.",
-          });
-          
-          // Reset form
-          setAiName('');
-          setFirstMessage('');
-          setSystemPrompt('');
-          
-          // Refresh assistants list
-          queryClient.invalidateQueries({ queryKey: ['assistants'] });
-        } catch (saveError) {
-          console.error("Erro ao salvar assistente:", saveError);
-          setError(`Erro ao salvar assistente: ${saveError instanceof Error ? saveError.message : 'Erro desconhecido'}`);
-          toast({
-            title: "Erro ao salvar assistente",
-            description: "O assistente foi criado na API, mas não foi possível salvá-lo no banco de dados.",
+            title: "Erro ao processar resposta",
+            description: "A resposta do servidor está incompleta. Por favor, tente novamente.",
             variant: "destructive"
           });
         }
@@ -197,6 +249,16 @@ const AITraining = () => {
         <Alert variant="destructive" className="mb-6">
           <AlertTitle>Erro</AlertTitle>
           <AlertDescription className="whitespace-pre-wrap">{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      {isAsyncProcess && (
+        <Alert className="mb-6 bg-blue-50 border-blue-200">
+          <AlertTitle className="text-blue-700">Processamento em andamento</AlertTitle>
+          <AlertDescription className="text-blue-600">
+            Seu assistente está sendo criado em segundo plano. Este processo pode levar alguns minutos.
+            Você será notificado quando o processo estiver concluído.
+          </AlertDescription>
         </Alert>
       )}
       
