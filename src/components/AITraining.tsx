@@ -11,6 +11,15 @@ import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+interface AssistantResponse {
+  success: boolean;
+  data?: {
+    assistant_id: string;
+    [key: string]: any;
+  };
+  error?: string;
+}
+
 const AITraining = () => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -47,7 +56,7 @@ const AITraining = () => {
         assistant_name: aiName,
         first_message: firstMessage,
         system_prompt: systemPrompt
-      });
+      }) as AssistantResponse;
       
       if (response.success && response.data && response.data.assistant_id) {
         // Salvar assistente no banco de dados com o user_id
@@ -81,20 +90,10 @@ const AITraining = () => {
           });
         }
       } else {
-        toast({
-          title: "Erro ao criar assistente",
-          description: "Ocorreu um erro ao criar seu assistente. Verifique os logs para mais detalhes.",
-          variant: "destructive"
-        });
         console.error('Erro na resposta do webhook:', response);
       }
     } catch (error) {
       console.error('Error creating assistant:', error);
-      toast({
-        title: "Erro ao criar assistente",
-        description: "Ocorreu um erro ao criar seu assistente. Por favor, tente novamente.",
-        variant: "destructive"
-      });
     } finally {
       setIsSubmitting(false);
     }

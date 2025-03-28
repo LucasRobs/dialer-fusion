@@ -24,7 +24,9 @@ const Dashboard = () => {
     queryKey: ['activeCampaigns'],
     queryFn: async () => {
       try {
-        return await campaignService.getActiveCampaigns();
+        return await campaignService.getCampaigns().then(campaigns => 
+          campaigns.filter(campaign => campaign.status === 'active')
+        );
       } catch (error) {
         console.error("Erro ao buscar campanhas ativas:", error);
         return [];

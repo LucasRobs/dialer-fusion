@@ -47,6 +47,87 @@ export const campaignService = {
     }
   },
   
+  // Get active campaigns (status = 'active')
+  async getActiveCampaigns() {
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching active campaigns:', error);
+      return [];
+    }
+  },
+  
+  // Get campaign statistics
+  async getCampaignStats() {
+    try {
+      // Fetch recent calls
+      const now = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(now.getDate() - 30);
+      
+      const { data: recentCallsData, error: recentCallsError } = await supabase
+        .from('calls')
+        .select('*')
+        .gte('call_start', thirtyDaysAgo.toISOString());
+      
+      if (recentCallsError) throw recentCallsError;
+      
+      // Fetch today's calls
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data: todayCalls, error: todayCallsError } = await supabase
+        .from('calls')
+        .select('*')
+        .gte('call_start', today.toISOString());
+      
+      if (todayCallsError) throw todayCallsError;
+      
+      // Calculate average call duration
+      const completedCalls = recentCallsData?.filter(call => 
+        call.status === 'completed' || call.status === 'answered'
+      ) || [];
+      
+      const totalDuration = completedCalls.reduce(
+        (sum, call) => sum + (call.duration || 0), 0
+      );
+      
+      const avgDuration = completedCalls.length > 0 
+        ? totalDuration / completedCalls.length 
+        : 0;
+      
+      const minutes = Math.floor(avgDuration / 60);
+      const seconds = Math.floor(avgDuration % 60);
+      
+      // Calculate completion rate
+      const completionRate = recentCallsData && recentCallsData.length > 0
+        ? Math.round((completedCalls.length / recentCallsData.length) * 100)
+        : 0;
+      
+      return {
+        recentCalls: recentCallsData?.length || 0,
+        avgCallDuration: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+        callsToday: todayCalls?.length || 0,
+        completionRate: `${completionRate}%`
+      };
+    } catch (error) {
+      console.error('Error fetching campaign stats:', error);
+      return {
+        recentCalls: 0,
+        avgCallDuration: '0:00',
+        callsToday: 0,
+        completionRate: '0%'
+      };
+    }
+  },
+  
   async getCampaignById(id: number) {
     try {
       const { data, error } = await supabase

@@ -148,9 +148,7 @@ const CampaignControls = () => {
         id: assistant.id,
         name: assistant.name,
         assistant_id: assistant.assistant_id,
-        description: `Assistant created on ${assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 
-                       assistant.date ? new Date(assistant.date).toLocaleDateString() : 
-                       'unknown date'}`
+        description: `Assistant created on ${assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'unknown date'}`
       }));
     },
     enabled: customAssistants.length > 0,
