@@ -6,7 +6,7 @@ import DashboardHeader from './DashboardHeader';
 import ActiveCampaign from './ActiveCampaign';
 import StatsGrid from './StatsGrid';
 import QuickActions from './QuickActions';
-import campaignService from '@/services/campaignService';
+import { campaignService } from '@/services/campaignService';
 import { clientService } from '@/services/clientService';
 import { toast } from 'sonner';
 
@@ -79,7 +79,7 @@ const Dashboard = () => {
     if (activeCampaign) {
       try {
         await campaignService.updateCampaign(activeCampaign.id, {
-          status: 'stopped' as any // Type assertion to handle the 'stopped' status
+          status: 'stopped'
         });
         setActiveCampaign(null);
         refetchCampaigns();

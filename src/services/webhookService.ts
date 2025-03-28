@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import assistantService from './assistantService';
 
@@ -53,10 +52,7 @@ export const webhookService = {
   // Função para buscar todos os assistentes do usuário
   async getAllAssistants(): Promise<VapiAssistant[]> {
     try {
-      console.log('Fetching assistants from database');
       const assistants = await assistantService.getAllAssistants();
-      console.log(`Found ${assistants.length} assistants in database`);
-      
       return assistants.map(assistant => ({
         id: assistant.assistant_id,
         name: assistant.name,
@@ -66,7 +62,6 @@ export const webhookService = {
       console.error('Error getting assistants:', error);
       
       // Default assistant sempre disponível
-      console.log('Returning default assistant as fallback');
       return [{
         id: VAPI_ASSISTANT_ID,
         name: 'Default Vapi Assistant',
@@ -102,8 +97,8 @@ export const webhookService = {
     else if (localStorage.getItem('selected_assistant')) {
       try {
         const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '');
-        if (selectedAssistant && selectedAssistant.assistant_id) {
-          assistantId = selectedAssistant.assistant_id;
+        if (selectedAssistant && selectedAssistant.id) {
+          assistantId = selectedAssistant.id;
           console.log('Using selected Vapi assistant ID:', assistantId);
         }
       } catch (e) {
@@ -128,12 +123,12 @@ export const webhookService = {
       });
       
       // Registra a chamada no histórico
-      await this.logWebhookCall(webhookData, response.ok, 'trigger_call');
+      await this.logWebhookCall(webhookData, response.ok);
       
       return { success: response.ok, status: response.status };
     } catch (error) {
       console.error('Erro ao disparar webhook:', error);
-      await this.logWebhookCall(webhookData, false, 'trigger_call', error);
+      await this.logWebhookCall(webhookData, false, error);
       return { success: false, error };
     }
   },
@@ -148,18 +143,7 @@ export const webhookService = {
       timestamp: new Date().toISOString()
     };
     
-    // Adiciona informações adicionais se necessário
-    if (!webhookData.additional_data) {
-      webhookData.additional_data = {};
-    }
-    
-    // Adiciona a API key da Vapi
-    webhookData.additional_data.vapi_api_key = VAPI_API_KEY;
-    
     try {
-      console.log('Enviando dados para webhook:', VAPI_ASSISTANT_WEBHOOK_URL);
-      console.log('Request data:', JSON.stringify(webhookData));
-      
       // Envia requisição para o webhook
       const response = await fetch(VAPI_ASSISTANT_WEBHOOK_URL, {
         method: 'POST',
@@ -169,137 +153,21 @@ export const webhookService = {
         body: JSON.stringify(webhookData),
       });
       
-      if (!response.ok) {
-        console.error('Erro HTTP ao criar assistente:', response.status, response.statusText);
-        let errorText = '';
-        try {
-          const errorResponse = await response.text();
-          console.error('Resposta de erro:', errorResponse);
-          errorText = errorResponse;
-          
-          // Tenta analisar JSON se possível
-          try {
-            const errorJson = JSON.parse(errorResponse);
-            if (errorJson.error) {
-              errorText = errorJson.error;
-            }
-          } catch {
-            // Se não for JSON, usa o texto como está
-          }
-        } catch (e) {
-          errorText = `${response.status} ${response.statusText}`;
-        }
-        
-        await this.logWebhookCall(
-          webhookData, 
-          false, 
-          'create_assistant', 
-          `HTTP Error: ${response.status} ${response.statusText} - ${errorText}`
-        );
-        
-        return { 
-          success: false, 
-          status: response.status,
-          data: { error: errorText },
-          error: errorText
-        };
-      }
-      
-      let responseData;
-      try {
-        responseData = await response.json();
-        console.log('Resposta JSON do webhook:', responseData);
-        
-        // Se a resposta contém uma mensagem de sucesso ou 'workflow was started'
-        if (responseData.message === "Workflow was started" || 
-            (responseData.message && responseData.message.includes("started"))) {
-          console.log('Fluxo de trabalho iniciado com sucesso');
-          
-          // Gerar um ID temporário para o assistente
-          const tempAssistantId = `temp_assistant_${Date.now()}`;
-          
-          await this.logWebhookCall(
-            webhookData, 
-            true, 
-            'create_assistant', 
-            null,
-            responseData
-          );
-          
-          return { 
-            success: true, 
-            status: response.status,
-            data: { 
-              message: responseData.message,
-              assistant_id: tempAssistantId,
-              isAsync: true // Indicação que o processo está rodando em segundo plano
-            }
-          };
-        }
-        
-        // Verifica se a resposta contém um assistant_id
-        if (!responseData.assistant_id) {
-          console.error('Resposta não contém assistant_id', responseData);
-          
-          // Se não há erro explícito mas também não há assistant_id, considera como erro
-          const errorMessage = 'Resposta do servidor não contém um ID de assistente válido';
-          await this.logWebhookCall(
-            webhookData, 
-            false, 
-            'create_assistant', 
-            errorMessage,
-            responseData
-          );
-          
-          return { 
-            success: false, 
-            status: response.status,
-            data: responseData,
-            error: errorMessage
-          };
-        }
-      } catch (e) {
-        console.error('Erro ao analisar resposta JSON:', e);
-        const textResponse = await response.text();
-        console.log('Resposta em texto:', textResponse);
-        
-        await this.logWebhookCall(
-          webhookData, 
-          false, 
-          'create_assistant', 
-          'Erro ao analisar resposta do servidor',
-          { text_response: textResponse }
-        );
-        
-        return { 
-          success: false, 
-          status: response.status,
-          data: null,
-          error: 'Erro ao analisar resposta do servidor'
-        };
-      }
-      
+      const responseData = await response.json();
       console.log('Resposta do webhook de assistente:', responseData);
       
       // Registra a chamada no histórico
-      await this.logWebhookCall(webhookData, true, 'create_assistant', null, responseData);
+      await this.logWebhookCall(webhookData, response.ok, 'create_assistant');
       
       return { 
-        success: true, 
+        success: response.ok, 
         status: response.status,
         data: responseData
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Erro ao criar assistente:', errorMessage);
-      
-      await this.logWebhookCall(webhookData, false, 'create_assistant', errorMessage);
-      
-      return { 
-        success: false, 
-        error: errorMessage,
-        data: null
-      };
+      console.error('Erro ao criar assistente:', error);
+      await this.logWebhookCall(webhookData, false, 'create_assistant', error);
+      return { success: false, error };
     }
   },
   
@@ -315,13 +183,7 @@ export const webhookService = {
   },
   
   // Função para registrar a chamada do webhook no histórico
-  async logWebhookCall(
-    data: WebhookData | AssistantWebhookData, 
-    success: boolean, 
-    action: string, 
-    error?: any,
-    responseData?: any
-  ) {
+  async logWebhookCall(data: WebhookData | AssistantWebhookData, success: boolean, action?: string, error?: any) {
     try {
       const webhookUrl = 'action' in data ? WEBHOOK_URL : VAPI_ASSISTANT_WEBHOOK_URL;
       const actionValue = 'action' in data ? data.action : (action || 'create_assistant');
@@ -331,27 +193,26 @@ export const webhookService = {
         request_data: data,
         success,
         error_message: error ? String(error) : null,
-        action: actionValue,
-        response_data: responseData
+        action: actionValue
       };
       
-      console.log('Registrando log de webhook:', {
-        url: webhookUrl,
-        action: actionValue,
-        success,
-        error: error ? String(error) : null
+      // Use the direct REST API URL instead of accessing protected properties
+      const supabaseRestUrl = 'https://ovanntvqwzifxjrnnalr.supabase.co/rest/v1/webhook_logs';
+      const supabaseApiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92YW5udHZxd3ppZnhqcm5uYWxyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTE4NzgsImV4cCI6MjA1ODU4Nzg3OH0.t7R_EiadlDXqWeB-Sgx_McseGGkrbk9br_mblC8unK8';
+      
+      const response = await fetch(supabaseRestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseApiKey,
+          'Authorization': `Bearer ${supabaseApiKey}`,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(logData)
       });
       
-      // Inserir no banco de dados
-      const { data: logResult, error: logError } = await supabase
-        .from('webhook_logs')
-        .insert(logData)
-        .select();
-        
-      if (logError) {
-        console.error('Erro ao registrar log via supabase client:', logError);
-      } else {
-        console.log('Log de webhook registrado com sucesso:', logResult);
+      if (!response.ok) {
+        console.error('Erro ao registrar log do webhook via REST:', await response.text());
       }
     } catch (err) {
       console.error('Erro ao registrar log do webhook:', err);
@@ -470,5 +331,3 @@ export const webhookService = {
     }
   }
 };
-
-export default webhookService;

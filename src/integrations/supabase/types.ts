@@ -178,64 +178,29 @@ export type Database = {
         Row: {
           created_at: string
           id: number
-          model_id: number
-          prompt: string
-          response: string
-          updated_at: string | null
         }
         Insert: {
           created_at?: string
           id?: number
-          model_id?: number
-          prompt?: string
-          response?: string
-          updated_at?: string | null
         }
         Update: {
           created_at?: string
           id?: number
-          model_id?: number
-          prompt?: string
-          response?: string
-          updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "training_data_model_id_fkey"
-            columns: ["model_id"]
-            isOneToOne: false
-            referencedRelation: "training_models"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       training_models: {
         Row: {
           created_at: string
-          description: string | null
           id: number
-          last_trained: string | null
-          name: string
-          status: string
-          updated_at: string | null
         }
         Insert: {
           created_at?: string
-          description?: string | null
           id?: number
-          last_trained?: string | null
-          name?: string
-          status?: string
-          updated_at?: string | null
         }
         Update: {
           created_at?: string
-          description?: string | null
           id?: number
-          last_trained?: string | null
-          name?: string
-          status?: string
-          updated_at?: string | null
         }
         Relationships: []
       }
