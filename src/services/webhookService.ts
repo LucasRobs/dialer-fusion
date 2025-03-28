@@ -6,7 +6,7 @@ import assistantService, { Assistant } from './assistantService';
 const WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
 const VAPI_ASSISTANT_WEBHOOK_URL = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
 const VAPI_API_URL = 'https://api.vapi.ai/assistant';
-const VAPI_API_KEY = 'Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd';
+const VAPI_API_KEY = '494da5a9-4a54-4155-bffb-d7206bd72afd';
 
 // Interface para os dados do webhook
 export interface WebhookData {
