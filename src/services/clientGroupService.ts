@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { Client } from './clientService';
 
@@ -196,7 +197,7 @@ export const clientGroupService = {
         throw clientsError;
       }
       
-      return clients || [];
+      return clients as Client[] || [];
     } catch (error) {
       console.error('Error in getClientsInGroup:', error);
       return [];
@@ -235,7 +236,7 @@ export const clientGroupService = {
         throw groupsError;
       }
       
-      return groups || [];
+      return groups as ClientGroup[] || [];
     } catch (error) {
       console.error('Error in getClientGroupsByClientId:', error);
       return [];

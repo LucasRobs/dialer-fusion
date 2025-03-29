@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { clientService } from "@/services/clientService";
 import { campaignService } from "@/services/campaignService";
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { clientGroupService } from "@/services/clientGroupService";
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,18 +52,24 @@ export default function CampaignControls() {
   const [isLoading, setIsLoading] = useState(false);
   
   // Load client groups
-  useEffect(() => {
-    const fetchClientGroups = async () => {
+  const { data: groupsData, isLoading: loadingGroups } = useQuery({
+    queryKey: ['clientGroups'],
+    queryFn: async () => {
       try {
-        const groups = await clientGroupService.getClientGroups();
-        setClientGroups(groups);
+        return await clientGroupService.getClientGroups();
       } catch (error) {
         console.error("Erro ao carregar grupos de clientes:", error);
+        toast.error("Erro ao carregar grupos de clientes");
+        return [];
       }
-    };
-    
-    fetchClientGroups();
-  }, []);
+    }
+  });
+  
+  useEffect(() => {
+    if (groupsData) {
+      setClientGroups(groupsData);
+    }
+  }, [groupsData]);
   
   // Create form
   const form = useForm({
@@ -75,51 +81,62 @@ export default function CampaignControls() {
     }
   });
   
-  const addCampaignMutation = useMutation({
+  // Create campaign mutation
+  const createCampaignMutation = useMutation({
     mutationFn: async (campaignData: any) => {
-      // First create the campaign
-      const campaign = await campaignService.createCampaign({
+      return await campaignService.createCampaign({
         name: campaignData.name,
+        status: "pending",
+        user_id: user?.id
+      });
+    }
+  });
+  
+  // Add clients to campaign mutation
+  const addClientsToCampaignMutation = useMutation({
+    mutationFn: async ({ campaignId, clientGroupId }: { campaignId: number, clientGroupId: string }) => {
+      const clients = await clientService.getClientsByGroupId(clientGroupId);
+      if (clients.length > 0) {
+        return await campaignService.addClientsToCampaign(campaignId, clients);
+      }
+      return null;
+    }
+  });
+  
+  const onSubmit = async (data: any) => {
+    try {
+      setIsLoading(true);
+      
+      // First create the campaign
+      const campaign = await createCampaignMutation.mutateAsync({
+        name: data.name,
         status: "pending",
         user_id: user?.id
       });
       
       // Then add clients from the selected group
-      if (campaignData.clientGroupId) {
-        const clients = await clientService.getClientsByGroupId(campaignData.clientGroupId);
-        
-        if (clients.length > 0) {
-          // Use a new mutation for adding clients to the campaign
-          await campaignService.addClientsToCampaign(campaign.id, clients);
-        }
+      if (data.clientGroupId) {
+        await addClientsToCampaignMutation.mutateAsync({
+          campaignId: campaign.id,
+          clientGroupId: data.clientGroupId
+        });
       }
       
-      return campaign;
-    },
-    onSuccess: () => {
       toast.success("Campanha criada com sucesso!");
       setIsSheetOpen(false);
       form.reset();
-    },
-    onError: (error: Error) => {
+    } catch (error: any) {
       toast.error(`Erro ao criar campanha: ${error.message}`);
+      console.error("Erro ao criar campanha:", error);
+    } finally {
+      setIsLoading(false);
     }
-  });
-  
-  const onSubmit = (data: any) => {
-    addCampaignMutation.mutate({
-      name: data.name,
-      clientGroupId: data.clientGroupId,
-      scheduleDate: data.scheduleDate,
-      scheduleTime: data.scheduleTime
-    });
   };
   
   return (
-    <div>
+    <div className="flex space-x-2">
       <Button 
         variant="outline" 
-        className="ml-2" 
         onClick={() => setIsSheetOpen(true)}
       >
         <Calendar className="h-4 w-4 mr-2" />
@@ -233,10 +250,10 @@ export default function CampaignControls() {
               <SheetFooter className="pt-4">
                 <Button 
                   type="submit" 
-                  disabled={addCampaignMutation.isPending}
+                  disabled={isLoading}
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {addCampaignMutation.isPending ? 'Salvando...' : 'Salvar Campanha'}
+                  {isLoading ? 'Salvando...' : 'Salvar Campanha'}
                 </Button>
               </SheetFooter>
             </form>
