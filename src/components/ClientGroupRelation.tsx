@@ -25,7 +25,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, PlusCircle, Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ClientGroup, clientGroupService } from '../services/clientGroupService';
 
@@ -59,7 +58,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     enabled: !!user?.id
   });
   
-  const { data: clientGroupMemberships = [], isLoading: isLoadingMemberships } = useQuery({
+  const { data: clientGroupMemberships = [], isLoading: isLoadingMemberships, refetch: refetchMemberships } = useQuery({
     queryKey: ['clientGroupMemberships', client.id],
     queryFn: async () => {
       try {
@@ -90,6 +89,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
       toast.success('Cliente adicionado ao grupo');
       setShowAddToGroupDialog(false);
       setSelectedGroupId('');
+      refetchMemberships(); // Refresh the memberships after adding
     },
     onError: (error: Error) => {
       toast.error(`Erro ao adicionar cliente ao grupo: ${error.message}`);
@@ -105,6 +105,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
       queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
       toast.success('Cliente removido do grupo');
+      refetchMemberships(); // Refresh the memberships after removing
     },
     onError: (error: Error) => {
       toast.error(`Erro ao remover cliente do grupo: ${error.message}`);
@@ -212,11 +213,11 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
                 </SelectTrigger>
                 <SelectContent onClick={(e) => e.stopPropagation()}>
                   {isLoadingGroups ? (
-                    <SelectItem value="loading">
+                    <SelectItem value="loading-indicator">
                       Carregando grupos...
                     </SelectItem>
                   ) : clientGroups.length === 0 ? (
-                    <SelectItem value="no-groups">
+                    <SelectItem value="no-groups-indicator">
                       Nenhum grupo encontrado
                     </SelectItem>
                   ) : (

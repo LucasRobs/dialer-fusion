@@ -66,7 +66,7 @@ export const clientGroupService = {
       .from('client_groups')
       .update(updates)
       .eq('id', id)
-      .eq('user_id', userId)  // Garantir que o grupo pertence ao usuário atual
+      .eq('user_id', userId)
       .select();
       
     if (error) {
@@ -98,7 +98,7 @@ export const clientGroupService = {
       .from('client_groups')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId);  // Garantir que o grupo pertence ao usuário atual
+      .eq('user_id', userId);
       
     if (error) {
       console.error('Error deleting client group:', error);
@@ -110,17 +110,22 @@ export const clientGroupService = {
   
   // Add a client to a group
   addClientToGroup: async (clientId: number, groupId: string) => {
-    const { data, error } = await supabase
-      .from('client_group_members')
-      .insert([{ client_id: clientId, group_id: groupId }])
-      .select();
+    try {
+      const { data, error } = await supabase
+        .from('client_group_members')
+        .insert([{ client_id: clientId, group_id: groupId }])
+        .select();
+        
+      if (error) {
+        console.error('Error adding client to group:', error);
+        throw error;
+      }
       
-    if (error) {
-      console.error('Error adding client to group:', error);
+      return data[0];
+    } catch (error) {
+      console.error('Error in addClientToGroup:', error);
       throw error;
     }
-    
-    return data[0];
   },
   
   // Remove a client from a group
@@ -141,51 +146,65 @@ export const clientGroupService = {
   
   // Get all clients in a group
   getClientsInGroup: async (groupId: string): Promise<Client[]> => {
-    const { data, error } = await supabase
-      .from('client_group_members')
-      .select(`
-        client_id,
-        clients (*)
-      `)
-      .eq('group_id', groupId);
+    try {
+      const { data, error } = await supabase
+        .from('client_group_members')
+        .select(`
+          client_id,
+          clients (*)
+        `)
+        .eq('group_id', groupId);
+        
+      if (error) {
+        console.error('Error fetching clients in group:', error);
+        throw error;
+      }
       
-    if (error) {
-      console.error('Error fetching clients in group:', error);
-      throw error;
+      if (!data || data.length === 0) {
+        return [];
+      }
+      
+      // Extract the clients from the nested data
+      const clients = data
+        .filter(item => item.clients)
+        .map(item => item.clients as Client);
+      
+      return clients;
+    } catch (error) {
+      console.error('Error in getClientsInGroup:', error);
+      return [];
     }
-    
-    // Properly extract and transform the nested clients data
-    // Each item.clients is an object, not an array
-    const clients = data.map(item => {
-      if (!item.clients) return null;
-      return item.clients as unknown as Client;
-    }).filter(Boolean) as Client[];
-    
-    return clients;
   },
   
   // Get all groups a client belongs to
   getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
-    const { data, error } = await supabase
-      .from('client_group_members')
-      .select(`
-        group_id,
-        client_groups (*)
-      `)
-      .eq('client_id', clientId);
+    try {
+      const { data, error } = await supabase
+        .from('client_group_members')
+        .select(`
+          group_id,
+          client_groups (*)
+        `)
+        .eq('client_id', clientId);
+        
+      if (error) {
+        console.error('Error fetching client groups for client:', error);
+        throw error;
+      }
       
-    if (error) {
-      console.error('Error fetching client groups for client:', error);
-      throw error;
+      if (!data || data.length === 0) {
+        return [];
+      }
+      
+      // Extract the groups from the nested data
+      const groups = data
+        .filter(item => item.client_groups)
+        .map(item => item.client_groups as ClientGroup);
+      
+      return groups;
+    } catch (error) {
+      console.error('Error in getClientGroupsByClientId:', error);
+      return [];
     }
-    
-    // Properly extract and transform the nested groups data
-    // Each item.client_groups is an object, not an array
-    const groups = data.map(item => {
-      if (!item.client_groups) return null;
-      return item.client_groups as unknown as ClientGroup;
-    }).filter(Boolean) as ClientGroup[];
-    
-    return groups;
   }
 };

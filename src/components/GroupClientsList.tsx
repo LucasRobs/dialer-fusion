@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Phone, X } from 'lucide-react';
 import { Client } from '@/services/clientService';
 import { clientGroupService } from '@/services/clientGroupService';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { webhookService } from '@/services/webhookService';
 import { supabase } from '@/lib/supabase';
 
@@ -33,7 +33,6 @@ interface GroupClientsListProps {
 }
 
 const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsListProps) => {
-  const { toast } = useToast();
   
   const { 
     data: clients = [], 
@@ -104,6 +103,8 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
     }
   };
 
+  console.log('Clients in group:', clients);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-3xl">
@@ -117,7 +118,7 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
           </div>
         ) : error ? (
           <div className="text-center p-6 text-red-500">
-            Erro ao carregar clientes
+            Erro ao carregar clientes: {error instanceof Error ? error.message : 'Erro desconhecido'}
           </div>
         ) : clients.length === 0 ? (
           <div className="text-center p-6 text-muted-foreground">
