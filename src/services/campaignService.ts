@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 interface Campaign {
@@ -347,5 +346,26 @@ export const campaignService = {
       name,
       value
     }));
+  },
+  
+  async addClientToCampaign(campaignId: number, clientId: number) {
+    try {
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .insert([
+          { 
+            campaign_id: campaignId,
+            client_id: clientId,
+            status: 'pending'
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+      return data[0];
+    } catch (error) {
+      console.error('Error adding client to campaign:', error);
+      throw error;
+    }
   }
 };
