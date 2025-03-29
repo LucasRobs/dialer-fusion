@@ -111,25 +111,32 @@ export const clientService = {
   },
 
   // Buscar clientes por grupo
-  async getClientsByGroupId(groupId: string) {
-    const { data, error } = await supabase
-      .from('client_group_members')
-      .select(`
-        client_id,
-        clients(*)
-      `)
-      .eq('group_id', groupId);
-    
-    if (error) throw error;
-    
-    // Properly extract and transform the nested clients data
-    // Each item.clients is an object, not an array
-    const clients = data.map(item => {
-      if (!item.clients) return null;
-      return item.clients as unknown as Client;
-    }).filter(Boolean) as Client[];
-    
-    return clients;
+  async getClientsByGroupId(groupId: string): Promise<Client[]> {
+    try {
+      if (!groupId) return [];
+      
+      const { data, error } = await supabase
+        .from('client_group_members')
+        .select(`
+          client_id,
+          clients(*)
+        `)
+        .eq('group_id', groupId);
+      
+      if (error) throw error;
+      
+      if (!data || data.length === 0) return [];
+      
+      // Extract the clients from the nested data
+      const clients = data
+        .filter(item => item.clients)
+        .map(item => item.clients as Client);
+      
+      return clients;
+    } catch (error) {
+      console.error('Error in getClientsByGroupId:', error);
+      return [];
+    }
   },
 
   // Importar clientes de uma planilha

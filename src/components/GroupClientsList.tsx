@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Phone, X } from 'lucide-react';
 import { Client } from '@/services/clientService';
 import { clientGroupService } from '@/services/clientGroupService';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { webhookService } from '@/services/webhookService';
 import { supabase } from '@/lib/supabase';
 
@@ -33,7 +33,6 @@ interface GroupClientsListProps {
 }
 
 const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsListProps) => {
-  const { toast } = useToast();
   
   const { 
     data: clients = [], 
@@ -49,14 +48,12 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
   const handleRemoveFromGroup = async (clientId: number) => {
     try {
       await clientGroupService.removeClientFromGroup(clientId, groupId);
-      toast({
-        title: "Cliente removido",
+      toast("Cliente removido", {
         description: "Cliente removido do grupo com sucesso.",
       });
       refetch();
     } catch (error) {
-      toast({
-        title: "Erro",
+      toast("Erro", {
         description: "Erro ao remover cliente do grupo.",
         variant: "destructive"
       });
@@ -83,26 +80,25 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       });
       
       if (result.success) {
-        toast({
-          title: "Ligação iniciada",
+        toast("Ligação iniciada", {
           description: `Iniciando ligação para ${client.name} (${client.phone})`,
         });
       } else {
-        toast({
-          title: "Erro ao iniciar ligação", 
+        toast("Erro ao iniciar ligação", {
           description: "Não foi possível iniciar a ligação. Tente novamente.",
           variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
-      toast({
-        title: "Erro", 
+      toast("Erro", {
         description: "Ocorreu um erro ao tentar iniciar a ligação.",
         variant: "destructive"
       });
     }
   };
+
+  console.log('Clients in group:', clients);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -117,7 +113,7 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
           </div>
         ) : error ? (
           <div className="text-center p-6 text-red-500">
-            Erro ao carregar clientes
+            Erro ao carregar clientes: {error instanceof Error ? error.message : 'Erro desconhecido'}
           </div>
         ) : clients.length === 0 ? (
           <div className="text-center p-6 text-muted-foreground">
