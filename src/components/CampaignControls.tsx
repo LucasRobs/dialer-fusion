@@ -31,7 +31,8 @@ import {
   Users, 
   UserPlus, 
   AlarmClock, 
-  CalendarIcon 
+  CalendarIcon, 
+  Loader2
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -39,7 +40,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { clientService } from "@/services/clientService";
 import { campaignService } from "@/services/campaignService";
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { clientGroupService } from "@/services/clientGroupService";
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,9 +48,9 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function CampaignControls() {
   const { user } = useAuth();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [clientGroups, setClientGroups] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient();
   
   // Load client groups
   const { data: groupsData, isLoading: loadingGroups } = useQuery({
@@ -84,22 +85,32 @@ export default function CampaignControls() {
   // Create campaign mutation
   const createCampaignMutation = useMutation({
     mutationFn: async (campaignData: any) => {
+      console.log('Creating campaign with data:', campaignData);
       return await campaignService.createCampaign({
         name: campaignData.name,
         status: "pending",
         user_id: user?.id
       });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     }
   });
   
   // Add clients to campaign mutation
   const addClientsToCampaignMutation = useMutation({
     mutationFn: async ({ campaignId, clientGroupId }: { campaignId: number, clientGroupId: string }) => {
+      console.log(`Adding clients from group ${clientGroupId} to campaign ${campaignId}`);
       const clients = await clientService.getClientsByGroupId(clientGroupId);
+      console.log(`Retrieved ${clients.length} clients for group ${clientGroupId}`);
+      
       if (clients.length > 0) {
         return await campaignService.addClientsToCampaign(campaignId, clients);
       }
       return null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     }
   });
   
@@ -108,23 +119,34 @@ export default function CampaignControls() {
       setIsLoading(true);
       
       // First create the campaign
+      console.log('Submitting form data:', data);
       const campaign = await createCampaignMutation.mutateAsync({
         name: data.name,
         status: "pending",
         user_id: user?.id
       });
       
+      console.log('Campaign created:', campaign);
+      
       // Then add clients from the selected group
       if (data.clientGroupId) {
-        await addClientsToCampaignMutation.mutateAsync({
+        console.log('Adding clients from group:', data.clientGroupId);
+        const result = await addClientsToCampaignMutation.mutateAsync({
           campaignId: campaign.id,
           clientGroupId: data.clientGroupId
         });
+        
+        console.log('Clients added to campaign:', result);
+      } else {
+        console.log('No client group selected, skipping client addition');
       }
       
       toast.success("Campanha criada com sucesso!");
       setIsSheetOpen(false);
       form.reset();
+      
+      // Refresh campaigns list
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     } catch (error: any) {
       toast.error(`Erro ao criar campanha: ${error.message}`);
       console.error("Erro ao criar campanha:", error);
@@ -181,11 +203,22 @@ export default function CampaignControls() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {clientGroups.map((group) => (
-                          <SelectItem key={group.id} value={group.id}>
-                            {group.name} ({group.client_count || 0} clientes)
+                        {loadingGroups ? (
+                          <SelectItem value="loading" disabled>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
+                            Carregando grupos...
                           </SelectItem>
-                        ))}
+                        ) : clientGroups.length === 0 ? (
+                          <SelectItem value="empty" disabled>
+                            Nenhum grupo encontrado
+                          </SelectItem>
+                        ) : (
+                          clientGroups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name} ({group.client_count || 0} clientes)
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -252,8 +285,17 @@ export default function CampaignControls() {
                   type="submit" 
                   disabled={isLoading}
                 >
-                  <Save className="h-4 w-4 mr-2" />
-                  {isLoading ? 'Salvando...' : 'Salvar Campanha'}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Salvar Campanha
+                    </>
+                  )}
                 </Button>
               </SheetFooter>
             </form>

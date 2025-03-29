@@ -115,18 +115,33 @@ export const clientService = {
     try {
       if (!groupId) return [];
       
+      console.log('Fetching clients for group ID:', groupId);
+      
       // First get client IDs from the group members
       const { data: memberData, error: memberError } = await supabase
         .from('client_group_members')
         .select('client_id')
         .eq('group_id', groupId);
       
-      if (memberError) throw memberError;
+      if (memberError) {
+        console.error('Error fetching group members:', memberError);
+        throw memberError;
+      }
       
-      if (!memberData || memberData.length === 0) return [];
+      if (!memberData || memberData.length === 0) {
+        console.log('No members found in group');
+        return [];
+      }
       
-      // Get client IDs
-      const clientIds = memberData.map(item => item.client_id);
+      // Get client IDs - convert string IDs to numbers if needed
+      const clientIds = memberData.map(item => {
+        // Make sure we're working with numeric IDs
+        return typeof item.client_id === 'string' 
+          ? parseInt(item.client_id, 10) 
+          : item.client_id;
+      });
+      
+      console.log('Found client IDs in group:', clientIds);
       
       // Then fetch the actual clients
       const { data: clients, error: clientsError } = await supabase
@@ -134,9 +149,13 @@ export const clientService = {
         .select('*')
         .in('id', clientIds);
       
-      if (clientsError) throw clientsError;
+      if (clientsError) {
+        console.error('Error fetching clients by IDs:', clientsError);
+        throw clientsError;
+      }
       
-      return clients as Client[];
+      console.log(`Retrieved ${clients?.length || 0} clients for group`);
+      return clients as Client[] || [];
     } catch (error) {
       console.error('Error in getClientsByGroupId:', error);
       return [];

@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 export const campaignService = {
@@ -124,38 +123,75 @@ export const campaignService = {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
 
+    // Ensure status is one of the allowed values (fix for database constraint)
+    if (!campaign.status || !['active', 'pending', 'completed', 'stopped'].includes(campaign.status)) {
+      campaign.status = 'pending'; // Default to pending if status is not valid
+    }
+
+    console.log('Creating campaign with data:', { ...campaign, user_id: userId });
+    
     const { data, error } = await supabase
       .from('campaigns')
       .insert([{ ...campaign, user_id: userId }])
       .select();
     
-    if (error) throw error;
+    if (error) {
+      console.error('Error creating campaign:', error);
+      throw error;
+    }
+    
+    console.log('Campaign created successfully:', data[0]);
     return data[0];
   },
   
   // Adicionar clientes a uma campanha
   async addClientsToCampaign(campaignId: number, clients: any[]) {
-    // Preparar array de objetos para inserir na tabela campaign_clients
-    const campaignClients = clients.map(client => ({
-      campaign_id: campaignId,
-      client_id: client.id,
-      status: 'pending'
-    }));
+    console.log(`Adding ${clients.length} clients to campaign ${campaignId}`);
     
-    const { data, error } = await supabase
-      .from('campaign_clients')
-      .insert(campaignClients)
-      .select();
+    // Validate input
+    if (!campaignId || !clients || clients.length === 0) {
+      console.error('Invalid input for addClientsToCampaign');
+      return null;
+    }
     
-    if (error) throw error;
-    
-    // Atualizar o total de chamadas na campanha
-    await supabase
-      .from('campaigns')
-      .update({ total_calls: clients.length })
-      .eq('id', campaignId);
-    
-    return data;
+    try {
+      // Preparar array de objetos para inserir na tabela campaign_clients
+      const campaignClients = clients.map(client => ({
+        campaign_id: campaignId,
+        client_id: client.id,
+        status: 'pending'
+      }));
+      
+      console.log('Prepared campaign client records:', campaignClients.length);
+      
+      const { data, error } = await supabase
+        .from('campaign_clients')
+        .insert(campaignClients)
+        .select();
+      
+      if (error) {
+        console.error('Error adding clients to campaign:', error);
+        throw error;
+      }
+      
+      // Atualizar o total de chamadas na campanha
+      const updateResult = await supabase
+        .from('campaigns')
+        .update({ total_calls: clients.length })
+        .eq('id', campaignId)
+        .select();
+        
+      if (updateResult.error) {
+        console.error('Error updating campaign total_calls:', updateResult.error);
+      } else {
+        console.log('Updated campaign total_calls:', clients.length);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in addClientsToCampaign:', error);
+      throw error;
+    }
   },
   
   // Atualizar uma campanha
