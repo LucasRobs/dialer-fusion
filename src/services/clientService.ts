@@ -115,24 +115,28 @@ export const clientService = {
     try {
       if (!groupId) return [];
       
-      const { data, error } = await supabase
+      // First get client IDs from the group members
+      const { data: memberData, error: memberError } = await supabase
         .from('client_group_members')
-        .select(`
-          client_id,
-          clients(*)
-        `)
+        .select('client_id')
         .eq('group_id', groupId);
       
-      if (error) throw error;
+      if (memberError) throw memberError;
       
-      if (!data || data.length === 0) return [];
+      if (!memberData || memberData.length === 0) return [];
       
-      // Extract the clients from the nested data
-      const clients = data
-        .filter(item => item.clients)
-        .map(item => item.clients as Client);
+      // Get client IDs
+      const clientIds = memberData.map(item => item.client_id);
       
-      return clients;
+      // Then fetch the actual clients
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('*')
+        .in('id', clientIds);
+      
+      if (clientsError) throw clientsError;
+      
+      return clients as Client[];
     } catch (error) {
       console.error('Error in getClientsByGroupId:', error);
       return [];

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Dialog, 
@@ -48,15 +48,10 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
   const handleRemoveFromGroup = async (clientId: number) => {
     try {
       await clientGroupService.removeClientFromGroup(clientId, groupId);
-      toast("Cliente removido", {
-        description: "Cliente removido do grupo com sucesso.",
-      });
+      toast("Cliente removido do grupo com sucesso.");
       refetch();
     } catch (error) {
-      toast("Erro", {
-        description: "Erro ao remover cliente do grupo.",
-        variant: "destructive"
-      });
+      toast("Erro ao remover cliente do grupo.");
     }
   };
 
@@ -80,21 +75,13 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       });
       
       if (result.success) {
-        toast("Ligação iniciada", {
-          description: `Iniciando ligação para ${client.name} (${client.phone})`,
-        });
+        toast(`Iniciando ligação para ${client.name} (${client.phone})`);
       } else {
-        toast("Erro ao iniciar ligação", {
-          description: "Não foi possível iniciar a ligação. Tente novamente.",
-          variant: "destructive"
-        });
+        toast("Não foi possível iniciar a ligação. Tente novamente.");
       }
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
-      toast("Erro", {
-        description: "Ocorreu um erro ao tentar iniciar a ligação.",
-        variant: "destructive"
-      });
+      toast("Ocorreu um erro ao tentar iniciar a ligação.");
     }
   };
 
