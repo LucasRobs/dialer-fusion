@@ -1,389 +1,248 @@
+
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useForm } from 'react-hook-form';
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetFooter 
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { 
+  Form, 
+  FormControl, 
+  FormField, 
+  FormItem, 
+  FormLabel, 
+  FormMessage 
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
   SelectValue 
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
-import { CalendarIcon, Plus, Trash2, Users } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { campaignService } from '@/services/campaignService';
-import { clientService, Client } from '@/services/clientService';
+  Calendar, 
+  Save, 
+  Users, 
+  UserPlus, 
+  AlarmClock, 
+  CalendarIcon 
+} from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { clientService } from "@/services/clientService";
+import { campaignService } from "@/services/campaignService";
+import { useMutation } from '@tanstack/react-query';
+import { clientGroupService } from "@/services/clientGroupService";
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { clientGroupService } from '@/services/clientGroupService';
 
 export default function CampaignControls() {
-  const [showNewCampaignDialog, setShowNewCampaignDialog] = useState(false);
-  const [showAddClientsDialog, setShowAddClientsDialog] = useState(false);
-  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
-  const [campaignName, setCampaignName] = useState('');
-  const [campaignDate, setCampaignDate] = useState<Date | undefined>(new Date());
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
+  const [clientGroups, setClientGroups] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
-  const { data: campaigns = [], isLoading: isLoadingCampaigns } = useQuery({
-    queryKey: ['campaigns'],
-    queryFn: campaignService.getCampaigns,
-  });
-  
-  const { data: clients = [], isLoading: isLoadingClients } = useQuery({
-    queryKey: ['clients', selectedGroupId],
-    queryFn: () => {
-      if (selectedGroupId) {
-        return clientService.getClientsByGroupId(selectedGroupId);
+  // Load client groups
+  useEffect(() => {
+    const fetchClientGroups = async () => {
+      try {
+        const groups = await clientGroupService.getClientGroups();
+        setClientGroups(groups);
+      } catch (error) {
+        console.error("Erro ao carregar grupos de clientes:", error);
       }
-      return clientService.getClients();
-    },
-  });
-
-  const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
-    queryKey: ['clientGroups'],
-    queryFn: () => clientGroupService.getClientGroups(),
-    enabled: !!user?.id,
+    };
+    
+    fetchClientGroups();
+  }, []);
+  
+  // Create form
+  const form = useForm({
+    defaultValues: {
+      name: "",
+      clientGroupId: "",
+      scheduleDate: new Date(),
+      scheduleTime: "09:00",
+    }
   });
   
-  const createCampaignMutation = useMutation({
-    mutationFn: (campaignData: { name: string; startDate: Date }) => 
-      campaignService.createCampaign(campaignData.name, campaignData.startDate),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      toast({
-        title: "Campanha criada",
-        description: "Campanha criada com sucesso.",
+  const addCampaignMutation = useMutation({
+    mutationFn: async (campaignData: any) => {
+      // First create the campaign
+      const campaign = await campaignService.createCampaign({
+        name: campaignData.name,
+        status: "pending",
+        user_id: user?.id
       });
-      setShowNewCampaignDialog(false);
-      setCampaignName('');
-      setCampaignDate(new Date());
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Erro ao criar campanha",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-  
-  const addClientsToCampaignMutation = useMutation({
-    mutationFn: async (data: { campaignId: number; clientIds: number[] }) => {
-      const promises = data.clientIds.map(clientId =>
-        campaignService.addClientToCampaign(data.campaignId, clientId)
-      );
       
-      return Promise.all(promises);
+      // Then add clients from the selected group
+      if (campaignData.clientGroupId) {
+        const clients = await clientService.getClientsByGroupId(campaignData.clientGroupId);
+        
+        if (clients.length > 0) {
+          // Use a new mutation for adding clients to the campaign
+          await campaignService.addClientsToCampaign(campaign.id, clients);
+        }
+      }
+      
+      return campaign;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      queryClient.invalidateQueries({ queryKey: ['campaignClients'] });
-      toast({
-        title: "Clientes adicionados",
-        description: "Clientes adicionados à campanha com sucesso.",
-      });
-      setShowAddClientsDialog(false);
-      setSelectedClientIds([]);
+      toast.success("Campanha criada com sucesso!");
+      setIsSheetOpen(false);
+      form.reset();
     },
     onError: (error: Error) => {
-      toast({
-        title: "Erro ao adicionar clientes",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
+      toast.error(`Erro ao criar campanha: ${error.message}`);
+    }
   });
   
-  const handleCreateCampaign = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (campaignName && campaignDate) {
-      createCampaignMutation.mutate({ 
-        name: campaignName, 
-        startDate: campaignDate 
-      });
-    }
-  };
-  
-  const handleAddClients = (campaign: any) => {
-    setSelectedCampaign(campaign);
-    setShowAddClientsDialog(true);
-  };
-  
-  const handleSubmitAddClients = () => {
-    if (selectedCampaign && selectedClientIds.length > 0) {
-      addClientsToCampaignMutation.mutate({
-        campaignId: selectedCampaign.id,
-        clientIds: selectedClientIds
-      });
-    }
-  };
-  
-  const handleCheckClient = (clientId: number, checked: boolean) => {
-    if (checked) {
-      setSelectedClientIds(prev => [...prev, clientId]);
-    } else {
-      setSelectedClientIds(prev => prev.filter(id => id !== clientId));
-    }
-  };
-  
-  const handleSelectAllClients = (checked: boolean) => {
-    if (checked) {
-      const filteredClientIds = filteredClients.map(client => client.id);
-      setSelectedClientIds(filteredClientIds);
-    } else {
-      setSelectedClientIds([]);
-    }
-  };
-  
-  const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.phone.includes(searchTerm) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  
-  const handleGroupFilterChange = (value: string) => {
-    setSelectedGroupId(value);
-    setSelectedClientIds([]);
+  const onSubmit = (data: any) => {
+    addCampaignMutation.mutate({
+      name: data.name,
+      clientGroupId: data.clientGroupId,
+      scheduleDate: data.scheduleDate,
+      scheduleTime: data.scheduleTime
+    });
   };
   
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Campanhas</h2>
-        <Button onClick={() => setShowNewCampaignDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Campanha
-        </Button>
-      </div>
-      
-      {isLoadingCampaigns ? (
-        <div className="flex justify-center p-8">
-          <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div>
-        </div>
-      ) : campaigns.length === 0 ? (
-        <Card>
-          <CardContent className="text-center p-8">
-            <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-lg text-muted-foreground mb-4">Nenhuma campanha criada</p>
-            <Button onClick={() => setShowNewCampaignDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Criar minha primeira campanha
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-6">
-          {campaigns.map((campaign) => (
-            <Card key={campaign.id}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xl">{campaign.name}</CardTitle>
-                <Badge
-                  variant={campaign.status === 'active' ? 'default' : 'secondary'}
-                >
-                  {campaign.status === 'active' ? 'Ativa' : 'Inativa'}
-                </Badge>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Início</p>
-                    <p>{campaign.start_date ? format(new Date(campaign.start_date), 'dd/MM/yyyy') : '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Chamadas</p>
-                    <p>{campaign.total_calls || 0} total / {campaign.answered_calls || 0} atendidas</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Duração Média</p>
-                    <p>{campaign.average_duration ? `${Math.round(campaign.average_duration / 60)} minutos` : '-'}</p>
-                  </div>
-                </div>
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => handleAddClients(campaign)}
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Adicionar Clientes
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-      
-      {/* Nova Campanha Dialog */}
-      <Dialog open={showNewCampaignDialog} onOpenChange={setShowNewCampaignDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nova Campanha</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateCampaign} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="campaign-name">Nome da Campanha</Label>
-              <Input 
-                id="campaign-name" 
-                value={campaignName} 
-                onChange={(e) => setCampaignName(e.target.value)} 
-                placeholder="Ex: Campanha de Verão 2025"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Data de Início</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {campaignDate ? format(campaignDate, 'dd/MM/yyyy') : <span>Selecione uma data</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={campaignDate}
-                    onSelect={setCampaignDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <DialogFooter>
-              <Button type="submit">Criar Campanha</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Adicionar Clientes Dialog */}
-      <Dialog 
-        open={showAddClientsDialog} 
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedClientIds([]);
-          }
-          setShowAddClientsDialog(open);
-        }}
+    <div>
+      <Button 
+        variant="outline" 
+        className="ml-2" 
+        onClick={() => setIsSheetOpen(true)}
       >
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Adicionar Clientes à Campanha</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center gap-4 mb-4">
-            <Input 
-              placeholder="Buscar clientes..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-            
-            <Select
-              value={selectedGroupId}
-              onValueChange={handleGroupFilterChange}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filtrar por grupo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Todos os clientes</SelectItem>
-                {clientGroups.map((group) => (
-                  <SelectItem key={group.id} value={group.id}>
-                    {group.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="overflow-y-auto flex-1 border rounded-md">
-            {isLoadingClients ? (
-              <div className="flex justify-center p-8">
-                <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div>
-              </div>
-            ) : filteredClients.length === 0 ? (
-              <div className="text-center p-8">
-                <p className="text-muted-foreground">Nenhum cliente encontrado</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <input 
-                        type="checkbox" 
-                        className="w-4 h-4" 
-                        checked={selectedClientIds.length === filteredClients.length && filteredClients.length > 0}
-                        onChange={(e) => handleSelectAllClients(e.target.checked)}
-                      />
-                    </TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredClients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>
-                        <input 
-                          type="checkbox" 
-                          className="w-4 h-4" 
-                          checked={selectedClientIds.includes(client.id)}
-                          onChange={(e) => handleCheckClient(client.id, e.target.checked)}
+        <Calendar className="h-4 w-4 mr-2" />
+        Nova Campanha
+      </Button>
+      
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Criar Nova Campanha</SheetTitle>
+          </SheetHeader>
+          
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome da Campanha</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Campanha de Outono" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="clientGroupId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Grupo de Clientes</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um grupo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {clientGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name} ({group.client_count || 0} clientes)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="scheduleDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Escolha uma data</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
                         />
-                      </TableCell>
-                      <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell>{client.phone}</TableCell>
-                      <TableCell>{client.email || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant={client.status === 'Active' ? 'default' : 'secondary'}>
-                          {client.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-          <DialogFooter className="pt-4">
-            <div className="mr-auto">
-              {selectedClientIds.length} clientes selecionados
-            </div>
-            <Button 
-              onClick={handleSubmitAddClients}
-              disabled={selectedClientIds.length === 0}
-            >
-              Adicionar à Campanha
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="scheduleTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Horário</FormLabel>
+                    <FormControl>
+                      <Input type="time" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <SheetFooter className="pt-4">
+                <Button 
+                  type="submit" 
+                  disabled={addCampaignMutation.isPending}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {addCampaignMutation.isPending ? 'Salvando...' : 'Salvar Campanha'}
+                </Button>
+              </SheetFooter>
+            </form>
+          </Form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
