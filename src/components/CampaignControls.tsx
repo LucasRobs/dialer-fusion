@@ -63,7 +63,7 @@ export default function CampaignControls() {
 
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
-    queryFn: () => clientGroupService.getClientGroups(),
+    queryFn: clientGroupService.getClientGroups,
     enabled: !!user?.id,
   });
   

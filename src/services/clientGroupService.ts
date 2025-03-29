@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { Client } from './clientService';
 
@@ -110,25 +111,6 @@ export const clientGroupService = {
   // Add a client to a group
   addClientToGroup: async (clientId: number, groupId: string) => {
     try {
-      // First check if the client is already in the group
-      const { data: existingMembership, error: checkError } = await supabase
-        .from('client_group_members')
-        .select('*')
-        .eq('client_id', clientId)
-        .eq('group_id', groupId)
-        .maybeSingle();
-        
-      if (checkError) {
-        console.error('Error checking membership:', checkError);
-        throw checkError;
-      }
-      
-      // If already exists, return the existing record
-      if (existingMembership) {
-        return existingMembership;
-      }
-      
-      // Otherwise create a new membership
       const { data, error } = await supabase
         .from('client_group_members')
         .insert([{ client_id: clientId, group_id: groupId }])
@@ -167,10 +149,12 @@ export const clientGroupService = {
     try {
       if (!groupId) return [];
       
-      // Direct join query approach
       const { data, error } = await supabase
         .from('client_group_members')
-        .select('client_id')
+        .select(`
+          client_id,
+          clients (*)
+        `)
         .eq('group_id', groupId);
       
       if (error) {
@@ -182,21 +166,12 @@ export const clientGroupService = {
         return [];
       }
       
-      // Get client IDs
-      const clientIds = data.map(item => item.client_id);
+      // Extract the clients from the nested data
+      const clients = data
+        .filter(item => item.clients)
+        .map(item => item.clients as Client);
       
-      // Fetch clients by IDs
-      const { data: clients, error: clientsError } = await supabase
-        .from('clients')
-        .select('*')
-        .in('id', clientIds);
-        
-      if (clientsError) {
-        console.error('Error fetching clients by IDs:', clientsError);
-        throw clientsError;
-      }
-      
-      return clients || [];
+      return clients;
     } catch (error) {
       console.error('Error in getClientsInGroup:', error);
       return [];
@@ -206,10 +181,12 @@ export const clientGroupService = {
   // Get all groups a client belongs to
   getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
     try {
-      // Direct join query approach
       const { data, error } = await supabase
         .from('client_group_members')
-        .select('group_id')
+        .select(`
+          group_id,
+          client_groups (*)
+        `)
         .eq('client_id', clientId);
         
       if (error) {
@@ -221,21 +198,12 @@ export const clientGroupService = {
         return [];
       }
       
-      // Get group IDs
-      const groupIds = data.map(item => item.group_id);
+      // Extract the groups from the nested data
+      const groups = data
+        .filter(item => item.client_groups)
+        .map(item => item.client_groups as ClientGroup);
       
-      // Fetch groups by IDs
-      const { data: groups, error: groupsError } = await supabase
-        .from('client_groups')
-        .select('*')
-        .in('id', groupIds);
-        
-      if (groupsError) {
-        console.error('Error fetching groups by IDs:', groupsError);
-        throw groupsError;
-      }
-      
-      return groups || [];
+      return groups;
     } catch (error) {
       console.error('Error in getClientGroupsByClientId:', error);
       return [];
