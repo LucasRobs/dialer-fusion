@@ -47,7 +47,14 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
-    queryFn: clientGroupService.getClientGroups,
+    queryFn: async () => {
+      try {
+        return await clientGroupService.getClientGroups();
+      } catch (error) {
+        console.error('Error fetching client groups:', error);
+        return [];
+      }
+    },
     enabled: !!user?.id
   });
   
@@ -79,13 +86,13 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
       queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
-      toast("Cliente adicionado ao grupo");
+      toast.success('Cliente adicionado ao grupo');
       setShowAddToGroupDialog(false);
       setSelectedGroupId('');
       refetchMemberships(); // Refresh the memberships after adding
     },
     onError: (error: Error) => {
-      toast("Erro ao adicionar cliente ao grupo");
+      toast.error(`Erro ao adicionar cliente ao grupo: ${error.message}`);
     }
   });
   
@@ -97,11 +104,11 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
       queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
-      toast("Cliente removido do grupo");
+      toast.success('Cliente removido do grupo');
       refetchMemberships(); // Refresh the memberships after removing
     },
     onError: (error: Error) => {
-      toast("Erro ao remover cliente do grupo");
+      toast.error(`Erro ao remover cliente do grupo: ${error.message}`);
     }
   });
   
@@ -148,7 +155,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={(e) => {
+          <DropdownMenuItem onClick={(e) => {
             e.stopPropagation();
             handleOpenDialog(e);
           }}>
