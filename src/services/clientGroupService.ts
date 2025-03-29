@@ -147,6 +147,8 @@ export const clientGroupService = {
   // Get all clients in a group
   getClientsInGroup: async (groupId: string): Promise<Client[]> => {
     try {
+      if (!groupId) return [];
+      
       const { data, error } = await supabase
         .from('client_group_members')
         .select(`
@@ -154,7 +156,7 @@ export const clientGroupService = {
           clients (*)
         `)
         .eq('group_id', groupId);
-        
+      
       if (error) {
         console.error('Error fetching clients in group:', error);
         throw error;

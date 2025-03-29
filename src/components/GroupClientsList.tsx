@@ -48,14 +48,12 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
   const handleRemoveFromGroup = async (clientId: number) => {
     try {
       await clientGroupService.removeClientFromGroup(clientId, groupId);
-      toast({
-        title: "Cliente removido",
+      toast("Cliente removido", {
         description: "Cliente removido do grupo com sucesso.",
       });
       refetch();
     } catch (error) {
-      toast({
-        title: "Erro",
+      toast("Erro", {
         description: "Erro ao remover cliente do grupo.",
         variant: "destructive"
       });
@@ -82,21 +80,18 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       });
       
       if (result.success) {
-        toast({
-          title: "Ligação iniciada",
+        toast("Ligação iniciada", {
           description: `Iniciando ligação para ${client.name} (${client.phone})`,
         });
       } else {
-        toast({
-          title: "Erro ao iniciar ligação", 
+        toast("Erro ao iniciar ligação", {
           description: "Não foi possível iniciar a ligação. Tente novamente.",
           variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
-      toast({
-        title: "Erro", 
+      toast("Erro", {
         description: "Ocorreu um erro ao tentar iniciar a ligação.",
         variant: "destructive"
       });

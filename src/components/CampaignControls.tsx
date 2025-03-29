@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,7 +63,7 @@ export default function CampaignControls() {
 
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
-    queryFn: () => clientGroupService.getClientGroups(),
+    queryFn: clientGroupService.getClientGroups,
     enabled: !!user?.id,
   });
   
@@ -91,8 +90,13 @@ export default function CampaignControls() {
   });
   
   const addClientsToCampaignMutation = useMutation({
-    mutationFn: (data: { campaignId: number; clientIds: number[] }) => 
-      campaignService.addClientsToCampaign(data.campaignId, data.clientIds),
+    mutationFn: async (data: { campaignId: number; clientIds: number[] }) => {
+      const promises = data.clientIds.map(clientId =>
+        campaignService.addClientToCampaign(data.campaignId, clientId)
+      );
+      
+      return Promise.all(promises);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['campaignClients'] });
@@ -161,7 +165,6 @@ export default function CampaignControls() {
   
   const handleGroupFilterChange = (value: string) => {
     setSelectedGroupId(value);
-    // Reset selected client IDs when changing groups
     setSelectedClientIds([]);
   };
   
