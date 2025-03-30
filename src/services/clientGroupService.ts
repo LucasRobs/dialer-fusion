@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { Client } from './clientService';
 
@@ -81,41 +82,46 @@ export const clientGroupService = {
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
     
-    // First delete all client-group relationships
-    const { error: relationshipError } = await supabase
-      .from('client_group_members')
-      .delete()
-      .eq('group_id', id);
+    try {
+      // First delete all client-group relationships
+      const { error: relationshipError } = await supabase
+        .from('client_group_members')
+        .delete()
+        .eq('group_id', id);
+        
+      if (relationshipError) {
+        console.error('Error deleting client group memberships:', relationshipError);
+        throw relationshipError;
+      }
       
-    if (relationshipError) {
-      console.error('Error deleting client group memberships:', relationshipError);
-      throw relationshipError;
-    }
-    
-    // Then delete the group
-    const { error } = await supabase
-      .from('client_groups')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
+      // Then delete the group
+      const { error } = await supabase
+        .from('client_groups')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+        
+      if (error) {
+        console.error('Error deleting client group:', error);
+        throw error;
+      }
       
-    if (error) {
-      console.error('Error deleting client group:', error);
+      return { success: true };
+    } catch (error) {
+      console.error('Error in deleteClientGroup:', error);
       throw error;
     }
-    
-    return { success: true };
   },
   
   // Add a client to a group
   addClientToGroup: async (clientId: number, groupId: string) => {
     try {
-      console.log(`Adding client ${clientId} to group ${groupId}`);
-      
       // Ensure clientId is a number
-      const numericClientId = typeof clientId === 'string' ? parseInt(clientId, 10) : clientId;
+      const numericClientId = typeof clientId === 'string' 
+        ? parseInt(clientId, 10) 
+        : clientId;
       
-      // First check if the client is already in the group
+      // Check if the client is already in the group to avoid duplicates
       const { data: existingMembership, error: checkError } = await supabase
         .from('client_group_members')
         .select('*')
@@ -134,8 +140,7 @@ export const clientGroupService = {
         return existingMembership;
       }
       
-      // Otherwise create a new membership
-      console.log(`Creating new membership record for client ${numericClientId} in group ${groupId}`);
+      // Create a new membership
       const { data, error } = await supabase
         .from('client_group_members')
         .insert([{ client_id: numericClientId, group_id: groupId }])
@@ -146,7 +151,9 @@ export const clientGroupService = {
         throw error;
       }
       
-      console.log('Successfully added client to group');
+      // Update client count in the group
+      await clientGroupService.updateGroupClientCount(groupId);
+      
       return data[0];
     } catch (error) {
       console.error('Error in addClientToGroup:', error);
@@ -156,23 +163,58 @@ export const clientGroupService = {
   
   // Remove a client from a group
   removeClientFromGroup: async (clientId: number, groupId: string) => {
-    const numericClientId = typeof clientId === 'string' ? parseInt(clientId, 10) : clientId;
-    
-    console.log(`Removing client ${numericClientId} from group ${groupId}`);
-    
-    const { error } = await supabase
-      .from('client_group_members')
-      .delete()
-      .eq('client_id', numericClientId)
-      .eq('group_id', groupId);
+    try {
+      const numericClientId = typeof clientId === 'string' 
+        ? parseInt(clientId, 10) 
+        : clientId;
       
-    if (error) {
-      console.error('Error removing client from group:', error);
+      const { error } = await supabase
+        .from('client_group_members')
+        .delete()
+        .eq('client_id', numericClientId)
+        .eq('group_id', groupId);
+        
+      if (error) {
+        console.error('Error removing client from group:', error);
+        throw error;
+      }
+      
+      // Update client count in the group
+      await clientGroupService.updateGroupClientCount(groupId);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error in removeClientFromGroup:', error);
       throw error;
     }
-    
-    console.log('Successfully removed client from group');
-    return { success: true };
+  },
+  
+  // Update the client count for a group
+  updateGroupClientCount: async (groupId: string) => {
+    try {
+      // Count clients in the group
+      const { count, error: countError } = await supabase
+        .from('client_group_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('group_id', groupId);
+        
+      if (countError) {
+        console.error('Error counting group members:', countError);
+        return;
+      }
+      
+      // Update the group with the new count
+      const { error: updateError } = await supabase
+        .from('client_groups')
+        .update({ client_count: count })
+        .eq('id', groupId);
+        
+      if (updateError) {
+        console.error('Error updating group client count:', updateError);
+      }
+    } catch (error) {
+      console.error('Error in updateGroupClientCount:', error);
+    }
   },
   
   // Get all clients in a group
@@ -180,45 +222,44 @@ export const clientGroupService = {
     try {
       if (!groupId) return [];
       
-      console.log(`Getting clients in group: ${groupId}`);
+      // Get the current user
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
       
-      // Direct join query approach
-      const { data, error } = await supabase
+      // Find client IDs in the group
+      const { data: memberData, error: memberError } = await supabase
         .from('client_group_members')
         .select('client_id')
         .eq('group_id', groupId);
       
-      if (error) {
-        console.error('Error fetching clients in group:', error);
-        throw error;
+      if (memberError) {
+        console.error('Error fetching group members:', memberError);
+        throw memberError;
       }
       
-      if (!data || data.length === 0) {
-        console.log('No clients found in group');
+      if (!memberData || memberData.length === 0) {
         return [];
       }
       
       // Get client IDs - ensuring they are numbers
-      const clientIds = data.map(item => {
+      const clientIds = memberData.map(item => {
         return typeof item.client_id === 'string' 
           ? parseInt(item.client_id, 10) 
           : item.client_id;
       });
       
-      console.log(`Found ${clientIds.length} client IDs in group: ${clientIds.join(', ')}`);
-      
       // Fetch clients by IDs
       const { data: clients, error: clientsError } = await supabase
         .from('clients')
         .select('*')
-        .in('id', clientIds);
+        .in('id', clientIds)
+        .eq('user_id', userId); // Ensure we only get clients belonging to the current user
         
       if (clientsError) {
         console.error('Error fetching clients by IDs:', clientsError);
         throw clientsError;
       }
       
-      console.log(`Retrieved ${clients?.length || 0} clients for group`);
       return clients as Client[] || [];
     } catch (error) {
       console.error('Error in getClientsInGroup:', error);
@@ -229,29 +270,39 @@ export const clientGroupService = {
   // Get all groups a client belongs to
   getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
     try {
-      // Direct join query approach
-      const { data, error } = await supabase
+      // Ensure clientId is a number
+      const numericClientId = typeof clientId === 'string' 
+        ? parseInt(clientId, 10) 
+        : clientId;
+      
+      // Get current user
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      // Find group IDs for the client
+      const { data: groupMemberships, error: membershipError } = await supabase
         .from('client_group_members')
         .select('group_id')
-        .eq('client_id', clientId);
+        .eq('client_id', numericClientId);
         
-      if (error) {
-        console.error('Error fetching client groups for client:', error);
-        throw error;
+      if (membershipError) {
+        console.error('Error fetching client group memberships:', membershipError);
+        throw membershipError;
       }
       
-      if (!data || data.length === 0) {
+      if (!groupMemberships || groupMemberships.length === 0) {
         return [];
       }
       
-      // Get group IDs
-      const groupIds = data.map(item => item.group_id);
+      // Extract group IDs
+      const groupIds = groupMemberships.map(item => item.group_id);
       
-      // Fetch groups by IDs
+      // Fetch group details
       const { data: groups, error: groupsError } = await supabase
         .from('client_groups')
         .select('*')
-        .in('id', groupIds);
+        .in('id', groupIds)
+        .eq('user_id', userId); // Ensure we only get groups belonging to the current user
         
       if (groupsError) {
         console.error('Error fetching groups by IDs:', groupsError);

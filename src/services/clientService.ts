@@ -117,7 +117,10 @@ export const clientService = {
       
       console.log('Fetching clients for group ID:', groupId);
       
-      // First get client IDs from the group members
+      // Primeiro, buscar as IDs dos clientes que pertencem ao grupo
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
       const { data: memberData, error: memberError } = await supabase
         .from('client_group_members')
         .select('client_id')
@@ -133,9 +136,8 @@ export const clientService = {
         return [];
       }
       
-      // Get client IDs - convert string IDs to numbers if needed
+      // Converter as IDs de cliente para números, se necessário
       const clientIds = memberData.map(item => {
-        // Make sure we're working with numeric IDs
         return typeof item.client_id === 'string' 
           ? parseInt(item.client_id, 10) 
           : item.client_id;
@@ -143,11 +145,12 @@ export const clientService = {
       
       console.log('Found client IDs in group:', clientIds);
       
-      // Then fetch the actual clients
+      // Em seguida, buscar os clientes correspondentes
       const { data: clients, error: clientsError } = await supabase
         .from('clients')
         .select('*')
-        .in('id', clientIds);
+        .in('id', clientIds)
+        .eq('user_id', userId); // Garantir que só buscamos clientes do usuário atual
       
       if (clientsError) {
         console.error('Error fetching clients by IDs:', clientsError);

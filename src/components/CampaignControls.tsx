@@ -1,307 +1,216 @@
 
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Button } from '@/components/ui/button';
 import { 
-  Sheet, 
-  SheetContent, 
-  SheetHeader, 
-  SheetTitle, 
-  SheetFooter 
-} from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import { 
-  Calendar, 
-  Save, 
-  Users, 
-  UserPlus, 
-  AlarmClock, 
-  CalendarIcon, 
-  Loader2
-} from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { clientService } from "@/services/clientService";
-import { campaignService } from "@/services/campaignService";
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { clientGroupService } from "@/services/clientGroupService";
+  Card, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription, 
+  CardContent, 
+  CardFooter 
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { DialogFooter } from '@/components/ui/dialog';
+import { Play, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { campaignService } from '@/services/campaignService';
+import { clientGroupService } from '@/services/clientGroupService';
+import { clientService } from '@/services/clientService';
 import { useAuth } from '@/contexts/AuthContext';
+import AssistantSelector from './AssistantSelector';
 
-export default function CampaignControls() {
-  const { user } = useAuth();
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [clientGroups, setClientGroups] = useState<any[]>([]);
+const formSchema = z.object({
+  name: z.string().min(1, { message: "Nome da campanha é obrigatório" }),
+  clientGroupId: z.string().min(1, { message: "Grupo de clientes é obrigatório" }),
+});
+
+export type FormValues = z.infer<typeof formSchema>;
+
+const CampaignControls = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedAssistant, setSelectedAssistant] = useState<any>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
-  // Load client groups
-  const { data: groupsData, isLoading: loadingGroups } = useQuery({
-    queryKey: ['clientGroups'],
-    queryFn: async () => {
-      try {
-        return await clientGroupService.getClientGroups();
-      } catch (error) {
-        console.error("Erro ao carregar grupos de clientes:", error);
-        toast.error("Erro ao carregar grupos de clientes");
-        return [];
-      }
-    }
-  });
-  
-  useEffect(() => {
-    if (groupsData) {
-      setClientGroups(groupsData);
-    }
-  }, [groupsData]);
-  
-  // Create form
-  const form = useForm({
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
-      name: "",
-      clientGroupId: "",
-      scheduleDate: new Date(),
-      scheduleTime: "09:00",
-    }
-  });
-  
-  // Create campaign mutation
-  const createCampaignMutation = useMutation({
-    mutationFn: async (campaignData: any) => {
-      console.log('Creating campaign with data:', campaignData);
-      return await campaignService.createCampaign({
-        name: campaignData.name,
-        status: "pending",
-        user_id: user?.id
-      });
+      name: '',
+      clientGroupId: '',
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-    }
   });
   
-  // Add clients to campaign mutation
-  const addClientsToCampaignMutation = useMutation({
-    mutationFn: async ({ campaignId, clientGroupId }: { campaignId: number, clientGroupId: string }) => {
-      console.log(`Adding clients from group ${clientGroupId} to campaign ${campaignId}`);
-      const clients = await clientService.getClientsByGroupId(clientGroupId);
-      console.log(`Retrieved ${clients.length} clients for group ${clientGroupId}`);
-      
-      if (clients.length > 0) {
-        return await campaignService.addClientsToCampaign(campaignId, clients);
-      }
-      return null;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-    }
+  // Fetch client groups
+  const { data: clientGroups = [] } = useQuery({
+    queryKey: ['clientGroups'],
+    queryFn: clientGroupService.getClientGroups,
   });
   
-  const onSubmit = async (data: any) => {
+  // Handle form submission to create campaign
+  const startCampaign = async (values: FormValues) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      
-      // First create the campaign
-      console.log('Submitting form data:', data);
-      const campaign = await createCampaignMutation.mutateAsync({
-        name: data.name,
-        status: "pending",
-        user_id: user?.id
-      });
-      
-      console.log('Campaign created:', campaign);
-      
-      // Then add clients from the selected group
-      if (data.clientGroupId) {
-        console.log('Adding clients from group:', data.clientGroupId);
-        const result = await addClientsToCampaignMutation.mutateAsync({
-          campaignId: campaign.id,
-          clientGroupId: data.clientGroupId
-        });
-        
-        console.log('Clients added to campaign:', result);
-      } else {
-        console.log('No client group selected, skipping client addition');
+      if (!selectedAssistant) {
+        toast.error("Por favor, selecione um assistente virtual");
+        setIsLoading(false);
+        return;
       }
       
-      toast.success("Campanha criada com sucesso!");
-      setIsSheetOpen(false);
+      // 1. Create a new campaign
+      const campaign = await campaignService.createCampaign({
+        name: values.name,
+        status: 'active',
+        start_date: new Date().toISOString(),
+      });
+      
+      if (!campaign || !campaign.id) {
+        throw new Error("Falha ao criar campanha");
+      }
+      
+      // 2. Get all clients from the selected group
+      const clients = await clientService.getClientsByGroupId(values.clientGroupId);
+      
+      if (!clients || clients.length === 0) {
+        toast.error("Não há clientes no grupo selecionado");
+        // Reverter a criação da campanha
+        await campaignService.updateCampaign(campaign.id, { status: 'stopped' });
+        setIsLoading(false);
+        return;
+      }
+      
+      // 3. Add all clients to the campaign
+      await campaignService.addClientsToCampaign(campaign.id, clients);
+      
+      // 4. Success notification
+      toast.success("Campanha iniciada com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
       form.reset();
       
-      // Refresh campaigns list
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-    } catch (error: any) {
-      toast.error(`Erro ao criar campanha: ${error.message}`);
-      console.error("Erro ao criar campanha:", error);
+    } catch (error) {
+      console.error("Erro ao iniciar campanha:", error);
+      toast.error("Erro ao iniciar campanha");
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleAssistantSelected = (assistant: any) => {
+    setSelectedAssistant(assistant);
+  };
   
   return (
-    <div className="flex space-x-2">
-      <Button 
-        variant="outline" 
-        onClick={() => setIsSheetOpen(true)}
-      >
-        <Calendar className="h-4 w-4 mr-2" />
-        Nova Campanha
-      </Button>
-      
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Criar Nova Campanha</SheetTitle>
-          </SheetHeader>
-          
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome da Campanha</FormLabel>
+    <Card className="max-w-md w-full mx-auto">
+      <CardHeader>
+        <CardTitle>Iniciar Nova Campanha</CardTitle>
+        <CardDescription>
+          Configure e inicie uma nova campanha de ligações
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(startCampaign)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome da Campanha</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Digite o nome da campanha" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="clientGroupId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Grupo de Clientes</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <Input placeholder="Ex: Campanha de Outono" {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um grupo de clientes" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="clientGroupId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Grupo de Clientes</FormLabel>
-                    <Select 
-                      onValueChange={field.onChange} 
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um grupo" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {loadingGroups ? (
-                          <SelectItem value="loading" disabled>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
-                            Carregando grupos...
+                    <SelectContent>
+                      {clientGroups.length === 0 ? (
+                        <SelectItem value="no-groups" disabled>
+                          Nenhum grupo disponível
+                        </SelectItem>
+                      ) : (
+                        clientGroups.map(group => (
+                          <SelectItem key={group.id} value={group.id}>
+                            <div className="flex items-center">
+                              <Users className="h-4 w-4 mr-2" />
+                              {group.name} 
+                              {group.client_count && (
+                                <span className="ml-2 text-muted-foreground">
+                                  ({group.client_count} clientes)
+                                </span>
+                              )}
+                            </div>
                           </SelectItem>
-                        ) : clientGroups.length === 0 ? (
-                          <SelectItem value="empty" disabled>
-                            Nenhum grupo encontrado
-                          </SelectItem>
-                        ) : (
-                          clientGroups.map((group) => (
-                            <SelectItem key={group.id} value={group.id}>
-                              {group.name} ({group.client_count || 0} clientes)
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="space-y-2">
+              <FormLabel>Assistente Virtual</FormLabel>
+              <AssistantSelector onAssistantSelected={handleAssistantSelected} />
+              {!selectedAssistant && (
+                <p className="text-sm text-destructive">
+                  Selecione um assistente virtual
+                </p>
+              )}
+            </div>
+            
+            <DialogFooter className="pt-4">
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin h-4 w-4 mr-2 border-b-2 border-white rounded-full"></div>
+                    Iniciando...
+                  </div>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Iniciar Campanha
+                  </>
                 )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="scheduleDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Escolha uma data</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date()}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="scheduleTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Horário</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <SheetFooter className="pt-4">
-                <Button 
-                  type="submit" 
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Salvar Campanha
-                    </>
-                  )}
-                </Button>
-              </SheetFooter>
-            </form>
-          </Form>
-        </SheetContent>
-      </Sheet>
-    </div>
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
   );
-}
+};
+
+export default CampaignControls;

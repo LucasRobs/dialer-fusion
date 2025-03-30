@@ -11,6 +11,7 @@ import { clientService } from '@/services/clientService';
 import { toast } from 'sonner';
 import assistantService from '@/services/assistantService';
 import { webhookService } from '@/services/webhookService';
+import AssistantSelector from '../AssistantSelector';
 
 const Dashboard = () => {
   const [activeCampaign, setActiveCampaign] = useState<any | null>(null);
@@ -34,37 +35,10 @@ const Dashboard = () => {
     }
   });
   
-  // Buscar assistente selecionado
-  const { data: assistants } = useQuery({
-    queryKey: ['assistants'],
-    queryFn: async () => {
-      try {
-        return await webhookService.getAllAssistants(user?.id);
-      } catch (error) {
-        console.error("Erro ao buscar assistentes:", error);
-        return [];
-      }
-    }
-  });
-  
-  // Load selected assistant from localStorage
-  useEffect(() => {
-    try {
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      if (storedAssistant) {
-        setSelectedAssistant(JSON.parse(storedAssistant));
-      } else if (assistants && assistants.length > 0) {
-        // Filter out pending assistants
-        const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
-        if (readyAssistants.length > 0) {
-          setSelectedAssistant(readyAssistants[0]);
-          localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao carregar assistente selecionado:", error);
-    }
-  }, [assistants]);
+  // Handle assistant selection
+  const handleAssistantSelected = (assistant: any) => {
+    setSelectedAssistant(assistant);
+  };
   
   // Buscar estatísticas dos clientes
   const { data: clientStats, isLoading: loadingClientStats } = useQuery({
@@ -150,7 +124,12 @@ const Dashboard = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <DashboardHeader />
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+        <DashboardHeader />
+        <div className="mt-4 md:mt-0">
+          <AssistantSelector onAssistantSelected={handleAssistantSelected} />
+        </div>
+      </div>
       
       {/* Active Campaign Section */}
       {activeCampaign && (
