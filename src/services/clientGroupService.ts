@@ -225,9 +225,9 @@ export const clientGroupService = {
       // Filtrar clientes que pertencem ao usuário atual
       const clients = data
         .map(item => item.clients)
-        .filter(client => client && client.user_id === userId);
+        .filter(client => client && client.user_id === userId) as Client[];
         
-      return clients as Client[];
+      return clients;
     } catch (error) {
       console.error('Error in getClientsInGroup:', error);
       return [];
@@ -264,9 +264,9 @@ export const clientGroupService = {
       // Filtrar grupos que pertencem ao usuário atual
       const groups = data
         .map(item => item.groups)
-        .filter(group => group && group.user_id === userId);
+        .filter(group => group && group.user_id === userId) as ClientGroup[];
         
-      return groups as ClientGroup[];
+      return groups;
     } catch (error) {
       console.error('Error in getClientGroupsByClientId:', error);
       return [];
