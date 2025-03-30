@@ -222,10 +222,10 @@ export const clientGroupService = {
         return [];
       }
       
-      // Filtrar clientes que pertencem ao usuário atual
+      // Properly type the data and filter clients that belong to the current user
       const clients = data
         .map(item => item.clients)
-        .filter(client => client && client.user_id === userId) as Client[];
+        .filter(client => client && typeof client === 'object' && client.user_id === userId) as Client[];
         
       return clients;
     } catch (error) {
@@ -261,10 +261,10 @@ export const clientGroupService = {
         return [];
       }
       
-      // Filtrar grupos que pertencem ao usuário atual
+      // Properly type the data and filter groups that belong to the current user
       const groups = data
         .map(item => item.groups)
-        .filter(group => group && group.user_id === userId) as ClientGroup[];
+        .filter(group => group && typeof group === 'object' && group.user_id === userId) as ClientGroup[];
         
       return groups;
     } catch (error) {
