@@ -70,7 +70,22 @@ const AssistantSelector = ({ onAssistantSelected }: AssistantSelectorProps) => {
     }
   };
   
-  const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
+  // Filter out pending assistants and deduplicate by assistant_id
+  const readyAssistants = React.useMemo(() => {
+    // First filter out pending assistants
+    const filtered = assistants.filter(asst => asst.status !== 'pending');
+    
+    // Then deduplicate by assistant_id using a Map
+    const uniqueAssistantsMap = new Map();
+    filtered.forEach(assistant => {
+      if (!uniqueAssistantsMap.has(assistant.assistant_id)) {
+        uniqueAssistantsMap.set(assistant.assistant_id, assistant);
+      }
+    });
+    
+    // Convert Map values back to array
+    return Array.from(uniqueAssistantsMap.values());
+  }, [assistants]);
   
   return (
     <div className="flex items-center space-x-2">
