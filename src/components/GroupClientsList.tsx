@@ -1,12 +1,13 @@
 
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter 
+  DialogFooter,
+  DialogDescription 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +34,9 @@ interface GroupClientsListProps {
 }
 
 const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsListProps) => {
+  const queryClient = useQueryClient();
+  const [isProcessingRemove, setIsProcessingRemove] = useState<number | null>(null);
+  const [isProcessingCall, setIsProcessingCall] = useState<number | null>(null);
   
   const { 
     data: clients = [], 
@@ -42,21 +46,40 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
   } = useQuery({
     queryKey: ['clientsInGroup', groupId],
     queryFn: () => clientGroupService.getClientsInGroup(groupId),
-    enabled: !!groupId && isOpen
+    enabled: !!groupId && isOpen,
+    staleTime: 10000 // 10 segundos
+  });
+
+  const removeFromGroupMutation = useMutation({
+    mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
+      setIsProcessingRemove(clientId);
+      return await clientGroupService.removeClientFromGroup(clientId, groupId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
+      queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
+      queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
+      toast("Cliente removido do grupo com sucesso.");
+      setIsProcessingRemove(null);
+      refetch();
+    },
+    onError: (error: Error) => {
+      toast("Erro ao remover cliente do grupo.");
+      setIsProcessingRemove(null);
+    }
   });
 
   const handleRemoveFromGroup = async (clientId: number) => {
-    try {
-      await clientGroupService.removeClientFromGroup(clientId, groupId);
-      toast("Cliente removido do grupo com sucesso.");
-      refetch();
-    } catch (error) {
-      toast("Erro ao remover cliente do grupo.");
+    if (isProcessingRemove === null) {
+      removeFromGroupMutation.mutate({ clientId, groupId });
     }
   };
 
   const handleCall = async (client: Client) => {
     try {
+      if (isProcessingCall !== null) return;
+      
+      setIsProcessingCall(client.id);
       const { data } = await supabase.auth.getUser();
       const userId = data.user?.id;
       
@@ -79,19 +102,27 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       } else {
         toast("Não foi possível iniciar a ligação. Tente novamente.");
       }
+      setIsProcessingCall(null);
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
       toast("Ocorreu um erro ao tentar iniciar a ligação.");
+      setIsProcessingCall(null);
     }
   };
 
-  console.log('Clients in group:', clients);
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(shouldClose) => {
+      // Só fecha o diálogo se não houver operação em andamento
+      if (isProcessingRemove === null && isProcessingCall === null && shouldClose === false) {
+        onClose();
+      }
+    }}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Clientes no grupo: {groupName}</DialogTitle>
+          <DialogDescription>
+            Gerencie os clientes no grupo {groupName}
+          </DialogDescription>
         </DialogHeader>
         
         {isLoading ? (
@@ -139,8 +170,13 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
                             handleCall(client);
                           }}
                           title="Ligar para cliente"
+                          disabled={isProcessingCall === client.id || isProcessingRemove === client.id}
                         >
-                          <Phone className="h-4 w-4" />
+                          {isProcessingCall === client.id ? (
+                            <div className="animate-spin h-4 w-4 border-b-2 border-primary rounded-full"></div>
+                          ) : (
+                            <Phone className="h-4 w-4" />
+                          )}
                         </Button>
                         <Button 
                           size="sm" 
@@ -151,8 +187,13 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
                             handleRemoveFromGroup(client.id);
                           }}
                           title="Remover do grupo"
+                          disabled={isProcessingRemove === client.id || isProcessingCall === client.id}
                         >
-                          <X className="h-4 w-4" />
+                          {isProcessingRemove === client.id ? (
+                            <div className="animate-spin h-4 w-4 border-b-2 border-destructive rounded-full"></div>
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>
@@ -164,7 +205,7 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
         )}
         
         <DialogFooter>
-          <Button onClick={onClose}>Fechar</Button>
+          <Button onClick={onClose} disabled={isProcessingRemove !== null || isProcessingCall !== null}>Fechar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
