@@ -32,6 +32,7 @@ import { ClientGroup, clientGroupService } from '../services/clientGroupService'
 
 interface ClientGroupRelationProps {
   client: any;
+  disabled?: boolean; // Se for opcional, adicione o "?"
 }
 
 // Define a type for the membership to ensure proper typing
