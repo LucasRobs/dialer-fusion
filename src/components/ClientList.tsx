@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -16,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { 
   MoreHorizontal, 
@@ -29,8 +28,7 @@ import {
   X,
   Filter,
   FileUp,
-  RefreshCw,
-  Loader2
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -60,7 +58,6 @@ export default function ClientList() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('Active');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -99,7 +96,6 @@ export default function ClientList() {
       });
       setShowNewClientDialog(false);
       clearForm();
-      setIsSubmitting(false);
     },
     onError: (error: Error) => {
       toast({
@@ -107,7 +103,6 @@ export default function ClientList() {
         description: error.message || "Ocorreu um erro ao adicionar o cliente.",
         variant: "destructive",
       });
-      setIsSubmitting(false);
     },
   });
   
@@ -122,7 +117,6 @@ export default function ClientList() {
       });
       setShowEditClientDialog(false);
       clearForm();
-      setIsSubmitting(false);
     },
     onError: (error: Error) => {
       toast({
@@ -130,7 +124,6 @@ export default function ClientList() {
         description: error.message || "Ocorreu um erro ao atualizar o cliente.",
         variant: "destructive",
       });
-      setIsSubmitting(false);
     },
   });
   
@@ -144,7 +137,6 @@ export default function ClientList() {
       });
       setShowDeleteClientDialog(false);
       clearForm();
-      setIsSubmitting(false);
     },
     onError: (error: Error) => {
       toast({
@@ -152,7 +144,6 @@ export default function ClientList() {
         description: error.message || "Ocorreu um erro ao excluir o cliente.",
         variant: "destructive",
       });
-      setIsSubmitting(false);
     },
   });
   
@@ -188,34 +179,26 @@ export default function ClientList() {
   const handleSubmitNew = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (isSubmitting) return;
-    
-    setIsSubmitting(true);
     addClientMutation.mutate({ name, phone, email, status });
   };
   
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (isSubmitting || !selectedClient) return;
-    
-    setIsSubmitting(true);
-    updateClientMutation.mutate({ 
-      id: selectedClient.id, 
-      client: { name, phone, email, status } 
-    });
+    if (selectedClient) {
+      updateClientMutation.mutate({ 
+        id: selectedClient.id, 
+        client: { name, phone, email, status } 
+      });
+    }
   };
   
   const confirmDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (isSubmitting || !selectedClient) return;
-    
-    setIsSubmitting(true);
-    deleteClientMutation.mutate(selectedClient.id);
+    if (selectedClient) {
+      deleteClientMutation.mutate(selectedClient.id);
+    }
   };
   
   const clearForm = () => {
@@ -224,17 +207,12 @@ export default function ClientList() {
     setEmail('');
     setStatus('Active');
     setSelectedClient(null);
-    setIsSubmitting(false);
   };
 
   const handleCall = async (e: React.MouseEvent, client: any) => {
     e.stopPropagation();
     e.preventDefault();
-    
-    if (isSubmitting) return;
-    
     try {
-      setIsSubmitting(true);
       const { data } = await supabase.auth.getUser();
       const userId = data.user?.id;
       
@@ -244,7 +222,7 @@ export default function ClientList() {
         client_id: client.id,
         client_name: client.name,
         client_phone: client.phone,
-        user_id: userId || '',
+        user_id: userId,
         additional_data: {
           source: 'client_list',
           client_email: client.email,
@@ -272,8 +250,6 @@ export default function ClientList() {
         description: "Ocorreu um erro ao tentar iniciar a ligação.",
         variant: "destructive"
       });
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -291,11 +267,11 @@ export default function ClientList() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Clientes</h1>
         <div className="flex gap-2">
-          <Button onClick={handleImportClients} disabled={isSubmitting}>
+          <Button onClick={handleImportClients}>
             <FileUp className="h-4 w-4 mr-2" />
             Importar Clientes
           </Button>
-          <Button onClick={handleNew} disabled={isSubmitting}>
+          <Button onClick={handleNew}>
             <Plus className="h-4 w-4 mr-2" />
             Adicionar Cliente
           </Button>
@@ -310,7 +286,6 @@ export default function ClientList() {
             className="pl-10" 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            disabled={isSubmitting}
           />
         </div>
         
@@ -318,7 +293,6 @@ export default function ClientList() {
           <Select
             value={selectedGroupId}
             onValueChange={handleGroupFilterChange}
-            disabled={isSubmitting || isLoadingGroups}
           >
             <SelectTrigger className="w-full">
               <div className="flex items-center">
@@ -327,7 +301,7 @@ export default function ClientList() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos os clientes</SelectItem>
+              <SelectItem value="all-clients">Todos os clientes</SelectItem>
               {clientGroups.map((group) => (
                 <SelectItem key={group.id} value={group.id}>
                   {group.name}
@@ -341,14 +315,9 @@ export default function ClientList() {
           variant="outline" 
           size="icon"
           onClick={() => refetch()}
-          disabled={isSubmitting}
           title="Atualizar lista"
         >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
+          <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
       
@@ -359,7 +328,7 @@ export default function ClientList() {
       ) : error ? (
         <div className="p-8 text-center">
           <p className="text-red-500">Erro ao carregar clientes: {error instanceof Error ? error.message : 'Erro desconhecido'}</p>
-          <Button onClick={() => refetch()} variant="outline" className="mt-4" disabled={isSubmitting}>
+          <Button onClick={() => refetch()} variant="outline" className="mt-4">
             Tentar novamente
           </Button>
         </div>
@@ -372,7 +341,7 @@ export default function ClientList() {
             }
           </p>
           {!selectedGroupId && (
-            <Button onClick={handleNew} disabled={isSubmitting}>
+            <Button onClick={handleNew}>
               <Plus className="h-4 w-4 mr-2" />
               Adicionar seu primeiro cliente
             </Button>
@@ -407,33 +376,27 @@ export default function ClientList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <ClientGroupRelation client={client}/>
+                      <ClientGroupRelation client={client} />
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={(e) => handleCall(e, client)}
                         title="Ligar para cliente"
-                        disabled={isSubmitting}
                       >
                         <Phone className="h-4 w-4" />
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={(e) => e.stopPropagation()}
-                            disabled={isSubmitting}
-                          >
+                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenuItem onClick={(e) => handleEdit(e, client)} disabled={isSubmitting}>
+                          <DropdownMenuItem onClick={(e) => handleEdit(e, client)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => handleDelete(e, client)} disabled={isSubmitting}>
+                          <DropdownMenuItem onClick={(e) => handleDelete(e, client)}>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Excluir
                           </DropdownMenuItem>
@@ -455,9 +418,6 @@ export default function ClientList() {
         <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-            <DialogDescription>
-              Preencha os dados abaixo para adicionar um novo cliente.
-            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmitNew} className="space-y-4">
             <div>
@@ -467,7 +427,6 @@ export default function ClientList() {
                 onChange={(e) => setName(e.target.value)} 
                 required 
                 onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -477,7 +436,6 @@ export default function ClientList() {
                 onChange={(e) => setPhone(e.target.value)} 
                 required 
                 onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -487,41 +445,23 @@ export default function ClientList() {
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
               />
             </div>
             <div>
-              <Select 
-                value={status} 
-                onValueChange={setStatus}
-                disabled={isSubmitting}
+              <select 
+                className="w-full border rounded-md py-2 px-3"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Status do cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Ativo</SelectItem>
-                  <SelectItem value="Inactive">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
+                <option value="Active">Ativo</option>
+                <option value="Inactive">Inativo</option>
+              </select>
             </div>
             <DialogFooter>
-              <Button 
-                type="submit" 
-                onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Adicionando...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar
-                  </>
-                )}
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar
               </Button>
             </DialogFooter>
           </form>
@@ -535,9 +475,6 @@ export default function ClientList() {
         <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Editar Cliente</DialogTitle>
-            <DialogDescription>
-              Modifique os dados do cliente abaixo.
-            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmitEdit} className="space-y-4">
             <div>
@@ -547,7 +484,6 @@ export default function ClientList() {
                 onChange={(e) => setName(e.target.value)} 
                 required 
                 onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -557,7 +493,6 @@ export default function ClientList() {
                 onChange={(e) => setPhone(e.target.value)} 
                 required 
                 onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -567,41 +502,23 @@ export default function ClientList() {
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
               />
             </div>
             <div>
-              <Select 
-                value={status} 
-                onValueChange={setStatus}
-                disabled={isSubmitting}
+              <select 
+                className="w-full border rounded-md py-2 px-3"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Status do cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Ativo</SelectItem>
-                  <SelectItem value="Inactive">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
+                <option value="Active">Ativo</option>
+                <option value="Inactive">Inativo</option>
+              </select>
             </div>
             <DialogFooter>
-              <Button 
-                type="submit" 
-                onClick={(e) => e.stopPropagation()}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Salvar
-                  </>
-                )}
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Salvar
               </Button>
             </DialogFooter>
           </form>
@@ -615,41 +532,20 @@ export default function ClientList() {
         <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Excluir Cliente</DialogTitle>
-            <DialogDescription>
-              Tem certeza de que deseja excluir este cliente? Esta ação não pode ser desfeita.
-            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p>Nome: <strong>{selectedClient?.name}</strong></p>
-            <p>Telefone: <strong>{selectedClient?.phone}</strong></p>
+            <p>Tem certeza de que deseja excluir este cliente?</p>
           </div>
           <DialogFooter>
-            <Button 
-              variant="secondary" 
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDeleteClientDialog(false);
-              }}
-              disabled={isSubmitting}
-            >
+            <Button variant="secondary" onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteClientDialog(false);
+            }}>
               Cancelar
             </Button>
-            <Button 
-              variant="destructive" 
-              onClick={confirmDelete}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Excluindo...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
-                </>
-              )}
+            <Button variant="destructive" onClick={confirmDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir
             </Button>
           </DialogFooter>
         </DialogContent>
