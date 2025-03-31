@@ -232,10 +232,15 @@ export const clientGroupService = {
           'id' in item.clients && 
           'name' in item.clients && 
           'phone' in item.clients && 
+          'email' in item.clients && // Check for email property
+          'status' in item.clients && // Check for status property
           'user_id' in item.clients && 
           item.clients.user_id === userId
         ) {
-          clients.push(item.clients as Client);
+          // Use unknown as an intermediate type to satisfy TypeScript
+          const clientData = item.clients as unknown;
+          // Then cast to Client
+          clients.push(clientData as Client);
         }
       }
       
@@ -282,10 +287,14 @@ export const clientGroupService = {
           typeof item.groups === 'object' && 
           'id' in item.groups && 
           'name' in item.groups && 
+          'created_at' in item.groups && // Check for created_at property
           'user_id' in item.groups && 
           item.groups.user_id === userId
         ) {
-          groups.push(item.groups as ClientGroup);
+          // Use unknown as an intermediate type to satisfy TypeScript
+          const groupData = item.groups as unknown;
+          // Then cast to ClientGroup
+          groups.push(groupData as ClientGroup);
         }
       }
       
