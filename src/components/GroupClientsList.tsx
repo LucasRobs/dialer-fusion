@@ -70,6 +70,7 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       
       const result = await webhookService.triggerCallWebhook({
         action: 'start_call',
+        campaign_id: 0, // Use 0 as a placeholder since there's no campaign associated
         client_id: client.id,
         client_name: client.name,
         client_phone: client.phone,
