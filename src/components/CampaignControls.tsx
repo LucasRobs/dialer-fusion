@@ -1,215 +1,665 @@
-
 import React, { useState, useEffect } from 'react';
+import {
+  PauseCircle,
+  StopCircle,
+  Users,
+  Settings,
+  Save,
+  BarChart3,
+  Calendar,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { 
   Card, 
+  CardContent, 
   CardHeader, 
   CardTitle, 
   CardDescription, 
-  CardContent, 
   CardFooter 
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { DialogFooter } from '@/components/ui/dialog';
-import { Play, Users } from 'lucide-react';
-import { toast } from 'sonner';
-import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+} from "@/components/ui/select";
+import WorkflowStatus from '@/components/WorkflowStatus';
+import { webhookService, VapiAssistant } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
-import { clientGroupService } from '@/services/clientGroupService';
-import { clientService } from '@/services/clientService';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
-import AssistantSelector from './AssistantSelector';
-
-const formSchema = z.object({
-  name: z.string().min(1, { message: "Nome da campanha é obrigatório" }),
-  clientGroupId: z.string().min(1, { message: "Grupo de clientes é obrigatório" }),
-});
-
-export type FormValues = z.infer<typeof formSchema>;
 
 const CampaignControls = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedAssistant, setSelectedAssistant] = useState<any>(null);
-  const queryClient = useQueryClient();
+  const [campaigns, setCampaigns] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [newCampaign, setNewCampaign] = useState({
+    name: '',
+    clientGroup: '',
+    aiProfile: '',
+  });
+  
+  const { toast } = useToast();
+  
+  const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
+  
   const { user } = useAuth();
   
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: '',
-      clientGroupId: '',
+  const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      return await campaignService.getCampaigns();
     },
+    staleTime: 0
   });
   
-  // Fetch client groups
-  const { data: clientGroups = [] } = useQuery({
+  const { data: customAssistants = [], isLoading: isLoadingAssistants } = useQuery({
+    queryKey: ['assistants', user?.id],
+    queryFn: () => assistantService.getAllAssistants(user?.id),
+    enabled: !!user?.id,
+    staleTime: 0
+  });
+  
+  const { refetch: refetchAssistants } = useQuery({
+    queryKey: ['assistants-refetch', user?.id],
+    queryFn: () => assistantService.getAllAssistants(user?.id),
+    enabled: false
+  });
+  
+  useEffect(() => {
+    if (customAssistants.length > 0) {
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          const assistant = JSON.parse(storedAssistant);
+          setSelectedAssistant(assistant);
+        } else if (customAssistants.length > 0) {
+          const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
+          if (readyAssistants.length > 0) {
+            setSelectedAssistant(readyAssistants[0]);
+            localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading selected assistant:', error);
+      }
+    }
+  }, [customAssistants]);
+  
+  const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
-    queryFn: clientGroupService.getClientGroups,
+    queryFn: async () => {
+      try {
+        const { count: totalCount } = await supabase
+          .from('clients')
+          .select('*', { count: 'exact', head: true });
+        
+        const { data: clientsData } = await supabase
+          .from('clients')
+          .select('status');
+        
+        const statusCounts = {};
+        if (clientsData) {
+          clientsData.forEach(client => {
+            const status = client.status || 'undefined';
+            statusCounts[status] = (statusCounts[status] || 0) + 1;
+          });
+        }
+        
+        const formattedGroups = [
+          { id: 'all', name: 'All Clients', count: totalCount || 0 }
+        ];
+        
+        Object.keys(statusCounts).forEach(status => {
+          formattedGroups.push({
+            id: status,
+            name: `${status} Clients`,
+            count: statusCounts[status]
+          });
+        });
+        
+        return formattedGroups;
+      } catch (error) {
+        console.error('Error fetching client groups:', error);
+        return [
+          { id: 'all', name: 'All Clients', count: 0 }
+        ];
+      }
+    }
   });
   
-  // Handle form submission to create campaign
-  const startCampaign = async (values: FormValues) => {
-    setIsLoading(true);
-    try {
-      if (!selectedAssistant) {
-        toast.error("Por favor, selecione um assistente virtual");
-        setIsLoading(false);
-        return;
-      }
+  const { data: aiProfiles = [] } = useQuery({
+    queryKey: ['aiProfiles', customAssistants.length],
+    queryFn: () => {
+      const readyAssistants = customAssistants.filter(assistant => 
+        (assistant.status === 'ready' || !assistant.status) && 
+        (assistant.user_id === user?.id || !assistant.user_id)
+      );
       
-      // 1. Create a new campaign
-      const campaign = await campaignService.createCampaign({
-        name: values.name,
-        status: 'active',
-        start_date: new Date().toISOString(),
-      });
+      return readyAssistants.map(assistant => ({
+        id: assistant.id,
+        name: assistant.name,
+        assistant_id: assistant.assistant_id,
+        description: `Assistant created on ${assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'unknown date'}`
+      }));
+    },
+    enabled: customAssistants.length > 0,
+    staleTime: 0
+  });
+  
+  useEffect(() => {
+    if (supabaseCampaignsData) {
+      const formattedCampaigns = supabaseCampaignsData.map(campaign => ({
+        id: campaign.id,
+        name: campaign.name || 'Untitled Campaign',
+        status: campaign.status || 'draft',
+        progress: campaign.total_calls > 0 
+          ? Math.round((campaign.answered_calls / campaign.total_calls) * 100) 
+          : 0,
+        clientGroup: 'Active Clients',
+        clientCount: campaign.total_calls || 0,
+        completedCalls: campaign.answered_calls || 0,
+        aiProfile: 'Sales Assistant',
+        startDate: campaign.start_date 
+          ? new Date(campaign.start_date).toLocaleDateString() 
+          : new Date().toLocaleDateString()
+      }));
       
-      if (!campaign || !campaign.id) {
-        throw new Error("Falha ao criar campanha");
-      }
-      
-      // 2. Get all clients from the selected group
-      const clients = await clientService.getClientsByGroupId(values.clientGroupId);
-      
-      if (!clients || clients.length === 0) {
-        toast.error("Não há clientes no grupo selecionado");
-        // Reverter a criação da campanha
-        await campaignService.updateCampaign(campaign.id, { status: 'stopped' });
-        setIsLoading(false);
-        return;
-      }
-      
-      // 3. Add all clients to the campaign
-      await campaignService.addClientsToCampaign(campaign.id, clients);
-      
-      // 4. Success notification
-      toast.success("Campanha iniciada com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
-      form.reset();
-      
-    } catch (error) {
-      console.error("Erro ao iniciar campanha:", error);
-      toast.error("Erro ao iniciar campanha");
-    } finally {
+      setCampaigns(formattedCampaigns);
       setIsLoading(false);
     }
+  }, [supabaseCampaignsData]);
+  
+  const handleStartCampaign = async (id: number) => {
+    try {
+      setCampaigns(campaigns.map(campaign => 
+        campaign.id === id ? { ...campaign, status: 'active' } : campaign
+      ));
+      
+      const campaign = campaigns.find(c => c.id === id);
+      
+      if (campaign) {
+        const { data: existingCampaign } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('id', id)
+          .single();
+        
+        if (existingCampaign) {
+          await campaignService.updateCampaign(id, {
+            status: 'active',
+            start_date: new Date().toISOString()
+          });
+          
+          const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
+          let assistantName = '';
+          let assistantId = '';
+          
+          if (assistantProfile) {
+            assistantName = assistantProfile.name;
+            assistantId = assistantProfile.assistant_id || assistantProfile.id;
+          } else if (selectedAssistant) {
+            assistantName = selectedAssistant.name;
+            assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
+          }
+          
+          await webhookService.triggerCallWebhook({
+            action: 'start_campaign',
+            campaign_id: campaign.id,
+            additional_data: {
+              campaign_name: campaign.name,
+              client_count: campaign.clientCount,
+              assistant_name: assistantName,
+              assistant_id: assistantId,
+              ai_profile: assistantName || 'Default Assistant',
+            }
+          });
+          
+          const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
+          
+          if (result && result.success) {
+            toast({
+              title: "Campanha Iniciada",
+              description: `${result.successfulCalls} ligações foram enviadas com sucesso (${result.failedCalls} falhas).`,
+            });
+          } else {
+            toast({
+              title: "Campanha Iniciada Parcialmente",
+              description: "Alguns clientes não puderam ser contactados. Verifique os logs.",
+              variant: "destructive"
+            });
+          }
+        } else {
+          toast({
+            title: "Erro",
+            description: "Campanha não encontrada. Por favor, atualize a página e tente novamente.",
+            variant: "destructive"
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar campanha:', error);
+      
+      toast({
+        title: "Erro",
+        description: "Falha ao iniciar a campanha. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+    }
   };
-
-  const handleAssistantSelected = (assistant: any) => {
-    setSelectedAssistant(assistant);
+  
+  const handleDeleteCampaign = async (id: number) => {
+    try {
+      setCampaigns(campaigns.filter(campaign => campaign.id !== id));
+      
+      await campaignService.deleteCampaign(id);
+      
+      toast({
+        title: "Campanha Excluída",
+        description: "A campanha foi excluída com sucesso.",
+      });
+      
+      refetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao excluir campanha:', error);
+      
+      toast({
+        title: "Erro ao Excluir",
+        description: "Houve um problema ao excluir a campanha. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+      
+      refetchCampaigns();
+    }
+  };
+  
+  const handlePauseCampaign = async (id: number) => {
+    setCampaigns(campaigns.map(campaign => 
+      campaign.id === id ? { ...campaign, status: 'paused' } : campaign
+    ));
+    
+    const campaign = campaigns.find(c => c.id === id);
+    
+    if (campaign) {
+      try {
+        await webhookService.triggerCallWebhook({
+          action: 'pause_campaign',
+          campaign_id: campaign.id,
+          additional_data: {
+            campaign_name: campaign.name,
+            progress: campaign.progress
+          }
+        });
+        
+        toast({
+          title: "Campanha Pausada",
+          description: "Sua campanha de ligações foi pausada. Você pode retomá-la a qualquer momento.",
+        });
+      } catch (error) {
+        console.error('Erro ao notificar sistema de ligações:', error);
+        
+        toast({
+          title: "Campanha Pausada",
+          description: "Campanha pausada, mas houve um erro ao notificar o sistema de ligações.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+  
+  const handleStopCampaign = async (id: number) => {
+    setCampaigns(campaigns.map(campaign => 
+      campaign.id === id ? { ...campaign, status: 'stopped' } : campaign
+    ));
+    
+    const campaign = campaigns.find(c => c.id === id);
+    
+    if (campaign) {
+      try {
+        await webhookService.triggerCallWebhook({
+          action: 'stop_campaign',
+          campaign_id: campaign.id,
+          additional_data: {
+            campaign_name: campaign.name,
+            progress: campaign.progress,
+            completed_calls: campaign.completedCalls
+          }
+        });
+        
+        toast({
+          title: "Campanha Interrompida",
+          description: "Sua campanha de ligações foi interrompida.",
+        });
+      } catch (error) {
+        console.error('Erro ao notificar sistema de ligações:', error);
+        
+        toast({
+          title: "Campanha Interrompida",
+          description: "Campanha interrompida, mas houve um erro ao notificar o sistema de ligações.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+  
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newCampaign.name || !newCampaign.clientGroup || !newCampaign.aiProfile) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
+    const clientCount = selectedGroup ? selectedGroup.count : 0;
+    
+    const selectedAssistantProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
+    
+    if (!selectedAssistantProfile) {
+      toast({
+        title: "Error",
+        description: "Please select a valid AI assistant",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const assistantToStore = {
+      id: selectedAssistantProfile.id,
+      name: selectedAssistantProfile.name,
+      assistant_id: selectedAssistantProfile.assistant_id || selectedAssistantProfile.id,
+      user_id: user?.id
+    };
+    
+    localStorage.setItem('selected_assistant', JSON.stringify(assistantToStore));
+    
+    try {
+      const createdCampaign = await campaignService.createCampaign({
+        name: newCampaign.name,
+        status: 'draft',
+        total_calls: clientCount,
+        answered_calls: 0,
+        start_date: null,
+        end_date: null,
+        user_id: user?.id
+      });
+      
+      await webhookService.triggerCallWebhook({
+        action: 'create_campaign',
+        campaign_id: createdCampaign.id,
+        additional_data: {
+          campaign_name: createdCampaign.name,
+          client_count: clientCount,
+          assistant_name: selectedAssistantProfile.name,
+          assistant_id: assistantToStore.assistant_id,
+          ai_profile: selectedAssistantProfile.name,
+          client_group: selectedGroup?.name
+        }
+      });
+      
+      toast({
+        title: "Campanha Criada",
+        description: "Sua nova campanha está pronta para iniciar.",
+      });
+      
+      setNewCampaign({
+        name: '',
+        clientGroup: '',
+        aiProfile: '',
+      });
+      
+      await refetchCampaigns();
+    } catch (error) {
+      console.error('Erro ao criar campanha:', error);
+      
+      toast({
+        title: "Erro ao Criar Campanha",
+        description: "Houve um problema ao criar sua campanha. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'bg-secondary text-white';
+      case 'paused':
+        return 'bg-yellow-500/80 text-white';
+      case 'completed':
+        return 'bg-blue-500/80 text-white';
+      case 'stopped':
+        return 'bg-destructive/80 text-white';
+      default:
+        return 'bg-muted text-muted-foreground';
+    }
   };
   
   return (
-    <Card className="max-w-md w-full mx-auto">
-      <CardHeader>
-        <CardTitle>Iniciar Nova Campanha</CardTitle>
-        <CardDescription>
-          Configure e inicie uma nova campanha de ligações
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(startCampaign)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome da Campanha</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Digite o nome da campanha" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="clientGroupId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Grupo de Clientes</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um grupo de clientes" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {clientGroups.length === 0 ? (
-                        <SelectItem value="no-groups" disabled>
-                          Nenhum grupo disponível
-                        </SelectItem>
+    <div className="container mx-auto p-4 max-w-7xl">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold">Suas Campanhas</h2>
+            <Button size="sm" onClick={() => refetchAssistants()}>
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Atualizar Assistentes
+            </Button>
+          </div>
+          
+          <WorkflowStatus />
+          
+          {isLoading ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Carregando campanhas...</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : campaigns.length > 0 ? (
+            <div className="space-y-4">
+              {campaigns.map((campaign) => (
+                <Card key={campaign.id} className="overflow-hidden">
+                  <div className={`h-1.5 w-full ${getStatusColor(campaign.status)}`}></div>
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-xl">{campaign.name}</CardTitle>
+                        <CardDescription>
+                          Started: {campaign.startDate} · {campaign.clientGroup} ({campaign.clientCount} clients)
+                        </CardDescription>
+                      </div>
+                      <div className={`px-2 py-1 rounded text-xs uppercase font-semibold ${getStatusColor(campaign.status)}`}>
+                        {campaign.status}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between mb-1 text-sm">
+                          <span>Progress: {campaign.completedCalls} of {campaign.clientCount} calls completed</span>
+                          <span>{campaign.progress}%</span>
+                        </div>
+                        <Progress value={campaign.progress} className="h-2" />
+                      </div>
+                      
+                      <div className="flex text-sm text-muted-foreground">
+                        <div className="flex items-center mr-4">
+                          <Users className="h-4 w-4 mr-1" />
+                          <span>{campaign.clientGroup}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <Settings className="h-4 w-4 mr-1" />
+                          <span>{campaign.aiProfile}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="border-t bg-muted/10 pt-4">
+                    <div className="flex gap-2 w-full">
+                      {campaign.status === 'active' ? (
+                        <>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handlePauseCampaign(campaign.id)}>
+                            <PauseCircle className="h-4 w-4 mr-2" />
+                            Pause
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStopCampaign(campaign.id)}>
+                            <StopCircle className="h-4 w-4 mr-2" />
+                            Stop
+                          </Button>
+                        </>
+                      ) : campaign.status === 'paused' ? (
+                        <>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStartCampaign(campaign.id)}>
+                            Resume
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStopCampaign(campaign.id)}>
+                            <StopCircle className="h-4 w-4 mr-2" />
+                            Stop
+                          </Button>
+                        </>
                       ) : (
-                        clientGroups.map(group => (
-                          <SelectItem key={group.id} value={group.id}>
-                            <div className="flex items-center">
-                              <Users className="h-4 w-4 mr-2" />
-                              {group.name} 
-                              {group.client_count && (
-                                <span className="ml-2 text-muted-foreground">
-                                  ({group.client_count} clientes)
-                                </span>
-                              )}
-                            </div>
+                        <>
+                          <Button className="flex-1" variant="outline" size="sm" onClick={() => handleStartCampaign(campaign.id)}>
+                            Start
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDeleteCampaign(campaign.id)}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="rounded-full bg-muted p-3 mb-4">
+                  <Calendar className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">No Campaigns Yet</h3>
+                <p className="text-muted-foreground text-center mb-4">
+                  Create your first campaign to start reaching out to your clients.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+        
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Criar Nova Campanha</CardTitle>
+              <CardDescription>
+                Configure uma nova campanha de chamadas usando seu assistente de IA
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateCampaign} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Campaign Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="Summer Promotion 2023"
+                    value={newCampaign.name}
+                    onChange={(e) => setNewCampaign({...newCampaign, name: e.target.value})}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="clientGroup">Select Client Group</Label>
+                  <Select
+                    value={newCampaign.clientGroup}
+                    onValueChange={(value) => setNewCampaign({...newCampaign, clientGroup: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a client group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isLoadingGroups ? (
+                        <SelectItem value="loading" disabled>Loading client groups...</SelectItem>
+                      ) : (
+                        clientGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id.toString()}>
+                            {group.name} ({group.count} clients)
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="space-y-2">
-              <FormLabel>Assistente Virtual</FormLabel>
-              <AssistantSelector onAssistantSelected={handleAssistantSelected} />
-              {!selectedAssistant && (
-                <p className="text-sm text-destructive">
-                  Selecione um assistente virtual
-                </p>
-              )}
-            </div>
-            
-            <DialogFooter className="pt-4">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin h-4 w-4 mr-2 border-b-2 border-white rounded-full"></div>
-                    Iniciando...
-                  </div>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Iniciar Campanha
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="aiProfile">Select AI Assistant</Label>
+                  <Select
+                    value={newCampaign.aiProfile}
+                    onValueChange={(value) => setNewCampaign({...newCampaign, aiProfile: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an AI assistant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isLoadingAssistants ? (
+                        <SelectItem value="loading" disabled>Loading assistants...</SelectItem>
+                      ) : aiProfiles.length === 0 ? (
+                        <SelectItem value="no-assistants" disabled>
+                          No assistants available - create one in the Training section
+                        </SelectItem>
+                      ) : (
+                        aiProfiles.map((profile) => (
+                          <SelectItem key={profile.id} value={profile.id.toString()}>
+                            {profile.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {newCampaign.aiProfile && 
+                      aiProfiles.find(p => p.id.toString() === newCampaign.aiProfile)?.description}
+                    {aiProfiles.length === 0 && (
+                      <span className="text-amber-500">
+                        Você precisa criar um assistente na seção de Treinamento antes de criar uma campanha.
+                      </span>
+                    )}
+                  </p>
+                </div>
+                
+                <div className="pt-4">
+                  <Button 
+                    type="submit" 
+                    className="w-full"
+                    disabled={aiProfiles.length === 0}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Create Campaign
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
   );
 };
 

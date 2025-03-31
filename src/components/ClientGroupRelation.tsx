@@ -5,8 +5,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
-  DialogDescription
+  DialogFooter 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { 
@@ -26,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, PlusCircle, Check, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ClientGroup, clientGroupService } from '../services/clientGroupService';
 
@@ -42,25 +42,28 @@ interface GroupMembership {
 const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   const [showAddToGroupDialog, setShowAddToGroupDialog] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
   
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  // Otimizando as queries com staleTime e configurações melhoradas
   const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['clientGroups'],
-    queryFn: clientGroupService.getClientGroups,
-    enabled: !!user?.id,
-    staleTime: 30000, // 30 segundos
-    retry: 1
+    queryFn: async () => {
+      try {
+        return await clientGroupService.getClientGroups();
+      } catch (error) {
+        console.error('Error fetching client groups:', error);
+        return [];
+      }
+    },
+    enabled: !!user?.id
   });
   
   const { data: clientGroupMemberships = [], isLoading: isLoadingMemberships } = useQuery({
-    queryKey: ['clientGroupMemberships', client?.id],
+    queryKey: ['clientGroupMemberships', client.id],
     queryFn: async () => {
       try {
-        if (!client?.id) return [];
+        if (!client.id) return [];
         const groups = await clientGroupService.getClientGroupsByClientId(client.id);
         
         // Map the groups to the expected format
@@ -73,52 +76,38 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
         return [] as GroupMembership[];
       }
     },
-    enabled: !!client?.id,
-    staleTime: 30000, // 30 segundos
-    retry: 1
+    enabled: !!client.id
   });
   
   const addToGroupMutation = useMutation({
     mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      setIsProcessing(true);
       return await clientGroupService.addClientToGroup(clientId, groupId);
     },
     onSuccess: () => {
-      // Invalidate relevant queries and show toast
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
       queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
-      
-      toast("Cliente adicionado ao grupo");
+      toast.success('Cliente adicionado ao grupo');
       setShowAddToGroupDialog(false);
       setSelectedGroupId('');
-      setIsProcessing(false);
     },
     onError: (error: Error) => {
-      toast("Erro ao adicionar cliente ao grupo");
-      console.error('Error adding client to group:', error);
-      setIsProcessing(false);
+      toast.error(`Erro ao adicionar cliente ao grupo: ${error.message}`);
     }
   });
   
   const removeFromGroupMutation = useMutation({
     mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      setIsProcessing(true);
       return await clientGroupService.removeClientFromGroup(clientId, groupId);
     },
     onSuccess: () => {
-      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
       queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
       queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
-      
-      toast("Cliente removido do grupo");
-      setIsProcessing(false);
+      toast.success('Cliente removido do grupo');
     },
     onError: (error: Error) => {
-      toast("Erro ao remover cliente do grupo");
-      console.error('Error removing client from group:', error);
-      setIsProcessing(false);
+      toast.error(`Erro ao remover cliente do grupo: ${error.message}`);
     }
   });
   
@@ -126,7 +115,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (selectedGroupId && !isProcessing) {
+    if (selectedGroupId) {
       addToGroupMutation.mutate({ 
         clientId: client.id, 
         groupId: selectedGroupId 
@@ -138,12 +127,10 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!isProcessing) {
-      removeFromGroupMutation.mutate({ 
-        clientId: client.id, 
-        groupId: groupId 
-      });
-    }
+    removeFromGroupMutation.mutate({ 
+      clientId: client.id, 
+      groupId: groupId 
+    });
   };
   
   const handleOpenDialog = (e: React.MouseEvent) => {
@@ -152,16 +139,11 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     setShowAddToGroupDialog(true);
   };
   
-  // Get filtered list of groups that the client is not already part of
-  const availableGroups = clientGroups.filter((group: ClientGroup) => 
-    !clientGroupMemberships.some(m => m.groupId === group.id)
-  );
-  
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-          <Button variant="outline" size="sm" className="h-8" disabled={isProcessing}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8" onClick={(e) => e.stopPropagation()}>
             <Users className="h-4 w-4 mr-2" />
             Grupos
             {clientGroupMemberships.length > 0 && (
@@ -172,10 +154,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={(e) => {
-            e.stopPropagation();
-            handleOpenDialog(e);
-          }}>
+          <DropdownMenuItem onClick={handleOpenDialog}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Adicionar a um grupo
           </DropdownMenuItem>
@@ -187,21 +166,13 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           )}
           
           {clientGroupMemberships.map((membership: GroupMembership) => (
-            <DropdownMenuItem 
-              key={membership.groupId} 
-              className="flex justify-between items-center"
-              onSelect={(e) => e.preventDefault()}
-            >
+            <DropdownMenuItem key={membership.groupId} className="flex justify-between items-center">
               <span>{membership.groupName}</span>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                disabled={isProcessing}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemoveFromGroup(e, membership.groupId);
-                }}
+                onClick={(e) => handleRemoveFromGroup(e, membership.groupId)}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -217,37 +188,35 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
         <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Adicionar Cliente ao Grupo</DialogTitle>
-            <DialogDescription>
-              Selecione um grupo para adicionar o cliente
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Select
                 value={selectedGroupId}
-                onValueChange={(value) => {
-                  setSelectedGroupId(value);
-                }}
-                disabled={isProcessing}
+                onValueChange={setSelectedGroupId}
               >
                 <SelectTrigger onClick={(e) => e.stopPropagation()}>
                   <SelectValue placeholder="Selecione um grupo" />
                 </SelectTrigger>
                 <SelectContent onClick={(e) => e.stopPropagation()}>
                   {isLoadingGroups ? (
-                    <SelectItem value="loading-indicator">
+                    <SelectItem value="loading">
                       Carregando grupos...
                     </SelectItem>
-                  ) : availableGroups.length === 0 ? (
-                    <SelectItem value="no-groups-indicator">
-                      Nenhum grupo disponível
+                  ) : clientGroups.length === 0 ? (
+                    <SelectItem value="no-groups">
+                      Nenhum grupo encontrado
                     </SelectItem>
                   ) : (
-                    availableGroups.map((group: ClientGroup) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))
+                    clientGroups
+                      .filter((group: ClientGroup) => 
+                        !clientGroupMemberships.some(m => m.groupId === group.id)
+                      )
+                      .map((group: ClientGroup) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
+                        </SelectItem>
+                      ))
                   )}
                 </SelectContent>
               </Select>
@@ -256,23 +225,11 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
           <DialogFooter>
             <Button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAddToGroup(e);
-              }}
-              disabled={!selectedGroupId || isProcessing}
+              onClick={handleAddToGroup}
+              disabled={!selectedGroupId}
             >
-              {isProcessing ? (
-                <div className="flex items-center">
-                  <div className="animate-spin h-4 w-4 mr-2 border-b-2 border-white rounded-full"></div>
-                  Adicionando...
-                </div>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Adicionar
-                </>
-              )}
+              <Check className="h-4 w-4 mr-2" />
+              Adicionar
             </Button>
           </DialogFooter>
         </DialogContent>

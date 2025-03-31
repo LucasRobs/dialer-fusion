@@ -185,19 +185,19 @@ export type Database = {
           client_id: number | null
           created_at: string
           group_id: string | null
-          id: string
+          id: number
         }
         Insert: {
           client_id?: number | null
           created_at?: string
           group_id?: string | null
-          id?: string
+          id?: number
         }
         Update: {
           client_id?: number | null
           created_at?: string
           group_id?: string | null
-          id?: string
+          id?: number
         }
         Relationships: []
       }

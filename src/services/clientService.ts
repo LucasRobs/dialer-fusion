@@ -111,58 +111,25 @@ export const clientService = {
   },
 
   // Buscar clientes por grupo
-  async getClientsByGroupId(groupId: string): Promise<Client[]> {
-    try {
-      if (!groupId) return [];
-      
-      console.log('Fetching clients for group ID:', groupId);
-      
-      // Primeiro, buscar as IDs dos clientes que pertencem ao grupo
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-      
-      const { data: memberData, error: memberError } = await supabase
-        .from('client_group_members')
-        .select('client_id')
-        .eq('group_id', groupId);
-      
-      if (memberError) {
-        console.error('Error fetching group members:', memberError);
-        throw memberError;
-      }
-      
-      if (!memberData || memberData.length === 0) {
-        console.log('No members found in group');
-        return [];
-      }
-      
-      // Converter as IDs de cliente para números, se necessário
-      const clientIds = memberData.map(item => {
-        return typeof item.client_id === 'string' 
-          ? parseInt(item.client_id, 10) 
-          : item.client_id;
-      });
-      
-      console.log('Found client IDs in group:', clientIds);
-      
-      // Em seguida, buscar os clientes correspondentes
-      const { data: clients, error: clientsError } = await supabase
-        .from('clients')
-        .select('*')
-        .in('id', clientIds)
-        .eq('user_id', userId); // Garantir que só buscamos clientes do usuário atual
-      
-      if (clientsError) {
-        console.error('Error fetching clients by IDs:', clientsError);
-        throw clientsError;
-      }
-      
-      console.log(`Retrieved ${clients?.length || 0} clients for group`);
-      return clients as Client[] || [];
-    } catch (error) {
-      console.error('Error in getClientsByGroupId:', error);
-      return [];
-    }
+  async getClientsByGroupId(groupId: string) {
+    const { data, error } = await supabase
+      .from('client_group_members')
+      .select(`
+        client_id,
+        clients(*)
+      `)
+      .eq('group_id', groupId);
+    
+    if (error) throw error;
+    
+    // Properly extract and transform the nested clients data
+    // Each item.clients is an object, not an array
+    const clients = data.map(item => {
+      if (!item.clients) return null;
+      return item.clients as unknown as Client;
+    }).filter(Boolean) as Client[];
+    
+    return clients;
   },
 
   // Importar clientes de uma planilha

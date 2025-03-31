@@ -1,13 +1,12 @@
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
-  DialogDescription 
+  DialogFooter 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Phone, X } from 'lucide-react';
 import { Client } from '@/services/clientService';
 import { clientGroupService } from '@/services/clientGroupService';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 import { webhookService } from '@/services/webhookService';
 import { supabase } from '@/lib/supabase';
 
@@ -34,9 +33,7 @@ interface GroupClientsListProps {
 }
 
 const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsListProps) => {
-  const queryClient = useQueryClient();
-  const [isProcessingRemove, setIsProcessingRemove] = useState<number | null>(null);
-  const [isProcessingCall, setIsProcessingCall] = useState<number | null>(null);
+  const { toast } = useToast();
   
   const { 
     data: clients = [], 
@@ -46,40 +43,28 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
   } = useQuery({
     queryKey: ['clientsInGroup', groupId],
     queryFn: () => clientGroupService.getClientsInGroup(groupId),
-    enabled: !!groupId && isOpen,
-    staleTime: 10000 // 10 segundos
-  });
-
-  const removeFromGroupMutation = useMutation({
-    mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      setIsProcessingRemove(clientId);
-      return await clientGroupService.removeClientFromGroup(clientId, groupId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clientsInGroup'] });
-      queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
-      queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
-      toast("Cliente removido do grupo com sucesso.");
-      setIsProcessingRemove(null);
-      refetch();
-    },
-    onError: (error: Error) => {
-      toast("Erro ao remover cliente do grupo.");
-      setIsProcessingRemove(null);
-    }
+    enabled: !!groupId && isOpen
   });
 
   const handleRemoveFromGroup = async (clientId: number) => {
-    if (isProcessingRemove === null) {
-      removeFromGroupMutation.mutate({ clientId, groupId });
+    try {
+      await clientGroupService.removeClientFromGroup(clientId, groupId);
+      toast({
+        title: "Cliente removido",
+        description: "Cliente removido do grupo com sucesso.",
+      });
+      refetch();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao remover cliente do grupo.",
+        variant: "destructive"
+      });
     }
   };
 
   const handleCall = async (client: Client) => {
     try {
-      if (isProcessingCall !== null) return;
-      
-      setIsProcessingCall(client.id);
       const { data } = await supabase.auth.getUser();
       const userId = data.user?.id;
       
@@ -98,31 +83,32 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       });
       
       if (result.success) {
-        toast(`Iniciando ligação para ${client.name} (${client.phone})`);
+        toast({
+          title: "Ligação iniciada",
+          description: `Iniciando ligação para ${client.name} (${client.phone})`,
+        });
       } else {
-        toast("Não foi possível iniciar a ligação. Tente novamente.");
+        toast({
+          title: "Erro ao iniciar ligação", 
+          description: "Não foi possível iniciar a ligação. Tente novamente.",
+          variant: "destructive"
+        });
       }
-      setIsProcessingCall(null);
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
-      toast("Ocorreu um erro ao tentar iniciar a ligação.");
-      setIsProcessingCall(null);
+      toast({
+        title: "Erro", 
+        description: "Ocorreu um erro ao tentar iniciar a ligação.",
+        variant: "destructive"
+      });
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(shouldClose) => {
-      // Só fecha o diálogo se não houver operação em andamento
-      if (isProcessingRemove === null && isProcessingCall === null && shouldClose === false) {
-        onClose();
-      }
-    }}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Clientes no grupo: {groupName}</DialogTitle>
-          <DialogDescription>
-            Gerencie os clientes no grupo {groupName}
-          </DialogDescription>
         </DialogHeader>
         
         {isLoading ? (
@@ -131,7 +117,7 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
           </div>
         ) : error ? (
           <div className="text-center p-6 text-red-500">
-            Erro ao carregar clientes: {error instanceof Error ? error.message : 'Erro desconhecido'}
+            Erro ao carregar clientes
           </div>
         ) : clients.length === 0 ? (
           <div className="text-center p-6 text-muted-foreground">
@@ -170,13 +156,8 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
                             handleCall(client);
                           }}
                           title="Ligar para cliente"
-                          disabled={isProcessingCall === client.id || isProcessingRemove === client.id}
                         >
-                          {isProcessingCall === client.id ? (
-                            <div className="animate-spin h-4 w-4 border-b-2 border-primary rounded-full"></div>
-                          ) : (
-                            <Phone className="h-4 w-4" />
-                          )}
+                          <Phone className="h-4 w-4" />
                         </Button>
                         <Button 
                           size="sm" 
@@ -187,13 +168,8 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
                             handleRemoveFromGroup(client.id);
                           }}
                           title="Remover do grupo"
-                          disabled={isProcessingRemove === client.id || isProcessingCall === client.id}
                         >
-                          {isProcessingRemove === client.id ? (
-                            <div className="animate-spin h-4 w-4 border-b-2 border-destructive rounded-full"></div>
-                          ) : (
-                            <X className="h-4 w-4" />
-                          )}
+                          <X className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -205,7 +181,7 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
         )}
         
         <DialogFooter>
-          <Button onClick={onClose} disabled={isProcessingRemove !== null || isProcessingCall !== null}>Fechar</Button>
+          <Button onClick={onClose}>Fechar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
