@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 interface Campaign {
@@ -105,29 +104,50 @@ export const campaignService = {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(now.getDate() - 30);
       
-      // Join calls with campaigns to filter by user_id
-      const { data: recentCallsData, error: recentCallsError } = await supabase
-        .from('calls')
-        .select('calls.*, campaigns!inner(user_id)')
-        .gte('call_start', thirtyDaysAgo.toISOString())
-        .eq('campaigns.user_id', userId);
+      // Fixed: Join calls with campaigns to filter by user_id
+      const { data: campaigns } = await supabase
+        .from('campaigns')
+        .select('id')
+        .eq('user_id', userId);
       
-      if (recentCallsError) throw recentCallsError;
+      let recentCallsData: any[] = [];
+      let todayCalls: any[] = [];
       
-      // Fetch today's calls for the current user
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const { data: todayCalls, error: todayCallsError } = await supabase
-        .from('calls')
-        .select('calls.*, campaigns!inner(user_id)')
-        .gte('call_start', today.toISOString())
-        .eq('campaigns.user_id', userId);
-      
-      if (todayCallsError) throw todayCallsError;
+      if (campaigns && campaigns.length > 0) {
+        const campaignIds = campaigns.map(c => c.id);
+        
+        // Fetch calls associated with user's campaigns
+        const { data: callsData, error: callsError } = await supabase
+          .from('calls')
+          .select('*')
+          .in('campaign_id', campaignIds)
+          .gte('call_start', thirtyDaysAgo.toISOString());
+        
+        if (callsError) {
+          console.error('Error fetching recent calls:', callsError);
+        } else {
+          recentCallsData = callsData || [];
+        }
+        
+        // Fetch today's calls
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const { data: todayCallsData, error: todayCallsError } = await supabase
+          .from('calls')
+          .select('*')
+          .in('campaign_id', campaignIds)
+          .gte('call_start', today.toISOString());
+        
+        if (todayCallsError) {
+          console.error('Error fetching today\'s calls:', todayCallsError);
+        } else {
+          todayCalls = todayCallsData || [];
+        }
+      }
       
       // Calculate average call duration
-      const completedCalls = recentCallsData?.filter(call => 
+      const completedCalls = recentCallsData.filter(call => 
         call.status === 'completed' || call.status === 'answered'
       ) || [];
       
@@ -143,14 +163,14 @@ export const campaignService = {
       const seconds = Math.floor(avgDuration % 60);
       
       // Calculate completion rate
-      const completionRate = recentCallsData && recentCallsData.length > 0
+      const completionRate = recentCallsData.length > 0
         ? Math.round((completedCalls.length / recentCallsData.length) * 100)
         : 0;
       
       return {
-        recentCalls: recentCallsData?.length || 0,
+        recentCalls: recentCallsData.length || 0,
         avgCallDuration: `${minutes}:${seconds.toString().padStart(2, '0')}`,
-        callsToday: todayCalls?.length || 0,
+        callsToday: todayCalls.length || 0,
         completionRate: `${completionRate}%`
       };
     } catch (error) {
@@ -348,29 +368,42 @@ export const campaignService = {
         throw new Error('No authenticated user found');
       }
       
-      // Fetch actual data from Supabase for current user only
-      // Join calls with campaigns to filter by user_id
-      const { data: callsData, error: callsError } = await supabase
-        .from('calls')
-        .select('calls.*, campaigns!inner(user_id)')
-        .eq('campaigns.user_id', userId)
-        .order('call_start', { ascending: false });
+      // Fixed: Fetch calls data using a different approach
+      let callsData: any[] = [];
       
-      if (callsError) {
-        console.error('Error fetching calls for analytics:', callsError);
-        throw callsError;
+      // First get all campaigns for the user
+      const { data: campaigns } = await supabase
+        .from('campaigns')
+        .select('id')
+        .eq('user_id', userId);
+      
+      if (campaigns && campaigns.length > 0) {
+        const campaignIds = campaigns.map(c => c.id);
+        
+        // Then get calls associated with those campaigns
+        const { data: calls, error: callsError } = await supabase
+          .from('calls')
+          .select('*')
+          .in('campaign_id', campaignIds)
+          .order('call_start', { ascending: false });
+        
+        if (callsError) {
+          console.error('Error fetching calls for analytics:', callsError);
+        } else {
+          callsData = calls || [];
+        }
       }
       
       // Process the data
-      const completedCalls = callsData?.filter(call => 
+      const completedCalls = callsData.filter(call => 
         call.status === 'completed' || call.status === 'answered'
       ) || [];
       
-      const totalCallDuration = callsData?.reduce(
+      const totalCallDuration = callsData.reduce(
         (sum, call) => sum + (call.duration || 0), 0
       ) || 0;
       
-      const avgDuration = callsData && callsData.length > 0 
+      const avgDuration = callsData.length > 0 
         ? totalCallDuration / callsData.length 
         : 0;
         
@@ -393,18 +426,18 @@ export const campaignService = {
       
       // Return analytics data
       return {
-        totalCalls: callsData?.length || 0,
+        totalCalls: callsData.length || 0,
         callsChangePercentage: 10,
         avgCallDuration: `${minutes}:${seconds.toString().padStart(2, '0')}`,
         durationChangePercentage: 5,
-        conversionRate: callsData && callsData.length > 0 
+        conversionRate: callsData.length > 0 
           ? Math.round((completedCalls.length / callsData.length) * 100) 
           : 0,
         conversionChangePercentage: 2,
-        callsData: callsData && callsData.length > 0 
+        callsData: callsData.length > 0 
           ? this.processCallsDataByMonth(callsData) 
           : sampleMonthlyData,
-        campaignData: callsData && callsData.length > 0 
+        campaignData: callsData.length > 0 
           ? this.processCallsDataByCampaign(callsData) 
           : sampleCampaignData
       };

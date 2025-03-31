@@ -39,12 +39,14 @@ const Dashboard = () => {
     queryKey: ['assistants'],
     queryFn: async () => {
       try {
-        return await webhookService.getAllAssistants(user?.id);
+        if (!user?.id) return [];
+        return await webhookService.getAllAssistants(user.id);
       } catch (error) {
         console.error("Erro ao buscar assistentes:", error);
         return [];
       }
-    }
+    },
+    enabled: !!user?.id
   });
   
   // Load selected assistant from localStorage

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -5,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { RotateCw, CheckCircle, AlertCircle, Phone, Settings, Info } from 'lucide-react';
-import { webhookService, WebhookData } from '@/services/webhookService';
+import { webhookService, WebhookPayload } from '@/services/webhookService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -98,9 +99,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         console.error('Error parsing stored assistant data:', e);
       }
       
-      const testData: Omit<WebhookData, 'timestamp'> = {
+      const testData: WebhookPayload = {
         action: 'test_call',
-        campaign_id: campaignId,
+        campaign_id: campaignId || 0,
         client_name: "Cliente Teste",
         client_phone: "+5511999999999",
         additional_data: {
