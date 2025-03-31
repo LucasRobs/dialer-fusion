@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -36,6 +37,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
+import { clientGroupService, ClientGroup } from '@/services/clientGroupService';
 
 const CampaignControls = () => {
   const [campaigns, setCampaigns] = useState([]);
@@ -94,46 +96,44 @@ const CampaignControls = () => {
     }
   }, [customAssistants]);
   
-  const { data: clientGroups = [], isLoading: isLoadingGroups } = useQuery({
-    queryKey: ['clientGroups'],
+  // Fetch user-created client groups
+  const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
+    queryKey: ['userClientGroups', user?.id],
     queryFn: async () => {
       try {
-        const { count: totalCount } = await supabase
-          .from('clients')
-          .select('*', { count: 'exact', head: true });
+        // Fetch all client groups created by the current user
+        const groups = await clientGroupService.getClientGroups();
         
-        const { data: clientsData } = await supabase
-          .from('clients')
-          .select('status');
-        
-        const statusCounts = {};
-        if (clientsData) {
-          clientsData.forEach(client => {
-            const status = client.status || 'undefined';
-            statusCounts[status] = (statusCounts[status] || 0) + 1;
-          });
+        // If no groups, return at least the "All Clients" option
+        if (!groups || groups.length === 0) {
+          const { count: totalCount } = await supabase
+            .from('clients')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user?.id);
+          
+          return [
+            { id: 'all', name: 'All Clients', client_count: totalCount || 0 }
+          ];
         }
         
-        const formattedGroups = [
-          { id: 'all', name: 'All Clients', count: totalCount || 0 }
-        ];
+        // Add "All Clients" option
+        const { count: totalCount } = await supabase
+          .from('clients')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user?.id);
         
-        Object.keys(statusCounts).forEach(status => {
-          formattedGroups.push({
-            id: status,
-            name: `${status} Clients`,
-            count: statusCounts[status]
-          });
-        });
-        
-        return formattedGroups;
-      } catch (error) {
-        console.error('Error fetching client groups:', error);
         return [
-          { id: 'all', name: 'All Clients', count: 0 }
+          { id: 'all', name: 'All Clients', client_count: totalCount || 0 },
+          ...groups
+        ];
+      } catch (error) {
+        console.error('Error fetching user client groups:', error);
+        return [
+          { id: 'all', name: 'All Clients', client_count: 0 }
         ];
       }
-    }
+    },
+    enabled: !!user?.id
   });
   
   const { data: aiProfiles = [] } = useQuery({
@@ -362,8 +362,9 @@ const CampaignControls = () => {
       return;
     }
     
-    const selectedGroup = clientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
-    const clientCount = selectedGroup ? selectedGroup.count : 0;
+    // Find the selected client group details
+    const selectedGroup = userClientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
+    const clientCount = selectedGroup ? selectedGroup.client_count || 0 : 0;
     
     const selectedAssistantProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
     
@@ -393,7 +394,8 @@ const CampaignControls = () => {
         answered_calls: 0,
         start_date: null,
         end_date: null,
-        user_id: user?.id
+        user_id: user?.id,
+        client_group_id: newCampaign.clientGroup !== 'all' ? newCampaign.clientGroup : null
       });
       
       await webhookService.triggerCallWebhook({
@@ -405,7 +407,8 @@ const CampaignControls = () => {
           assistant_name: selectedAssistantProfile.name,
           assistant_id: assistantToStore.assistant_id,
           ai_profile: selectedAssistantProfile.name,
-          client_group: selectedGroup?.name
+          client_group: selectedGroup?.name,
+          client_group_id: newCampaign.clientGroup !== 'all' ? newCampaign.clientGroup : null
         }
       });
       
@@ -597,10 +600,12 @@ const CampaignControls = () => {
                     <SelectContent>
                       {isLoadingGroups ? (
                         <SelectItem value="loading" disabled>Loading client groups...</SelectItem>
+                      ) : userClientGroups.length === 0 ? (
+                        <SelectItem value="no-groups" disabled>No client groups available</SelectItem>
                       ) : (
-                        clientGroups.map((group) => (
+                        userClientGroups.map((group) => (
                           <SelectItem key={group.id} value={group.id.toString()}>
-                            {group.name} ({group.count} clients)
+                            {group.name} ({group.client_count || 0} clients)
                           </SelectItem>
                         ))
                       )}

@@ -11,6 +11,7 @@ interface Campaign {
   end_date?: string | null;
   average_duration?: number;
   user_id?: string;
+  client_group_id?: string | null;
 }
 
 interface AnalyticsData {
@@ -34,9 +35,19 @@ interface AnalyticsData {
 export const campaignService = {
   async getCampaigns() {
     try {
+      // Fetch campaigns for the current user only
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        console.error('No authenticated user found');
+        return [];
+      }
+      
       const { data, error } = await supabase
         .from('campaigns')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -47,13 +58,22 @@ export const campaignService = {
     }
   },
   
-  // Get active campaigns (status = 'active')
+  // Get active campaigns (status = 'active') for current user only
   async getActiveCampaigns() {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        console.error('No authenticated user found');
+        return [];
+      }
+      
       const { data, error } = await supabase
         .from('campaigns')
         .select('*')
         .eq('status', 'active')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -64,29 +84,45 @@ export const campaignService = {
     }
   },
   
-  // Get campaign statistics
+  // Get campaign statistics for current user only
   async getCampaignStats() {
     try {
-      // Fetch recent calls
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        console.error('No authenticated user found');
+        return {
+          recentCalls: 0,
+          avgCallDuration: '0:00',
+          callsToday: 0,
+          completionRate: '0%'
+        };
+      }
+      
+      // Fetch recent calls for the current user
       const now = new Date();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(now.getDate() - 30);
       
+      // Join calls with campaigns to filter by user_id
       const { data: recentCallsData, error: recentCallsError } = await supabase
         .from('calls')
-        .select('*')
-        .gte('call_start', thirtyDaysAgo.toISOString());
+        .select('calls.*, campaigns!inner(user_id)')
+        .gte('call_start', thirtyDaysAgo.toISOString())
+        .eq('campaigns.user_id', userId);
       
       if (recentCallsError) throw recentCallsError;
       
-      // Fetch today's calls
+      // Fetch today's calls for the current user
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       const { data: todayCalls, error: todayCallsError } = await supabase
         .from('calls')
-        .select('*')
-        .gte('call_start', today.toISOString());
+        .select('calls.*, campaigns!inner(user_id)')
+        .gte('call_start', today.toISOString())
+        .eq('campaigns.user_id', userId);
       
       if (todayCallsError) throw todayCallsError;
       
@@ -130,10 +166,19 @@ export const campaignService = {
   
   async getCampaignById(id: number) {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        console.error('No authenticated user found');
+        return null;
+      }
+      
       const { data, error } = await supabase
         .from('campaigns')
         .select('*')
         .eq('id', id)
+        .eq('user_id', userId)
         .maybeSingle();
       
       if (error) throw error;
@@ -146,13 +191,32 @@ export const campaignService = {
   
   async createCampaign(campaign: Campaign) {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        throw new Error('No authenticated user found');
+      }
+      
+      // Ensure user_id is set
+      const campaignWithUserId = {
+        ...campaign,
+        user_id: userId
+      };
+      
       const { data, error } = await supabase
         .from('campaigns')
-        .insert([campaign])
+        .insert([campaignWithUserId])
         .select()
         .single();
       
       if (error) throw error;
+      
+      // If a client group is specified, prepare data for calls
+      if (data && data.id && campaign.client_group_id && campaign.client_group_id !== 'all') {
+        await this.prepareCampaignClientsFromGroup(data.id, campaign.client_group_id);
+      }
+      
       return data;
     } catch (error) {
       console.error('Error creating campaign:', error);
@@ -160,13 +224,65 @@ export const campaignService = {
     }
   },
   
+  // Helper function to prepare clients from a specific group for a campaign
+  async prepareCampaignClientsFromGroup(campaignId: number, groupId: string) {
+    try {
+      // Get clients from the specified group
+      const { data: groupMembers, error: groupError } = await supabase
+        .from('client_group_members')
+        .select('client_id')
+        .eq('group_id', groupId);
+      
+      if (groupError) throw groupError;
+      
+      if (!groupMembers || groupMembers.length === 0) {
+        console.log('No clients found in this group');
+        return;
+      }
+      
+      // Get client details
+      const clientIds = groupMembers.map(member => member.client_id);
+      
+      // Associate these clients with the campaign in campaign_clients table
+      const campaignClients = clientIds.map(clientId => ({
+        campaign_id: campaignId,
+        client_id: clientId,
+        status: 'pending'
+      }));
+      
+      const { error: insertError } = await supabase
+        .from('campaign_clients')
+        .insert(campaignClients);
+      
+      if (insertError) throw insertError;
+      
+      // Update the campaign's total_calls count
+      await supabase
+        .from('campaigns')
+        .update({ total_calls: clientIds.length })
+        .eq('id', campaignId);
+      
+    } catch (error) {
+      console.error('Error preparing campaign clients from group:', error);
+      throw error;
+    }
+  },
+  
   async updateCampaign(id: number, updates: Partial<Campaign>) {
     try {
-      // First check if the campaign exists
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        throw new Error('No authenticated user found');
+      }
+      
+      // First check if the campaign exists and belongs to the current user
       const { data: existingCampaign, error: checkError } = await supabase
         .from('campaigns')
         .select('id')
         .eq('id', id)
+        .eq('user_id', userId)
         .maybeSingle();
         
       if (checkError) {
@@ -175,7 +291,7 @@ export const campaignService = {
       }
       
       if (!existingCampaign) {
-        throw new Error(`Campaign with ID ${id} not found`);
+        throw new Error(`Campaign with ID ${id} not found or not owned by current user`);
       }
       
       // Now update the campaign
@@ -183,6 +299,7 @@ export const campaignService = {
         .from('campaigns')
         .update(updates)
         .eq('id', id)
+        .eq('user_id', userId)
         .select()
         .single();
       
@@ -200,10 +317,19 @@ export const campaignService = {
   
   async deleteCampaign(id: number) {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        throw new Error('No authenticated user found');
+      }
+      
+      // Only delete if campaign belongs to current user
       const { error } = await supabase
         .from('campaigns')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', userId);
       
       if (error) throw error;
       return true;
@@ -215,10 +341,19 @@ export const campaignService = {
   
   async getAnalyticsData(): Promise<AnalyticsData> {
     try {
-      // Fetch actual data from Supabase
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
+      
+      if (!userId) {
+        throw new Error('No authenticated user found');
+      }
+      
+      // Fetch actual data from Supabase for current user only
+      // Join calls with campaigns to filter by user_id
       const { data: callsData, error: callsError } = await supabase
         .from('calls')
-        .select('*')
+        .select('calls.*, campaigns!inner(user_id)')
+        .eq('campaigns.user_id', userId)
         .order('call_start', { ascending: false });
       
       if (callsError) {
