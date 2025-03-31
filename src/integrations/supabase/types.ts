@@ -182,22 +182,22 @@ export type Database = {
       }
       client_group_members: {
         Row: {
-          client_id: string | null
+          client_id: number | null
           created_at: string
           group_id: string | null
-          id: number
+          id: string
         }
         Insert: {
-          client_id?: string | null
+          client_id?: number | null
           created_at?: string
           group_id?: string | null
-          id?: number
+          id?: string
         }
         Update: {
-          client_id?: string | null
+          client_id?: number | null
           created_at?: string
           group_id?: string | null
-          id?: number
+          id?: string
         }
         Relationships: []
       }

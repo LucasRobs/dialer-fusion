@@ -99,6 +99,8 @@ export const clientGroupService = {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
       
+      console.log('Deleting client group with ID:', id);
+      
       // First delete all client-group relationships
       const { error: relationshipError } = await supabase
         .from('client_group_members')
@@ -129,13 +131,15 @@ export const clientGroupService = {
     }
   },
   
-  // Add a client to a group - otimizado para melhor performance
+  // Add a client to a group
   addClientToGroup: async (clientId: number, groupId: string) => {
     try {
       // Ensure clientId is a number
       const numericClientId = typeof clientId === 'string' 
         ? parseInt(clientId, 10) 
         : clientId;
+      
+      console.log('Adding client', numericClientId, 'to group', groupId);
       
       // Check if the client is already in the group to avoid duplicates
       const { data: existingMembership, error: checkError } = await supabase
@@ -152,6 +156,7 @@ export const clientGroupService = {
       
       // If already exists, return the existing record
       if (existingMembership) {
+        console.log('Client already in group:', existingMembership);
         return existingMembership;
       }
       
@@ -166,6 +171,7 @@ export const clientGroupService = {
         throw error;
       }
       
+      console.log('Client added to group successfully:', data);
       return data[0];
     } catch (error) {
       console.error('Error in addClientToGroup:', error);
@@ -173,12 +179,14 @@ export const clientGroupService = {
     }
   },
   
-  // Remove a client from a group - otimizado para melhor performance
+  // Remove a client from a group
   removeClientFromGroup: async (clientId: number, groupId: string) => {
     try {
       const numericClientId = typeof clientId === 'string' 
         ? parseInt(clientId, 10) 
         : clientId;
+      
+      console.log('Removing client', numericClientId, 'from group', groupId);
       
       const { error } = await supabase
         .from('client_group_members')
@@ -198,7 +206,7 @@ export const clientGroupService = {
     }
   },
   
-  // Get all clients in a group - otimizado para melhor performance
+  // Get all clients in a group
   getClientsInGroup: async (groupId: string): Promise<Client[]> => {
     try {
       if (!groupId) return [];
@@ -206,6 +214,8 @@ export const clientGroupService = {
       // Get the current user
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
+      
+      console.log('Fetching clients for group ID:', groupId);
       
       // Consulta otimizada usando joins diretamente no Supabase
       const { data, error } = await supabase
@@ -219,8 +229,11 @@ export const clientGroupService = {
       }
       
       if (!data || data.length === 0) {
+        console.log('No clients found for this group');
         return [];
       }
+      
+      console.log('Raw client data:', data);
       
       // Use type assertion with proper checks to ensure each client has the required properties
       const clients: Client[] = [];
@@ -232,8 +245,8 @@ export const clientGroupService = {
           'id' in item.clients && 
           'name' in item.clients && 
           'phone' in item.clients && 
-          'email' in item.clients && // Check for email property
-          'status' in item.clients && // Check for status property
+          'email' in item.clients && 
+          'status' in item.clients && 
           'user_id' in item.clients && 
           item.clients.user_id === userId
         ) {
@@ -244,6 +257,7 @@ export const clientGroupService = {
         }
       }
       
+      console.log('Processed clients:', clients);
       return clients;
     } catch (error) {
       console.error('Error in getClientsInGroup:', error);
@@ -251,7 +265,7 @@ export const clientGroupService = {
     }
   },
   
-  // Get all groups a client belongs to - otimizado
+  // Get all groups a client belongs to
   getClientGroupsByClientId: async (clientId: number): Promise<ClientGroup[]> => {
     try {
       // Ensure clientId is a number
@@ -262,6 +276,8 @@ export const clientGroupService = {
       // Get current user
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
+      
+      console.log('Fetching groups for client ID:', numericClientId);
       
       // Consulta otimizada usando joins diretamente no Supabase
       const { data, error } = await supabase
@@ -275,8 +291,11 @@ export const clientGroupService = {
       }
       
       if (!data || data.length === 0) {
+        console.log('No groups found for this client');
         return [];
       }
+      
+      console.log('Raw group data:', data);
       
       // Use type assertion with proper checks to ensure each group has the required properties
       const groups: ClientGroup[] = [];
@@ -287,7 +306,7 @@ export const clientGroupService = {
           typeof item.groups === 'object' && 
           'id' in item.groups && 
           'name' in item.groups && 
-          'created_at' in item.groups && // Check for created_at property
+          'created_at' in item.groups && 
           'user_id' in item.groups && 
           item.groups.user_id === userId
         ) {
@@ -298,6 +317,7 @@ export const clientGroupService = {
         }
       }
       
+      console.log('Processed groups:', groups);
       return groups;
     } catch (error) {
       console.error('Error in getClientGroupsByClientId:', error);
