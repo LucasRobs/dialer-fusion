@@ -5,8 +5,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
-  DialogDescription 
+  DialogFooter 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { 
@@ -43,7 +42,6 @@ interface GroupMembership {
 const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   const [showAddToGroupDialog, setShowAddToGroupDialog] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
   
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -83,12 +81,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   
   const addToGroupMutation = useMutation({
     mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      setIsLoading(true);
-      try {
-        return await clientGroupService.addClientToGroup(clientId, groupId);
-      } finally {
-        setIsLoading(false);
-      }
+      return await clientGroupService.addClientToGroup(clientId, groupId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
@@ -105,12 +98,7 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
   
   const removeFromGroupMutation = useMutation({
     mutationFn: async ({ clientId, groupId }: { clientId: number, groupId: string }) => {
-      setIsLoading(true);
-      try {
-        return await clientGroupService.removeClientFromGroup(clientId, groupId);
-      } finally {
-        setIsLoading(false);
-      }
+      return await clientGroupService.removeClientFromGroup(clientId, groupId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientGroupMemberships'] });
@@ -151,11 +139,6 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
     setShowAddToGroupDialog(true);
   };
   
-  // Filter out groups the client is already a member of
-  const availableGroups = clientGroups.filter((group: ClientGroup) => 
-    !clientGroupMemberships.some(m => m.groupId === group.id)
-  );
-  
   return (
     <>
       <DropdownMenu>
@@ -190,7 +173,6 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
                 size="sm" 
                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
                 onClick={(e) => handleRemoveFromGroup(e, membership.groupId)}
-                disabled={isLoading}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -206,9 +188,6 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
         <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Adicionar Cliente ao Grupo</DialogTitle>
-            <DialogDescription>
-              Selecione o grupo ao qual deseja adicionar este cliente.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -224,16 +203,20 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
                     <SelectItem value="loading">
                       Carregando grupos...
                     </SelectItem>
-                  ) : availableGroups.length === 0 ? (
+                  ) : clientGroups.length === 0 ? (
                     <SelectItem value="no-groups">
-                      Nenhum grupo disponível
+                      Nenhum grupo encontrado
                     </SelectItem>
                   ) : (
-                    availableGroups.map((group: ClientGroup) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))
+                    clientGroups
+                      .filter((group: ClientGroup) => 
+                        !clientGroupMemberships.some(m => m.groupId === group.id)
+                      )
+                      .map((group: ClientGroup) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name}
+                        </SelectItem>
+                      ))
                   )}
                 </SelectContent>
               </Select>
@@ -243,22 +226,10 @@ const ClientGroupRelation = ({ client }: ClientGroupRelationProps) => {
             <Button
               type="button"
               onClick={handleAddToGroup}
-              disabled={!selectedGroupId || isLoading}
+              disabled={!selectedGroupId}
             >
-              {isLoading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Adicionando...
-                </span>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Adicionar
-                </>
-              )}
+              <Check className="h-4 w-4 mr-2" />
+              Adicionar
             </Button>
           </DialogFooter>
         </DialogContent>

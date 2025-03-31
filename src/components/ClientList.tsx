@@ -62,6 +62,7 @@ export default function ClientList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // Buscar todos os grupos do cliente
   const { 
     data: clientGroups = [], 
     isLoading: isLoadingGroups
@@ -70,6 +71,7 @@ export default function ClientList() {
     queryFn: () => clientGroupService.getClientGroups(),
   });
   
+  // Buscar todos os clientes ou clientes de um grupo específico
   const { 
     data: clients = [], 
     isLoading, 
@@ -218,7 +220,6 @@ export default function ClientList() {
       
       const result = await webhookService.triggerCallWebhook({
         action: 'start_call',
-        campaign_id: 0,
         client_id: client.id,
         client_name: client.name,
         client_phone: client.phone,

@@ -6,8 +6,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
-  DialogDescription
+  DialogFooter 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,8 +34,6 @@ interface GroupClientsListProps {
 
 const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsListProps) => {
   const { toast } = useToast();
-  const [isRemoving, setIsRemoving] = useState<number | null>(null);
-  const [isCalling, setIsCalling] = useState<number | null>(null);
   
   const { 
     data: clients = [], 
@@ -51,7 +48,6 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
 
   const handleRemoveFromGroup = async (clientId: number) => {
     try {
-      setIsRemoving(clientId);
       await clientGroupService.removeClientFromGroup(clientId, groupId);
       toast({
         title: "Cliente removido",
@@ -64,20 +60,16 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
         description: "Erro ao remover cliente do grupo.",
         variant: "destructive"
       });
-    } finally {
-      setIsRemoving(null);
     }
   };
 
   const handleCall = async (client: Client) => {
     try {
-      setIsCalling(client.id);
       const { data } = await supabase.auth.getUser();
       const userId = data.user?.id;
       
       const result = await webhookService.triggerCallWebhook({
         action: 'start_call',
-        campaign_id: 0, // Use 0 as a placeholder since there's no campaign associated
         client_id: client.id,
         client_name: client.name,
         client_phone: client.phone,
@@ -109,8 +101,6 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
         description: "Ocorreu um erro ao tentar iniciar a ligação.",
         variant: "destructive"
       });
-    } finally {
-      setIsCalling(null);
     }
   };
 
@@ -119,9 +109,6 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Clientes no grupo: {groupName}</DialogTitle>
-          <DialogDescription>
-            Lista de todos os clientes associados a este grupo
-          </DialogDescription>
         </DialogHeader>
         
         {isLoading ? (
@@ -169,13 +156,8 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
                             handleCall(client);
                           }}
                           title="Ligar para cliente"
-                          disabled={isCalling === client.id}
                         >
-                          {isCalling === client.id ? (
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          ) : (
-                            <Phone className="h-4 w-4" />
-                          )}
+                          <Phone className="h-4 w-4" />
                         </Button>
                         <Button 
                           size="sm" 
@@ -186,13 +168,8 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
                             handleRemoveFromGroup(client.id);
                           }}
                           title="Remover do grupo"
-                          disabled={isRemoving === client.id}
                         >
-                          {isRemoving === client.id ? (
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          ) : (
-                            <X className="h-4 w-4" />
-                          )}
+                          <X className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>

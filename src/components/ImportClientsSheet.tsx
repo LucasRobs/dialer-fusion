@@ -5,8 +5,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
-  DialogDescription
+  DialogFooter 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -176,9 +175,6 @@ const ImportClientsSheet = ({ isOpen, onClose }: ImportClientsSheetProps) => {
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Importar Clientes</DialogTitle>
-          <DialogDescription>
-            Importe seus clientes de uma planilha ou inserindo diretamente os dados.
-          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">

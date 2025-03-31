@@ -10,22 +10,9 @@ export interface VapiAssistant {
   created_at?: string;
 }
 
-export interface WebhookPayload {
+interface WebhookPayload {
   action: string;
   campaign_id: number;
-  client_id?: number;
-  client_name?: string;
-  client_phone?: string;
-  user_id?: string;
-  additional_data?: Record<string, any>;
-}
-
-export interface WebhookData {
-  action: string;
-  campaign_id?: number;
-  client_name?: string;
-  client_phone?: string;
-  timestamp?: string;
   additional_data?: Record<string, any>;
 }
 
@@ -33,12 +20,6 @@ interface WebhookResponse {
   success: boolean;
   message?: string;
   data?: any;
-}
-
-interface AssistantCreationParams {
-  assistant_name: string;
-  first_message: string;
-  system_prompt: string;
 }
 
 export const webhookService = {
@@ -189,102 +170,6 @@ export const webhookService = {
         successfulCalls: 0,
         failedCalls: 1,
       };
-    }
-  },
-
-  // New methods to fix the errors
-  async createAssistant(params: AssistantCreationParams): Promise<WebhookResponse> {
-    try {
-      // This would normally call an external API, but for now just log and return success
-      console.log('Creating assistant with params:', params);
-      
-      // Log the webhook request
-      const { error: logError } = await supabase
-        .from('webhook_logs')
-        .insert([
-          {
-            action: 'create_assistant',
-            webhook_url: 'internal',
-            request_data: params,
-            success: true
-          }
-        ]);
-        
-      if (logError) {
-        console.error('Error logging webhook request:', logError);
-      }
-      
-      // Generate a dummy assistant ID
-      const dummyAssistantId = `asst_${Math.random().toString(36).substring(2, 15)}`;
-      
-      return {
-        success: true,
-        message: 'Assistant creation request sent successfully',
-        data: {
-          assistant_id: dummyAssistantId
-        }
-      };
-    } catch (error) {
-      console.error('Error creating assistant:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  },
-  
-  async getAssistantsFromVapi(): Promise<WebhookResponse> {
-    try {
-      // This would normally fetch from an external API, but we'll return dummy data
-      const assistants = [
-        {
-          id: 'asst_123456789',
-          name: 'Default Assistant',
-          status: 'ready',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'asst_987654321',
-          name: 'Customer Support Assistant',
-          status: 'ready',
-          created_at: new Date().toISOString()
-        }
-      ];
-      
-      return {
-        success: true,
-        data: assistants
-      };
-    } catch (error) {
-      console.error('Error fetching assistants:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  },
-  
-  async getAllAssistants(userId?: string): Promise<any[]> {
-    try {
-      // Fetch assistants from the database based on user ID
-      if (!userId) {
-        return [];
-      }
-      
-      const { data, error } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('user_id', userId);
-        
-      if (error) {
-        console.error('Error fetching assistants:', error);
-        return [];
-      }
-      
-      return data || [];
-    } catch (error) {
-      console.error('Error in getAllAssistants:', error);
-      return [];
     }
   }
 };
