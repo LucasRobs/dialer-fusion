@@ -114,7 +114,6 @@ export default function ClientList() {
   
   const handleEdit = (e, client) => {
     e.stopPropagation();
-    e.preventDefault();
     setSelectedClient(client);
     setName(client.name);
     setPhone(client.phone);
@@ -125,20 +124,17 @@ export default function ClientList() {
   
   const handleDelete = (e, client) => {
     e.stopPropagation();
-    e.preventDefault();
     setSelectedClient(client);
     setShowDeleteClientDialog(true);
   };
   
   const handleSubmitNew = async (e) => {
     e.preventDefault();
-    e.stopPropagation();
     addClientMutation.mutate({ name, phone, email, status });
   };
   
   const handleSubmitEdit = async (e) => {
     e.preventDefault();
-    e.stopPropagation();
     if (selectedClient) {
       updateClientMutation.mutate({ id: selectedClient.id, client: { name, phone, email, status } });
     }
@@ -146,7 +142,6 @@ export default function ClientList() {
   
   const confirmDelete = async (e) => {
     e.preventDefault();
-    e.stopPropagation();
     if (selectedClient) {
       deleteClientMutation.mutate(selectedClient.id);
     }
@@ -164,15 +159,42 @@ export default function ClientList() {
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Clientes</h1>
-        <Button onClick={handleNew}><Plus className="h-4 w-4 mr-2" />Adicionar Cliente</Button>
+        <div className="flex space-x-2">
+          <Select 
+            value={selectedGroupId} 
+            onValueChange={setSelectedGroupId}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filtrar por grupo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos os grupos</SelectItem>
+              {clientGroups.map(group => (
+                <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleNew}><Plus className="h-4 w-4 mr-2" />Adicionar Cliente</Button>
+        </div>
       </div>
-      <Input placeholder="Buscar clientes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+      
+      <div className="mb-4">
+        <Input 
+          placeholder="Buscar clientes..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
+          className="max-w-md"
+        />
+      </div>
+      
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Nome</TableHead>
             <TableHead>Telefone</TableHead>
             <TableHead>Email</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -181,10 +203,136 @@ export default function ClientList() {
               <TableCell>{client.name}</TableCell>
               <TableCell>{client.phone}</TableCell>
               <TableCell>{client.email}</TableCell>
+              <TableCell>
+              <Badge variant={client.status === 'Active' ? 'default' : 'destructive'}>
+                {client.status === 'Active' ? 'Ativo' : 'Inativo'}
+              </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={(e) => handleEdit(e, client)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={(e) => handleDelete(e, client)}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Excluir
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      
+      {/* Dialog para adicionar cliente */}
+      {showNewClientDialog && (
+        <Dialog open={showNewClientDialog} onOpenChange={setShowNewClientDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adicionar Cliente</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmitNew}>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="name" className="text-right">Nome</label>
+                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-3" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="phone" className="text-right">Telefone</label>
+                  <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="col-span-3" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="email" className="text-right">Email</label>
+                  <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="status" className="text-right">Status</label>
+                  <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Ativo</SelectItem>
+                      <SelectItem value="Inactive">Inativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowNewClientDialog(false)}>Cancelar</Button>
+                <Button type="submit">Salvar</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+      
+      {/* Dialog para editar cliente */}
+      {showEditClientDialog && selectedClient && (
+        <Dialog open={showEditClientDialog} onOpenChange={setShowEditClientDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Cliente</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmitEdit}>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="edit-name" className="text-right">Nome</label>
+                  <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} className="col-span-3" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="edit-phone" className="text-right">Telefone</label>
+                  <Input id="edit-phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="col-span-3" required />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="edit-email" className="text-right">Email</label>
+                  <Input id="edit-email" value={email} onChange={(e) => setEmail(e.target.value)} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="edit-status" className="text-right">Status</label>
+                  <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Ativo</SelectItem>
+                      <SelectItem value="Inactive">Inativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowEditClientDialog(false)}>Cancelar</Button>
+                <Button type="submit">Atualizar</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+      
+      {/* Dialog para confirmar exclusão */}
+      {showDeleteClientDialog && selectedClient && (
+        <Dialog open={showDeleteClientDialog} onOpenChange={setShowDeleteClientDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmar exclusão</DialogTitle>
+            </DialogHeader>
+            <p>Tem certeza que deseja excluir o cliente {selectedClient.name}?</p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowDeleteClientDialog(false)}>Cancelar</Button>
+              <Button type="button" variant="destructive" onClick={confirmDelete}>Excluir</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
