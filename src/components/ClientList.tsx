@@ -407,7 +407,7 @@ export default function ClientList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <ClientGroupRelation client={client} disabled={isSubmitting} />
+                      <ClientGroupRelation client={client}/>
                       <Button 
                         size="sm" 
                         variant="outline"
