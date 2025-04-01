@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 
 export type Client = {
@@ -15,98 +14,96 @@ export type Client = {
 export const clientService = {
   // Buscar todos os clientes do usuário atual
   async getClients() {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-
     const { data, error } = await supabase
       .from('clients')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data as Client[];
+      .select('*');
+
+    if (error) {
+      throw new Error(`Erro ao buscar clientes: ${error.message}`);
+    }
+
+    return data;
   },
 
-  // Buscar um cliente por ID (apenas se pertencer ao usuário atual)
+  // Buscar um cliente por ID
   async getClientById(id: number) {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-
     const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('id', id)
-      .eq('user_id', userId)
       .single();
-    
-    if (error) throw error;
-    return data as Client;
+
+    if (error) {
+      throw new Error(`Erro ao buscar cliente: ${error.message}`);
+    }
+
+    return data;
   },
 
   // Adicionar um novo cliente
   async addClient(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-
     const { data, error } = await supabase
       .from('clients')
-      .insert([{ ...client, user_id: userId }])
+      .insert(client)
       .select();
-    
-    if (error) throw error;
-    return data[0] as Client;
+
+    if (error) {
+      throw new Error(`Erro ao adicionar cliente: ${error.message}`);
+    }
+
+    return data;
   },
 
   // Atualizar um cliente existente
   async updateClient(id: number, client: Partial<Client>) {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-
     const { data, error } = await supabase
       .from('clients')
       .update(client)
       .eq('id', id)
-      .eq('user_id', userId) // Garantir que o cliente pertence ao usuário atual
       .select();
-    
-    if (error) throw error;
-    return data[0] as Client;
+
+    if (error) {
+      throw new Error(`Erro ao atualizar cliente: ${error.message}`);
+    }
+
+    return data;
   },
 
   // Excluir um cliente
   async deleteClient(id: number) {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('clients')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId); // Garantir que o cliente pertence ao usuário atual
-    
-    if (error) throw error;
-    return true;
+      .select();
+
+    if (error) {
+      throw new Error(`Erro ao excluir cliente: ${error.message}`);
+    }
+
+    return data;
   },
-  
+
   // Obter estatísticas dos clientes
   async getClientStats() {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw new Error(`Erro ao obter usuário: ${userError.message}`);
+
     const userId = userData?.user?.id;
 
     const { data: allClients, error: clientsError } = await supabase
       .from('clients')
       .select('id, status')
       .eq('user_id', userId);
-    
-    if (clientsError) throw clientsError;
-    
+
+    if (clientsError) throw new Error(`Erro ao buscar estatísticas: ${clientsError.message}`);
+
     const totalClients = allClients?.length || 0;
     const activeClients = allClients?.filter(client => client.status === 'Active')?.length || 0;
-    
+
     return {
       totalClients,
-      activeClients
+      activeClients,
     };
   },
 
@@ -119,36 +116,44 @@ export const clientService = {
         clients(*)
       `)
       .eq('group_id', groupId);
-    
-    if (error) throw error;
-    
-    // Properly extract and transform the nested clients data
-    // Each item.clients is an object, not an array
-    const clients = data.map(item => {
-      if (!item.clients) return null;
-      return item.clients as unknown as Client;
-    }).filter(Boolean) as Client[];
-    
+
+    if (error) {
+      throw new Error(`Erro ao buscar clientes por grupo: ${error.message}`);
+    }
+
+    const clients = data
+      .map(item => {
+        if (item.clients && typeof item.clients === 'object') {
+          return item.clients as unknown as Client;
+        }
+        return null;
+      })
+      .filter((client): client is Client => client !== null);
+
     return clients;
   },
 
   // Importar clientes de uma planilha
   async importClients(clients: Omit<Client, 'id' | 'created_at' | 'updated_at'>[]) {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw new Error(`Erro ao obter usuário: ${userError.message}`);
+
     const userId = userData?.user?.id;
 
-    // Adicionar user_id a cada cliente
     const clientsWithUserId = clients.map(client => ({
       ...client,
-      user_id: userId
+      user_id: userId,
     }));
 
     const { data, error } = await supabase
       .from('clients')
       .insert(clientsWithUserId)
       .select();
-    
-    if (error) throw error;
+
+    if (error) {
+      throw new Error(`Erro ao importar clientes: ${error.message}`);
+    }
+
     return data as Client[];
-  }
+  },
 };
