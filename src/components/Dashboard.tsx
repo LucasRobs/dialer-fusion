@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Users, 
@@ -8,15 +7,19 @@ import {
   BarChart3, 
   Clock,
   Zap,
-  Phone as PhoneIcon,
   PhoneOff,
   ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { webhookService } from '@/services/webhookService';
 
 const Dashboard = () => {
-  // Dummy data for dashboard stats
+  const [assistantName, setAssistantName] = useState('');
+  const [firstMessage, setFirstMessage] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const stats = {
     totalClients: 1250,
     activeClients: 876,
@@ -33,6 +36,31 @@ const Dashboard = () => {
     startTime: "09:30 AM",
     callsMade: 342,
     callsRemaining: 228,
+  };
+
+  const handleCreateAssistant = async () => {
+    setIsSubmitting(true);
+    try {
+      const response = await webhookService.createAssistant({
+        assistant_name: assistantName,
+        first_message: firstMessage,
+        system_prompt: systemPrompt,
+      });
+
+      if (response.success) {
+        alert('Assistente criado com sucesso!');
+        setAssistantName('');
+        setFirstMessage('');
+        setSystemPrompt('');
+      } else {
+        alert(`Erro: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Erro ao criar assistente:', error);
+      alert('Erro ao criar assistente. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -98,6 +126,61 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Form to Create Assistant */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Create Virtual Assistant</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="assistantName" className="block text-sm font-medium">
+                Assistant Name
+              </label>
+              <input
+                id="assistantName"
+                type="text"
+                value={assistantName}
+                onChange={(e) => setAssistantName(e.target.value)}
+                className="mt-1 block w-full border rounded-md p-2"
+                placeholder="Ex: Sales Assistant"
+              />
+            </div>
+            <div>
+              <label htmlFor="firstMessage" className="block text-sm font-medium">
+                First Message
+              </label>
+              <textarea
+                id="firstMessage"
+                value={firstMessage}
+                onChange={(e) => setFirstMessage(e.target.value)}
+                className="mt-1 block w-full border rounded-md p-2"
+                placeholder="Ex: Hello! How can I assist you today?"
+              />
+            </div>
+            <div>
+              <label htmlFor="systemPrompt" className="block text-sm font-medium">
+                System Prompt
+              </label>
+              <textarea
+                id="systemPrompt"
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                className="mt-1 block w-full border rounded-md p-2"
+                placeholder="Ex: You are a virtual assistant that helps customers with inquiries."
+              />
+            </div>
+            <Button
+              onClick={handleCreateAssistant}
+              disabled={isSubmitting}
+              className="w-full"
+            >
+              {isSubmitting ? 'Creating Assistant...' : 'Create Assistant'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -181,50 +264,6 @@ const Dashboard = () => {
             </Link>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Quick Actions */}
-      <h2 className="text-2xl font-bold mb-4">Quick Actions</h2>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Link to="/clients">
-          <Card className="h-full card-hover border-2 border-transparent hover:border-secondary/30">
-            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-              <Users className="h-10 w-10 mb-3 text-secondary" />
-              <h3 className="font-semibold text-lg mb-1">Manage Clients</h3>
-              <p className="text-sm text-foreground/70">Add, edit, or remove clients from your database</p>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link to="/training">
-          <Card className="h-full card-hover border-2 border-transparent hover:border-secondary/30">
-            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-              <Brain className="h-10 w-10 mb-3 text-secondary" />
-              <h3 className="font-semibold text-lg mb-1">Train AI Assistant</h3>
-              <p className="text-sm text-foreground/70">Customize your AI to match your business needs</p>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link to="/campaigns">
-          <Card className="h-full card-hover border-2 border-transparent hover:border-secondary/30">
-            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-              <Zap className="h-10 w-10 mb-3 text-secondary" />
-              <h3 className="font-semibold text-lg mb-1">Start Campaign</h3>
-              <p className="text-sm text-foreground/70">Launch a new mass calling campaign</p>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link to="/history">
-          <Card className="h-full card-hover border-2 border-transparent hover:border-secondary/30">
-            <CardContent className="p-6 flex flex-col items-center justify-center text-center">
-              <Clock className="h-10 w-10 mb-3 text-secondary" />
-              <h3 className="font-semibold text-lg mb-1">Contact History</h3>
-              <p className="text-sm text-foreground/70">See detailed history of your client interactions</p>
-            </CardContent>
-          </Card>
-        </Link>
       </div>
     </div>
   );
