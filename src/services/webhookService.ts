@@ -44,7 +44,7 @@ interface AssistantCreationParams {
 
 // Vapi API key
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
-const VAPI_API_URL = "https://dashboard.vapi.ai";
+const VAPI_API_URL = "https://api.vapi.ai";
 
 export const webhookService = {
   // Webhook para criar assistente virtual
