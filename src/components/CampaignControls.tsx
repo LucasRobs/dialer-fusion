@@ -8,6 +8,8 @@ import {
   BarChart3,
   Calendar,
   Trash2,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -35,11 +37,11 @@ import { campaignService } from '@/services/campaignService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+const supabaseUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3emxmam9pdW9vY2JhdGZpemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzNTY5ODEsImV4cCI6MjA1ODkzMjk4MX0.D10AhJ4BeF4vWtH--RYM7WKwePOlZOhEX2tRF0hTfHU';
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
+
 import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
 import { clientGroupService } from '@/services/clientGroupService';
@@ -66,6 +68,7 @@ const CampaignControls = () => {
 
   const [campaigns, setCampaigns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
     name: '',
     clientGroup: '',
@@ -80,10 +83,33 @@ const CampaignControls = () => {
   });
 
   // Fetch assistants
-  const { data: customAssistants = [], isLoading: isLoadingAssistants } = useQuery({
+  const { data: customAssistants = [], isLoading: isLoadingAssistants, refetch: refetchAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: () => assistantService.getAllAssistants(user?.id),
     enabled: !!user?.id,
+    staleTime: 0,
+  });
+
+  // Map assistants to AI profiles
+  const { data: aiProfiles = [] } = useQuery({
+    queryKey: ['aiProfiles', customAssistants.length],
+    queryFn: () => {
+      const readyAssistants = customAssistants.filter(
+        (assistant) =>
+          (assistant.status === 'ready' || !assistant.status) &&
+          (assistant.user_id === user?.id || !assistant.user_id)
+      );
+
+      return readyAssistants.map((assistant) => ({
+        id: assistant.id,
+        name: assistant.name,
+        assistant_id: assistant.assistant_id,
+        description: `Assistente criado em ${
+          assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'data desconhecida'
+        }`,
+      }));
+    },
+    enabled: customAssistants.length > 0,
     staleTime: 0,
   });
 
@@ -109,39 +135,6 @@ const CampaignControls = () => {
     },
     enabled: !!user?.id,
   });
-
-  // Map assistants to AI profiles
-  const { data: aiProfiles = [] } = useQuery({
-    queryKey: ['aiProfiles', customAssistants.length],
-    queryFn: () => {
-      const readyAssistants = customAssistants.filter(
-        (assistant) =>
-          (assistant.status === 'ready' || !assistant.status) &&
-          (assistant.user_id === user?.id || !assistant.user_id)
-      );
-
-      return readyAssistants.map((assistant) => ({
-        id: assistant.id,
-        name: assistant.name,
-        assistant_id: assistant.assistant_id,
-        description: `Assistant created on ${
-          assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'unknown date'
-        }`,
-      }));
-    },
-    enabled: customAssistants.length > 0,
-    staleTime: 0,
-  });
-
-  // Refetch assistants when customAssistants changes
-  const refetchAssistants = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['assistants'] });
-    await queryClient.invalidateQueries({ queryKey: ['aiProfiles'] });
-  };
-
-  useEffect(() => {
-    refetchAssistants();
-  }, [customAssistants]);
 
   useEffect(() => {
     if (supabaseCampaignsData) {
@@ -172,8 +165,8 @@ const CampaignControls = () => {
 
     if (!newCampaign.name || !newCampaign.clientGroup || !newCampaign.aiProfile) {
       toast({
-        title: 'Error',
-        description: 'Please fill in all required fields',
+        title: 'Erro',
+        description: 'Por favor, preencha todos os campos obrigatórios',
         variant: 'destructive',
       });
       return;
@@ -190,14 +183,20 @@ const CampaignControls = () => {
 
     if (!selectedAssistantProfile) {
       toast({
-        title: 'Error',
-        description: 'Please select a valid AI assistant',
+        title: 'Erro',
+        description: 'Por favor, selecione um assistente de IA válido',
         variant: 'destructive',
       });
       return;
     }
 
     try {
+      // Salvar o assistente selecionado no localStorage
+      localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistantProfile));
+      console.log('Assistente selecionado para campanha:', selectedAssistantProfile);
+
+      setIsSubmitting(true);
+
       const createdCampaign = await campaignService.createCampaign({
         name: newCampaign.name,
         status: 'draft',
@@ -211,7 +210,7 @@ const CampaignControls = () => {
 
       toast({
         title: 'Campanha Criada',
-        description: 'Sua nova campanha está pronta para iniciar.',
+        description: `Sua campanha "${newCampaign.name}" foi criada com o assistente "${selectedAssistantProfile.name}"`,
       });
 
       setNewCampaign({
@@ -228,6 +227,8 @@ const CampaignControls = () => {
         description: 'Houve um problema ao criar sua campanha. Por favor, tente novamente.',
         variant: 'destructive',
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -237,8 +238,14 @@ const CampaignControls = () => {
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold">Suas Campanhas</h2>
-            <Button size="sm" onClick={() => refetchAssistants()}>
-              <BarChart3 className="h-4 w-4 mr-2" />
+            <Button size="sm" onClick={() => {
+              refetchAssistants();
+              toast({
+                title: "Assistentes Atualizados",
+                description: "Lista de assistentes foi atualizada com sucesso."
+              });
+            }}>
+              <RefreshCw className="h-4 w-4 mr-2" />
               Atualizar Assistentes
             </Button>
           </div>
@@ -249,8 +256,8 @@ const CampaignControls = () => {
             <Card>
               <CardContent className="flex items-center justify-center py-12">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Carregando campanhas...</p>
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="text-muted-foreground mt-4">Carregando campanhas...</p>
                 </div>
               </CardContent>
             </Card>
@@ -264,7 +271,7 @@ const CampaignControls = () => {
                       <div>
                         <CardTitle className="text-xl">{campaign.name}</CardTitle>
                         <CardDescription>
-                          Started: {campaign.startDate} · {campaign.clientGroup} ({campaign.clientCount} clients)
+                          Iniciada: {campaign.startDate} · {campaign.clientGroup} ({campaign.clientCount} clientes)
                         </CardDescription>
                       </div>
                       <div className={`px-2 py-1 rounded text-xs uppercase font-semibold ${getStatusColor(campaign.status)}`}>
@@ -276,7 +283,7 @@ const CampaignControls = () => {
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between mb-1 text-sm">
-                          <span>Progress: {campaign.completedCalls} of {campaign.clientCount} calls completed</span>
+                          <span>Progresso: {campaign.completedCalls} de {campaign.clientCount} chamadas concluídas</span>
                           <span>{campaign.progress}%</span>
                         </div>
                         <Progress value={campaign.progress} className="h-2" />
@@ -292,9 +299,9 @@ const CampaignControls = () => {
                 <div className="rounded-full bg-muted p-3 mb-4">
                   <Calendar className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h3 className="text-xl font-semibold mb-2">No Campaigns Yet</h3>
+                <h3 className="text-xl font-semibold mb-2">Nenhuma Campanha</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  Create your first campaign to start reaching out to your clients.
+                  Crie sua primeira campanha para começar a alcançar seus clientes.
                 </p>
               </CardContent>
             </Card>
@@ -312,10 +319,10 @@ const CampaignControls = () => {
             <CardContent>
               <form onSubmit={handleCreateCampaign} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Campaign Name</Label>
+                  <Label htmlFor="name">Nome da Campanha</Label>
                   <Input
                     id="name"
-                    placeholder="Summer Promotion 2023"
+                    placeholder="Promoção de Verão 2023"
                     value={newCampaign.name}
                     onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
                     required
@@ -323,23 +330,23 @@ const CampaignControls = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="clientGroup">Select Client Group</Label>
+                  <Label htmlFor="clientGroup">Selecionar Grupo de Clientes</Label>
                   <Select
                     value={newCampaign.clientGroup}
                     onValueChange={(value) => setNewCampaign({ ...newCampaign, clientGroup: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a client group" />
+                      <SelectValue placeholder="Selecione um grupo de clientes" />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingGroups ? (
-                        <SelectItem value="loading" disabled>Loading client groups...</SelectItem>
+                        <SelectItem value="loading" disabled>Carregando grupos de clientes...</SelectItem>
                       ) : userClientGroups.length === 0 ? (
-                        <SelectItem value="no-groups" disabled>No client groups available</SelectItem>
+                        <SelectItem value="no-groups" disabled>Nenhum grupo de clientes disponível</SelectItem>
                       ) : (
                         userClientGroups.map((group) => (
                           <SelectItem key={group.id} value={group.id.toString()}>
-                            {group.name} ({group.client_count || 0} clients)
+                            {group.name} ({group.client_count || 0} clientes)
                           </SelectItem>
                         ))
                       )}
@@ -348,20 +355,20 @@ const CampaignControls = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="aiProfile">Select AI Assistant</Label>
+                  <Label htmlFor="aiProfile">Selecionar Assistente de IA</Label>
                   <Select
                     value={newCampaign.aiProfile}
                     onValueChange={(value) => setNewCampaign({ ...newCampaign, aiProfile: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select an AI assistant" />
+                      <SelectValue placeholder="Selecione um assistente de IA" />
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingAssistants ? (
-                        <SelectItem value="loading" disabled>Loading assistants...</SelectItem>
+                        <SelectItem value="loading" disabled>Carregando assistentes...</SelectItem>
                       ) : aiProfiles.length === 0 ? (
                         <SelectItem value="no-assistants" disabled>
-                          No assistants available - create one in the Training section
+                          Nenhum assistente disponível - crie um na seção de Treinamento
                         </SelectItem>
                       ) : (
                         aiProfiles.map((profile) => (
@@ -372,16 +379,30 @@ const CampaignControls = () => {
                       )}
                     </SelectContent>
                   </Select>
+                  {aiProfiles.length === 0 && (
+                    <div className="p-2 bg-amber-50 text-amber-800 rounded text-xs mt-1">
+                      Você precisa criar um assistente na seção de Treinamento de IA antes de criar uma campanha.
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4">
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={aiProfiles.length === 0}
+                    disabled={aiProfiles.length === 0 || isSubmitting}
                   >
-                    <Save className="h-4 w-4 mr-2" />
-                    Create Campaign
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Criando Campanha...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Criar Campanha
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>

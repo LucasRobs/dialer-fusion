@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { webhookService } from '@/services/webhookService';
 import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { PlusCircle, Check, X, RefreshCw, Settings, Info, Trash2, Loader2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface AssistantResponse {
   success: boolean;
@@ -28,9 +31,24 @@ const AITraining = () => {
   const [aiName, setAiName] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
+
+  // Carregar assistente selecionado do localStorage ao montar o componente
+  useEffect(() => {
+    try {
+      const savedAssistant = localStorage.getItem('selected_assistant');
+      if (savedAssistant) {
+        const assistant = JSON.parse(savedAssistant);
+        setSelectedAssistantId(assistant.id);
+        console.log('Assistente atual carregado do localStorage:', assistant);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar assistente do localStorage:', error);
+    }
+  }, []);
 
   // Fetch existing assistants for the current user
-  const { data: assistants = [], isLoading } = useQuery({
+  const { data: assistants = [], isLoading, refetch } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: () => assistantService.getAllAssistants(user?.id),
     enabled: !!user?.id,
@@ -75,6 +93,10 @@ const AITraining = () => {
             description: "Seu assistente foi criado e está pronto para uso.",
           });
 
+          // Selecionar o novo assistente automaticamente
+          localStorage.setItem('selected_assistant', JSON.stringify(savedAssistant));
+          setSelectedAssistantId(savedAssistant.id);
+
           // Atualizar a lista de assistentes
           queryClient.invalidateQueries({ queryKey: ['assistants', user?.id] });
 
@@ -108,6 +130,28 @@ const AITraining = () => {
     }
   };
 
+  const handleSelectAssistant = async (assistantId: string) => {
+    try {
+      const assistant = assistants.find(a => a.id === assistantId);
+      if (assistant) {
+        localStorage.setItem('selected_assistant', JSON.stringify(assistant));
+        setSelectedAssistantId(assistantId);
+        
+        toast({
+          title: "Assistente selecionado",
+          description: `O assistente "${assistant.name}" foi selecionado com sucesso.`,
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao selecionar assistente:', error);
+      toast({
+        title: "Erro ao selecionar assistente",
+        description: "Não foi possível selecionar o assistente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 max-w-4xl">
       <div className="mb-8">
@@ -117,25 +161,95 @@ const AITraining = () => {
         </p>
       </div>
 
+      {/* Status do assistente atual */}
+      {selectedAssistantId && (
+        <Alert className="mb-8 border-primary/20 bg-primary/5">
+          <Info className="h-4 w-4 text-primary" />
+          <AlertTitle>Assistente Ativo</AlertTitle>
+          <AlertDescription>
+            {assistants.find(a => a.id === selectedAssistantId)?.name || 'Assistente selecionado'} está 
+            configurado como seu assistente padrão para campanhas.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Lista de assistentes existentes */}
       {assistants.length > 0 && (
         <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Assistentes Criados</CardTitle>
-            <CardDescription>
-              Assistentes de IA que você já configurou
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle>Assistentes Disponíveis</CardTitle>
+              <CardDescription>
+                Selecione um assistente para usar em suas campanhas
+              </CardDescription>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetch()}
+              className="text-xs"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Atualizar
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {assistants.map((assistant) => (
-                <div key={assistant.id} className="p-4 border rounded-md">
-                  <div className="font-medium">{assistant.name}</div>
-                  <div className="text-sm text-muted-foreground mt-1">
-                    Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
-                  </div>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ))}
+              ) : (
+                assistants.map((assistant) => (
+                  <div 
+                    key={assistant.id} 
+                    className={`p-4 border rounded-lg transition-all ${
+                      selectedAssistantId === assistant.id 
+                        ? 'border-primary bg-primary/5' 
+                        : 'hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-medium flex items-center">
+                          {assistant.name}
+                          {assistant.status === 'ready' && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-200">
+                              Pronto
+                            </Badge>
+                          )}
+                          {assistant.status === 'pending' && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                              Pendente
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
+                        </div>
+                        <div className="text-sm mt-2 text-muted-foreground line-clamp-2">
+                          {assistant.system_prompt || 'Sem descrição'}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={selectedAssistantId === assistant.id ? "default" : "outline"}
+                        onClick={() => handleSelectAssistant(assistant.id)}
+                        className="shrink-0"
+                      >
+                        {selectedAssistantId === assistant.id ? (
+                          <>
+                            <Check className="h-4 w-4 mr-1" />
+                            Selecionado
+                          </>
+                        ) : (
+                          'Selecionar'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -144,7 +258,7 @@ const AITraining = () => {
       {/* Formulário para criar novo assistente */}
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Configurar Assistente Virtual</CardTitle>
+          <CardTitle>Configurar Novo Assistente Virtual</CardTitle>
           <CardDescription>
             Defina as configurações básicas para seu assistente virtual
           </CardDescription>
@@ -196,11 +310,14 @@ const AITraining = () => {
             <Button type="submit" disabled={isSubmitting} className="w-full">
               {isSubmitting ? (
                 <>
-                  <div className="animate-spin mr-2 h-4 w-4 border-t-2 border-b-2 border-current rounded-full"></div>
+                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
                   Criando Assistente...
                 </>
               ) : (
-                "Criar Assistente"
+                <>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Criar Assistente
+                </>
               )}
             </Button>
           </CardFooter>
