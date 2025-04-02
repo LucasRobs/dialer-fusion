@@ -52,7 +52,7 @@ export const webhookService = {
     try {
       console.log('Criando assistente com parâmetros:', params);
 
-      // Atualizado para usar os campos `instructions` e `default_message`
+      // Simplificando para usar os campos exatos que a API espera
       const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'POST',
         headers: {
@@ -61,8 +61,8 @@ export const webhookService = {
         },
         body: JSON.stringify({
           name: params.assistant_name,
-          instructions: params.system_prompt, // Usando `instructions` no lugar de `prompt`
-          default_message: params.first_message, // Usando `default_message` no lugar de `first_message`
+          prompt: params.system_prompt,
+          first_message: params.first_message,
         }),
       });
 
@@ -178,7 +178,7 @@ export const webhookService = {
     }
   },
 
-  
+
   // Webhook para fazer a ligação
   async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<WebhookResponse> {
     try {
