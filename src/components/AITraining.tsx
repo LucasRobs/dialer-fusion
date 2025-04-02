@@ -11,18 +11,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PlusCircle, Check, X, RefreshCw, Settings, Info, Trash2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-
-interface AssistantResponse {
-  success: boolean;
-  data?: {
-    assistant_id: string;
-    [key: string]: any;
-  };
-  error?: string;
-}
+import { toast } from 'sonner';
 
 const AITraining = () => {
-  const { toast } = useToast();
+  const { toast: uiToast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -31,6 +23,8 @@ const AITraining = () => {
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
+
+  console.log('Current user:', user);
 
   // Carregar assistente selecionado do localStorage ao montar o componente
   useEffect(() => {
@@ -47,17 +41,37 @@ const AITraining = () => {
   }, []);
 
   // Fetch existing assistants for the current user
-  const { data: assistants = [], isLoading, refetch } = useQuery({
+  const { 
+    data: assistants = [], 
+    isLoading, 
+    refetch,
+    error: fetchError
+  } = useQuery({
     queryKey: ['assistants', user?.id],
-    queryFn: () => webhookService.getAllAssistants(user?.id),
+    queryFn: () => {
+      console.log('Fetching assistants for user ID:', user?.id);
+      return webhookService.getAllAssistants(user?.id);
+    },
     enabled: !!user?.id,
   });
+
+  // Log fetch error if there is one
+  useEffect(() => {
+    if (fetchError) {
+      console.error('Error fetching assistants:', fetchError);
+    }
+  }, [fetchError]);
+
+  // Log assistants when they change
+  useEffect(() => {
+    console.log('Assistants loaded:', assistants);
+  }, [assistants]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!aiName || !firstMessage || !systemPrompt) {
-      toast({
+      uiToast({
         title: "Campos obrigatórios",
         description: "Por favor, preencha todos os campos obrigatórios.",
         variant: "destructive",
@@ -78,7 +92,7 @@ const AITraining = () => {
       if (response.success && response.data) {
         console.log('Assistente criado no Vapi:', response.data);
         
-        toast({
+        uiToast({
           title: "Assistente criado com sucesso",
           description: "Seu assistente foi criado e está pronto para uso.",
         });
@@ -92,7 +106,7 @@ const AITraining = () => {
         setFirstMessage('');
         setSystemPrompt('');
       } else {
-        toast({
+        uiToast({
           title: "Erro ao criar assistente",
           description: response.message || "Houve um problema ao criar o assistente no Vapi.",
           variant: "destructive",
@@ -100,7 +114,7 @@ const AITraining = () => {
       }
     } catch (error) {
       console.error("Erro ao criar assistente:", error);
-      toast({
+      uiToast({
         title: "Erro ao criar assistente",
         description: "Houve um problema ao criar o assistente. Por favor, tente novamente.",
         variant: "destructive",
@@ -118,21 +132,14 @@ const AITraining = () => {
         localStorage.setItem('selected_assistant', JSON.stringify(assistant));
         setSelectedAssistantId(assistantId);
         
-        toast({
-          title: "Assistente selecionado",
-          description: `O assistente "${assistant.name}" foi selecionado com sucesso.`,
-        });
+        toast.success(`Assistente "${assistant.name}" selecionado com sucesso.`);
         
         // Force a refresh of any component that depends on selected_assistant
         window.dispatchEvent(new Event('storage'));
       }
     } catch (error) {
       console.error('Erro ao selecionar assistente:', error);
-      toast({
-        title: "Erro ao selecionar assistente",
-        description: "Não foi possível selecionar o assistente.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível selecionar o assistente.");
     }
   };
 
@@ -215,6 +222,9 @@ const AITraining = () => {
                         Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
                       </div>
                       <div className="text-sm mt-2 text-muted-foreground line-clamp-2">
+                        {assistant.system_prompt && (
+                          <span>Prompt: {assistant.system_prompt}</span>
+                        )}
                       </div>
                     </div>
                     <Button
