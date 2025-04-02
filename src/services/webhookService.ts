@@ -42,32 +42,38 @@ interface AssistantCreationParams {
   system_prompt: string;
 }
 
+// Vapi API key
+const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
+const VAPI_API_URL = "https://api.vapi.ai";
+
+
 export const webhookService = {
   // Webhook para criar assistente virtual
     async createAssistant(params: AssistantCreationParams): Promise<WebhookResponse> {
       try {
         console.log('Criando assistente com parâmetros:', params);
         
-        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/createassistant', {
+        const response = await fetch(`${VAPI_API_URL}/assistants`, {
           method: 'POST',
           headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             name: params.assistant_name,
-            firstMessage: params.first_message,
+            first_message: params.first_message,
             prompt: params.system_prompt,
           }),
         });
   
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Resposta de erro do webhook:', errorText);
+          console.error('Resposta de erro da Vapi:', errorText);
           throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
         }
   
         const data = await response.json();
-        console.log('Assistente criado com sucesso:', data);
+        console.log('Assistente criado com sucesso via API da Vapi:', data);
         
         // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
         if (data && data.id) {
@@ -118,35 +124,28 @@ export const webhookService = {
 
     async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
       try {
-        console.log('Buscando assistentes diretamente do Vapi para o usuário:', userId);
+        console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
         
-        if (!userId) {
-          console.log('ID do usuário não fornecido, retornando lista vazia');
-          return [];
-        }
-        
-        // Buscar assistentes diretamente do Vapi em vez do banco de dados
-        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/getassistants', {
-          method: 'POST',
+        // Fazer chamada direta para a API da Vapi para buscar todos os assistentes
+        const response = await fetch(`${VAPI_API_URL}/assistants`, {
+          method: 'GET',
           headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
             'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: userId
-          }),
+          }
         });
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Erro ao buscar assistentes do Vapi:', errorText);
+          console.error('Erro ao buscar assistentes da Vapi:', errorText);
           throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
         }
         
-        const data = await response.json();
-        console.log('Assistentes recuperados do Vapi:', data);
+        const assistantsData = await response.json();
+        console.log('Todos os assistentes recuperados da Vapi:', assistantsData);
         
         // Converter para o formato VapiAssistant
-        const assistants: VapiAssistant[] = data.map((assistant: any) => ({
+        const assistants: VapiAssistant[] = assistantsData.map((assistant: any) => ({
           id: assistant.id,
           name: assistant.name || 'Assistente sem nome',
           assistant_id: assistant.id,
@@ -157,10 +156,10 @@ export const webhookService = {
           first_message: assistant.first_message || assistant.firstMessage
         }));
         
-        console.log(`Encontrados ${assistants.length} assistentes do Vapi`);
+        console.log(`Encontrados ${assistants.length} assistentes da Vapi`);
         return assistants;
       } catch (error) {
-        console.error('Erro ao buscar assistentes do Vapi:', error);
+        console.error('Erro ao buscar assistentes da Vapi:', error);
         
         // Fallback: tentar buscar do banco de dados local caso a API falhe
         console.log('Tentando buscar do banco de dados local como fallback');

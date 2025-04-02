@@ -41,7 +41,7 @@ const AITraining = () => {
     }
   }, []);
 
-  // Fetch existing assistants for the current user
+  // Fetch existing assistants directly from Vapi using the API key
   const { 
     data: assistants = [], 
     isLoading, 
@@ -50,14 +50,15 @@ const AITraining = () => {
   } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
-      console.log('Buscando assistentes para o usuário ID:', user?.id);
+      console.log('Buscando assistentes da Vapi para o usuário ID:', user?.id);
       setIsLoadingAssistants(true);
       try {
+        // Buscar todos os assistentes diretamente da Vapi
         const results = await webhookService.getAllAssistants(user?.id);
-        console.log('Assistentes retornados da API:', results);
+        console.log('Assistentes retornados da API da Vapi:', results);
         return results;
       } catch (error) {
-        console.error('Erro na busca de assistentes:', error);
+        console.error('Erro na busca de assistentes da Vapi:', error);
         throw error;
       } finally {
         setIsLoadingAssistants(false);
@@ -69,14 +70,14 @@ const AITraining = () => {
   // Log fetch error if there is one
   useEffect(() => {
     if (fetchError) {
-      console.error('Error fetching assistants:', fetchError);
-      toast.error("Erro ao buscar assistentes do Vapi");
+      console.error('Error fetching assistants from Vapi:', fetchError);
+      toast.error("Erro ao buscar assistentes da Vapi");
     }
   }, [fetchError]);
 
-  // Log assistants when they change
-  useEffect(() => {
-    console.log('Assistants loaded:', assistants);
+   // Log assistants when they change
+   useEffect(() => {
+    console.log('Assistants loaded from Vapi:', assistants);
   }, [assistants]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,7 +95,7 @@ const AITraining = () => {
     setIsSubmitting(true);
 
     try {
-      // Enviar dados para o webhook via serviço
+      // Enviar dados para a API da Vapi diretamente
       const response = await webhookService.createAssistant({
         assistant_name: aiName,
         first_message: firstMessage,
@@ -102,9 +103,9 @@ const AITraining = () => {
       });
 
       if (response.success && response.data) {
-        console.log('Assistente criado no Vapi:', response.data);
+        console.log('Assistente criado na Vapi:', response.data);
         
-        toast.success("Assistente criado com sucesso");
+        toast.success("Assistente criado com sucesso na Vapi");
 
         // Atualizar a lista de assistentes
         await refetch();
@@ -114,10 +115,10 @@ const AITraining = () => {
         setFirstMessage('');
         setSystemPrompt('');
       } else {
-        toast.error(response.message || "Houve um problema ao criar o assistente no Vapi.");
+        toast.error(response.message || "Houve um problema ao criar o assistente na Vapi.");
       }
     } catch (error) {
-      console.error("Erro ao criar assistente:", error);
+      console.error("Erro ao criar assistente na Vapi:", error);
       toast.error("Erro ao criar assistente. Por favor, tente novamente.");
     } finally {
       setIsSubmitting(false);

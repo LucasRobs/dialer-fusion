@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,12 +33,13 @@ const Dashboard = () => {
     }
   });
   
-  // Buscar assistente selecionado
-  const { data: assistants } = useQuery({
-    queryKey: ['assistants'],
+  // Buscar assistentes - usando a API da Vapi diretamente
+  const { data: assistants, isLoading: loadingAssistants, refetch: refetchAssistants } = useQuery({
+    queryKey: ['assistants', user?.id],
     queryFn: async () => {
       try {
         if (!user?.id) return [];
+        console.log("Buscando assistentes para o usuário:", user.id);
         return await webhookService.getAllAssistants(user.id);
       } catch (error) {
         console.error("Erro ao buscar assistentes:", error);
