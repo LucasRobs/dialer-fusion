@@ -7,6 +7,8 @@ export interface VapiAssistant {
   user_id?: string;
   status?: string;
   created_at?: string;
+  system_prompt?: string;
+  first_message?: string;
 }
 
 export interface WebhookPayload {

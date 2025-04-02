@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { webhookService } from '@/services/webhookService';
+import { webhookService, VapiAssistant } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PlusCircle, Check, X, RefreshCw, Settings, Info, Trash2, Loader2 } from 'lucide-react';
