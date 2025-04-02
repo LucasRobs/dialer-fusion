@@ -15,11 +15,13 @@ import { Button } from '@/components/ui/button';
 import { webhookService } from '@/services/webhookService';
 
 const Dashboard = () => {
+  // State for creating a virtual assistant
   const [assistantName, setAssistantName] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Dashboard stats
   const stats = {
     totalClients: 1250,
     activeClients: 876,
@@ -29,6 +31,7 @@ const Dashboard = () => {
     completionRate: '87%',
   };
 
+  // Active campaign details
   const campaignStatus = {
     active: true,
     name: "Summer Promotion 2023",
@@ -38,6 +41,7 @@ const Dashboard = () => {
     callsRemaining: 228,
   };
 
+  // Handle creating a virtual assistant
   const handleCreateAssistant = async () => {
     setIsSubmitting(true);
     try {
@@ -53,18 +57,35 @@ const Dashboard = () => {
         setFirstMessage('');
         setSystemPrompt('');
       } else {
-        alert(`Erro: ${response.message}`);
+        alert(`Erro ao criar assistente: ${response.message}`);
       }
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
-      alert('Erro ao criar assistente. Tente novamente.');
+      alert('Erro ao criar assistente. Verifique os logs para mais detalhes.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Handle making a call
+  const handleMakeCall = async () => {
+    try {
+      const response = await webhookService.makeCall(1, '+5511999999999', 123); // Replace with real values
+
+      if (response.success) {
+        alert('Ligação iniciada com sucesso!');
+      } else {
+        alert(`Erro ao iniciar ligação: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar ligação:', error);
+      alert('Erro ao iniciar ligação. Verifique os logs para mais detalhes.');
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold">Welcome back, User</h1>
