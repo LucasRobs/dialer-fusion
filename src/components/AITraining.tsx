@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
@@ -24,6 +23,7 @@ const AITraining = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiName, setAiName] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
@@ -33,67 +33,76 @@ const AITraining = () => {
   const { data: assistants = [], isLoading } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: () => assistantService.getAllAssistants(user?.id),
-    enabled: !!user?.id
+    enabled: !!user?.id,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!aiName || !firstMessage || !systemPrompt) {
       toast({
         title: "Campos obrigatórios",
         description: "Por favor, preencha todos os campos obrigatórios.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
       // Enviar dados para o webhook via serviço
       const response = await webhookService.createAssistant({
         assistant_name: aiName,
         first_message: firstMessage,
-        system_prompt: systemPrompt
-      }) as AssistantResponse;
-      
-      if (response.success && response.data && response.data.assistant_id) {
-        // Salvar assistente no banco de dados com o user_id
+        system_prompt: systemPrompt,
+      });
+
+      if (response.success && response.data?.assistant_id) {
+        // Salvar assistente no banco de dados
         const savedAssistant = await assistantService.saveAssistant({
           name: aiName,
           assistant_id: response.data.assistant_id,
           system_prompt: systemPrompt,
           first_message: firstMessage,
           user_id: user?.id,
-          status: 'ready'
+          status: 'ready',
         });
-        
+
         if (savedAssistant) {
           toast({
             title: "Assistente criado com sucesso",
-            description: "Seu assistente de IA foi criado e configurado.",
+            description: "Seu assistente foi criado e está pronto para uso.",
           });
-          
-          // Reset form
+
+          // Atualizar a lista de assistentes
+          queryClient.invalidateQueries({ queryKey: ['assistants', user?.id] });
+
+          // Resetar o formulário
           setAiName('');
           setFirstMessage('');
           setSystemPrompt('');
-          
-          // Refresh assistants list
-          queryClient.invalidateQueries({ queryKey: ['assistants'] });
         } else {
           toast({
             title: "Erro ao salvar assistente",
-            description: "O assistente foi criado na Vapi, mas não foi possível salvá-lo no banco de dados.",
-            variant: "destructive"
+            description: "O assistente foi criado, mas não foi possível salvá-lo no banco de dados.",
+            variant: "destructive",
           });
         }
       } else {
-        console.error('Erro na resposta do webhook:', response);
+        toast({
+          title: "Erro ao criar assistente",
+          description: "Houve um problema ao criar o assistente.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error('Error creating assistant:', error);
+      console.error("Erro ao criar assistente:", error);
+      toast({
+        title: "Erro ao criar assistente",
+        description: "Houve um problema ao criar o assistente. Por favor, tente novamente.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -107,7 +116,7 @@ const AITraining = () => {
           Configure seu assistente virtual personalizado para interagir com seus clientes.
         </p>
       </div>
-      
+
       {/* Lista de assistentes existentes */}
       {assistants.length > 0 && (
         <Card className="mb-8">
@@ -119,7 +128,7 @@ const AITraining = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {assistants.map(assistant => (
+              {assistants.map((assistant) => (
                 <div key={assistant.id} className="p-4 border rounded-md">
                   <div className="font-medium">{assistant.name}</div>
                   <div className="text-sm text-muted-foreground mt-1">
@@ -131,7 +140,7 @@ const AITraining = () => {
           </CardContent>
         </Card>
       )}
-      
+
       {/* Formulário para criar novo assistente */}
       <Card className="mb-8">
         <CardHeader>
@@ -152,7 +161,7 @@ const AITraining = () => {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="firstMessage">Primeira Mensagem</Label>
               <Textarea
@@ -167,7 +176,7 @@ const AITraining = () => {
                 Esta será a primeira mensagem que seu assistente enviará ao cliente.
               </p>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="systemPrompt">Prompt do Sistema</Label>
               <Textarea

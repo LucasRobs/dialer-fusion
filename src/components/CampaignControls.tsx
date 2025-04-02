@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -31,361 +30,173 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
-import { webhookService, VapiAssistant } from '@/services/webhookService';
+import { webhookService } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
-import { clientGroupService, ClientGroup } from '@/services/clientGroupService';
+import { clientGroupService } from '@/services/clientGroupService';
+
+const getStatusColor = (status: string): string => {
+  switch (status) {
+    case 'active':
+      return 'bg-green-500';
+    case 'draft':
+      return 'bg-yellow-500';
+    case 'completed':
+      return 'bg-blue-500';
+    case 'paused':
+      return 'bg-gray-500';
+    default:
+      return 'bg-red-500';
+  }
+};
 
 const CampaignControls = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
   const [campaigns, setCampaigns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  
   const [newCampaign, setNewCampaign] = useState({
     name: '',
     clientGroup: '',
     aiProfile: '',
   });
-  
-  const { toast } = useToast();
-  
-  const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
-  
-  const { user } = useAuth();
-  
+
+  // Fetch campaigns
   const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
-    queryFn: async () => {
-      return await campaignService.getCampaigns();
-    },
-    staleTime: 0
+    queryFn: async () => await campaignService.getCampaigns(),
+    staleTime: 0,
   });
-  
+
+  // Fetch assistants
   const { data: customAssistants = [], isLoading: isLoadingAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: () => assistantService.getAllAssistants(user?.id),
     enabled: !!user?.id,
-    staleTime: 0
+    staleTime: 0,
   });
-  
-  const { refetch: refetchAssistants } = useQuery({
-    queryKey: ['assistants-refetch', user?.id],
-    queryFn: () => assistantService.getAllAssistants(user?.id),
-    enabled: false
-  });
-  
-  useEffect(() => {
-    if (customAssistants.length > 0) {
-      try {
-        const storedAssistant = localStorage.getItem('selected_assistant');
-        if (storedAssistant) {
-          const assistant = JSON.parse(storedAssistant);
-          setSelectedAssistant(assistant);
-        } else if (customAssistants.length > 0) {
-          const readyAssistants = customAssistants.filter(asst => asst.status !== 'pending');
-          if (readyAssistants.length > 0) {
-            setSelectedAssistant(readyAssistants[0]);
-            localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
-          }
-        }
-      } catch (error) {
-        console.error('Error loading selected assistant:', error);
-      }
-    }
-  }, [customAssistants]);
-  
-  // Fetch user-created client groups
+
+  // Fetch client groups
   const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['userClientGroups', user?.id],
     queryFn: async () => {
       try {
-        // Fetch all client groups created by the current user
         const groups = await clientGroupService.getClientGroups();
-        
-        // If no groups, return at least the "All Clients" option
-        if (!groups || groups.length === 0) {
-          const { count: totalCount } = await supabase
-            .from('clients')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user?.id);
-          
-          return [
-            { id: 'all', name: 'All Clients', client_count: totalCount || 0 }
-          ];
-        }
-        
-        // Add "All Clients" option
         const { count: totalCount } = await supabase
           .from('clients')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user?.id);
-        
+
         return [
           { id: 'all', name: 'All Clients', client_count: totalCount || 0 },
-          ...groups
+          ...groups,
         ];
       } catch (error) {
         console.error('Error fetching user client groups:', error);
-        return [
-          { id: 'all', name: 'All Clients', client_count: 0 }
-        ];
+        return [{ id: 'all', name: 'All Clients', client_count: 0 }];
       }
     },
-    enabled: !!user?.id
+    enabled: !!user?.id,
   });
-  
+
+  // Map assistants to AI profiles
   const { data: aiProfiles = [] } = useQuery({
     queryKey: ['aiProfiles', customAssistants.length],
     queryFn: () => {
-      const readyAssistants = customAssistants.filter(assistant => 
-        (assistant.status === 'ready' || !assistant.status) && 
-        (assistant.user_id === user?.id || !assistant.user_id)
+      const readyAssistants = customAssistants.filter(
+        (assistant) =>
+          (assistant.status === 'ready' || !assistant.status) &&
+          (assistant.user_id === user?.id || !assistant.user_id)
       );
-      
-      return readyAssistants.map(assistant => ({
+
+      return readyAssistants.map((assistant) => ({
         id: assistant.id,
         name: assistant.name,
         assistant_id: assistant.assistant_id,
-        description: `Assistant created on ${assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'unknown date'}`
+        description: `Assistant created on ${
+          assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'unknown date'
+        }`,
       }));
     },
     enabled: customAssistants.length > 0,
-    staleTime: 0
+    staleTime: 0,
   });
-  
+
+  // Refetch assistants when customAssistants changes
+  const refetchAssistants = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['assistants'] });
+    await queryClient.invalidateQueries({ queryKey: ['aiProfiles'] });
+  };
+
+  useEffect(() => {
+    refetchAssistants();
+  }, [customAssistants]);
+
   useEffect(() => {
     if (supabaseCampaignsData) {
-      const formattedCampaigns = supabaseCampaignsData.map(campaign => ({
+      const formattedCampaigns = supabaseCampaignsData.map((campaign) => ({
         id: campaign.id,
         name: campaign.name || 'Untitled Campaign',
         status: campaign.status || 'draft',
-        progress: campaign.total_calls > 0 
-          ? Math.round((campaign.answered_calls / campaign.total_calls) * 100) 
-          : 0,
+        progress:
+          campaign.total_calls > 0
+            ? Math.round((campaign.answered_calls / campaign.total_calls) * 100)
+            : 0,
         clientGroup: 'Active Clients',
         clientCount: campaign.total_calls || 0,
         completedCalls: campaign.answered_calls || 0,
         aiProfile: 'Sales Assistant',
-        startDate: campaign.start_date 
-          ? new Date(campaign.start_date).toLocaleDateString() 
-          : new Date().toLocaleDateString()
+        startDate: campaign.start_date
+          ? new Date(campaign.start_date).toLocaleDateString()
+          : new Date().toLocaleDateString(),
       }));
-      
+
       setCampaigns(formattedCampaigns);
       setIsLoading(false);
     }
   }, [supabaseCampaignsData]);
-  
-  const handleStartCampaign = async (id: number) => {
-    try {
-      setCampaigns(campaigns.map(campaign => 
-        campaign.id === id ? { ...campaign, status: 'active' } : campaign
-      ));
-      
-      const campaign = campaigns.find(c => c.id === id);
-      
-      if (campaign) {
-        const { data: existingCampaign } = await supabase
-          .from('campaigns')
-          .select('*')
-          .eq('id', id)
-          .single();
-        
-        if (existingCampaign) {
-          await campaignService.updateCampaign(id, {
-            status: 'active',
-            start_date: new Date().toISOString()
-          });
-          
-          const assistantProfile = aiProfiles.find(profile => profile.id.toString() === campaign.aiProfile);
-          let assistantName = '';
-          let assistantId = '';
-          
-          if (assistantProfile) {
-            assistantName = assistantProfile.name;
-            assistantId = assistantProfile.assistant_id || assistantProfile.id;
-          } else if (selectedAssistant) {
-            assistantName = selectedAssistant.name;
-            assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
-          }
-          
-          await webhookService.triggerCallWebhook({
-            action: 'start_campaign',
-            campaign_id: campaign.id,
-            additional_data: {
-              campaign_name: campaign.name,
-              client_count: campaign.clientCount,
-              assistant_name: assistantName,
-              assistant_id: assistantId,
-              ai_profile: assistantName || 'Default Assistant',
-            }
-          });
-          
-          const result = await webhookService.prepareBulkCallsForCampaign(campaign.id);
-          
-          if (result && result.success) {
-            toast({
-              title: "Campanha Iniciada",
-              description: `${result.successfulCalls} ligações foram enviadas com sucesso (${result.failedCalls} falhas).`,
-            });
-          } else {
-            toast({
-              title: "Campanha Iniciada Parcialmente",
-              description: "Alguns clientes não puderam ser contactados. Verifique os logs.",
-              variant: "destructive"
-            });
-          }
-        } else {
-          toast({
-            title: "Erro",
-            description: "Campanha não encontrada. Por favor, atualize a página e tente novamente.",
-            variant: "destructive"
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao iniciar campanha:', error);
-      
-      toast({
-        title: "Erro",
-        description: "Falha ao iniciar a campanha. Por favor, tente novamente.",
-        variant: "destructive"
-      });
-    }
-  };
-  
-  const handleDeleteCampaign = async (id: number) => {
-    try {
-      setCampaigns(campaigns.filter(campaign => campaign.id !== id));
-      
-      await campaignService.deleteCampaign(id);
-      
-      toast({
-        title: "Campanha Excluída",
-        description: "A campanha foi excluída com sucesso.",
-      });
-      
-      refetchCampaigns();
-    } catch (error) {
-      console.error('Erro ao excluir campanha:', error);
-      
-      toast({
-        title: "Erro ao Excluir",
-        description: "Houve um problema ao excluir a campanha. Por favor, tente novamente.",
-        variant: "destructive"
-      });
-      
-      refetchCampaigns();
-    }
-  };
-  
-  const handlePauseCampaign = async (id: number) => {
-    setCampaigns(campaigns.map(campaign => 
-      campaign.id === id ? { ...campaign, status: 'paused' } : campaign
-    ));
-    
-    const campaign = campaigns.find(c => c.id === id);
-    
-    if (campaign) {
-      try {
-        await webhookService.triggerCallWebhook({
-          action: 'pause_campaign',
-          campaign_id: campaign.id,
-          additional_data: {
-            campaign_name: campaign.name,
-            progress: campaign.progress
-          }
-        });
-        
-        toast({
-          title: "Campanha Pausada",
-          description: "Sua campanha de ligações foi pausada. Você pode retomá-la a qualquer momento.",
-        });
-      } catch (error) {
-        console.error('Erro ao notificar sistema de ligações:', error);
-        
-        toast({
-          title: "Campanha Pausada",
-          description: "Campanha pausada, mas houve um erro ao notificar o sistema de ligações.",
-          variant: "destructive"
-        });
-      }
-    }
-  };
-  
-  const handleStopCampaign = async (id: number) => {
-    setCampaigns(campaigns.map(campaign => 
-      campaign.id === id ? { ...campaign, status: 'stopped' } : campaign
-    ));
-    
-    const campaign = campaigns.find(c => c.id === id);
-    
-    if (campaign) {
-      try {
-        await webhookService.triggerCallWebhook({
-          action: 'stop_campaign',
-          campaign_id: campaign.id,
-          additional_data: {
-            campaign_name: campaign.name,
-            progress: campaign.progress,
-            completed_calls: campaign.completedCalls
-          }
-        });
-        
-        toast({
-          title: "Campanha Interrompida",
-          description: "Sua campanha de ligações foi interrompida.",
-        });
-      } catch (error) {
-        console.error('Erro ao notificar sistema de ligações:', error);
-        
-        toast({
-          title: "Campanha Interrompida",
-          description: "Campanha interrompida, mas houve um erro ao notificar o sistema de ligações.",
-          variant: "destructive"
-        });
-      }
-    }
-  };
-  
+
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newCampaign.name || !newCampaign.clientGroup || !newCampaign.aiProfile) {
       toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Please fill in all required fields',
+        variant: 'destructive',
       });
       return;
     }
-    
-    // Find the selected client group details
-    const selectedGroup = userClientGroups.find(group => group.id.toString() === newCampaign.clientGroup);
+
+    const selectedGroup = userClientGroups.find(
+      (group) => group.id.toString() === newCampaign.clientGroup
+    );
     const clientCount = selectedGroup ? selectedGroup.client_count || 0 : 0;
-    
-    const selectedAssistantProfile = aiProfiles.find(profile => profile.id.toString() === newCampaign.aiProfile);
-    
+
+    const selectedAssistantProfile = aiProfiles.find(
+      (profile) => profile.id.toString() === newCampaign.aiProfile
+    );
+
     if (!selectedAssistantProfile) {
       toast({
-        title: "Error",
-        description: "Please select a valid AI assistant",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Please select a valid AI assistant',
+        variant: 'destructive',
       });
       return;
     }
-    
-    const assistantToStore = {
-      id: selectedAssistantProfile.id,
-      name: selectedAssistantProfile.name,
-      assistant_id: selectedAssistantProfile.assistant_id || selectedAssistantProfile.id,
-      user_id: user?.id
-    };
-    
-    localStorage.setItem('selected_assistant', JSON.stringify(assistantToStore));
-    
+
     try {
       const createdCampaign = await campaignService.createCampaign({
         name: newCampaign.name,
@@ -395,61 +206,31 @@ const CampaignControls = () => {
         start_date: null,
         end_date: null,
         user_id: user?.id,
-        client_group_id: newCampaign.clientGroup !== 'all' ? newCampaign.clientGroup : null
+        client_group_id: newCampaign.clientGroup !== 'all' ? newCampaign.clientGroup : null,
       });
-      
-      await webhookService.triggerCallWebhook({
-        action: 'create_campaign',
-        campaign_id: createdCampaign.id,
-        additional_data: {
-          campaign_name: createdCampaign.name,
-          client_count: clientCount,
-          assistant_name: selectedAssistantProfile.name,
-          assistant_id: assistantToStore.assistant_id,
-          ai_profile: selectedAssistantProfile.name,
-          client_group: selectedGroup?.name,
-          client_group_id: newCampaign.clientGroup !== 'all' ? newCampaign.clientGroup : null
-        }
-      });
-      
+
       toast({
-        title: "Campanha Criada",
-        description: "Sua nova campanha está pronta para iniciar.",
+        title: 'Campanha Criada',
+        description: 'Sua nova campanha está pronta para iniciar.',
       });
-      
+
       setNewCampaign({
         name: '',
         clientGroup: '',
         aiProfile: '',
       });
-      
+
       await refetchCampaigns();
     } catch (error) {
       console.error('Erro ao criar campanha:', error);
-      
       toast({
-        title: "Erro ao Criar Campanha",
-        description: "Houve um problema ao criar sua campanha. Por favor, tente novamente.",
-        variant: "destructive"
+        title: 'Erro ao Criar Campanha',
+        description: 'Houve um problema ao criar sua campanha. Por favor, tente novamente.',
+        variant: 'destructive',
       });
     }
   };
-  
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-secondary text-white';
-      case 'paused':
-        return 'bg-yellow-500/80 text-white';
-      case 'completed':
-        return 'bg-blue-500/80 text-white';
-      case 'stopped':
-        return 'bg-destructive/80 text-white';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
-  
+
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -461,9 +242,9 @@ const CampaignControls = () => {
               Atualizar Assistentes
             </Button>
           </div>
-          
+
           <WorkflowStatus />
-          
+
           {isLoading ? (
             <Card>
               <CardContent className="flex items-center justify-center py-12">
@@ -500,55 +281,8 @@ const CampaignControls = () => {
                         </div>
                         <Progress value={campaign.progress} className="h-2" />
                       </div>
-                      
-                      <div className="flex text-sm text-muted-foreground">
-                        <div className="flex items-center mr-4">
-                          <Users className="h-4 w-4 mr-1" />
-                          <span>{campaign.clientGroup}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Settings className="h-4 w-4 mr-1" />
-                          <span>{campaign.aiProfile}</span>
-                        </div>
-                      </div>
                     </div>
                   </CardContent>
-                  <CardFooter className="border-t bg-muted/10 pt-4">
-                    <div className="flex gap-2 w-full">
-                      {campaign.status === 'active' ? (
-                        <>
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handlePauseCampaign(campaign.id)}>
-                            <PauseCircle className="h-4 w-4 mr-2" />
-                            Pause
-                          </Button>
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStopCampaign(campaign.id)}>
-                            <StopCircle className="h-4 w-4 mr-2" />
-                            Stop
-                          </Button>
-                        </>
-                      ) : campaign.status === 'paused' ? (
-                        <>
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStartCampaign(campaign.id)}>
-                            Resume
-                          </Button>
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleStopCampaign(campaign.id)}>
-                            <StopCircle className="h-4 w-4 mr-2" />
-                            Stop
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button className="flex-1" variant="outline" size="sm" onClick={() => handleStartCampaign(campaign.id)}>
-                            Start
-                          </Button>
-                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleDeleteCampaign(campaign.id)}>
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </CardFooter>
                 </Card>
               ))}
             </div>
@@ -566,7 +300,7 @@ const CampaignControls = () => {
             </Card>
           )}
         </div>
-        
+
         <div>
           <Card>
             <CardHeader>
@@ -583,16 +317,16 @@ const CampaignControls = () => {
                     id="name"
                     placeholder="Summer Promotion 2023"
                     value={newCampaign.name}
-                    onChange={(e) => setNewCampaign({...newCampaign, name: e.target.value})}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
                     required
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="clientGroup">Select Client Group</Label>
                   <Select
                     value={newCampaign.clientGroup}
-                    onValueChange={(value) => setNewCampaign({...newCampaign, clientGroup: value})}
+                    onValueChange={(value) => setNewCampaign({ ...newCampaign, clientGroup: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a client group" />
@@ -612,12 +346,12 @@ const CampaignControls = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="aiProfile">Select AI Assistant</Label>
                   <Select
                     value={newCampaign.aiProfile}
-                    onValueChange={(value) => setNewCampaign({...newCampaign, aiProfile: value})}
+                    onValueChange={(value) => setNewCampaign({ ...newCampaign, aiProfile: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select an AI assistant" />
@@ -638,20 +372,11 @@ const CampaignControls = () => {
                       )}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {newCampaign.aiProfile && 
-                      aiProfiles.find(p => p.id.toString() === newCampaign.aiProfile)?.description}
-                    {aiProfiles.length === 0 && (
-                      <span className="text-amber-500">
-                        Você precisa criar um assistente na seção de Treinamento antes de criar uma campanha.
-                      </span>
-                    )}
-                  </p>
                 </div>
-                
+
                 <div className="pt-4">
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     className="w-full"
                     disabled={aiProfiles.length === 0}
                   >
