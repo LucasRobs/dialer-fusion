@@ -77,6 +77,8 @@ const AITraining = () => {
       });
 
       if (response.success && response.data?.assistant_id) {
+        console.log('Assistente criado no Vapi:', response.data);
+        
         // Salvar assistente no banco de dados
         const savedAssistant = await assistantService.saveAssistant({
           name: aiName,
@@ -94,7 +96,7 @@ const AITraining = () => {
           });
 
           // Selecionar o novo assistente automaticamente
-          localStorage.setItem('selected_assistant', JSON.stringify(savedAssistant));
+          await assistantService.selectAssistant(savedAssistant.id);
           setSelectedAssistantId(savedAssistant.id);
 
           // Atualizar a lista de assistentes
@@ -107,14 +109,14 @@ const AITraining = () => {
         } else {
           toast({
             title: "Erro ao salvar assistente",
-            description: "O assistente foi criado, mas não foi possível salvá-lo no banco de dados.",
+            description: "O assistente foi criado no Vapi, mas não foi possível salvá-lo no banco de dados.",
             variant: "destructive",
           });
         }
       } else {
         toast({
           title: "Erro ao criar assistente",
-          description: "Houve um problema ao criar o assistente.",
+          description: response.message || "Houve um problema ao criar o assistente no Vapi.",
           variant: "destructive",
         });
       }
@@ -132,15 +134,18 @@ const AITraining = () => {
 
   const handleSelectAssistant = async (assistantId: string) => {
     try {
-      const assistant = assistants.find(a => a.id === assistantId);
+      const assistant = await assistantService.selectAssistant(assistantId);
+      
       if (assistant) {
-        localStorage.setItem('selected_assistant', JSON.stringify(assistant));
         setSelectedAssistantId(assistantId);
         
         toast({
           title: "Assistente selecionado",
           description: `O assistente "${assistant.name}" foi selecionado com sucesso.`,
         });
+        
+        // Force a refresh of any component that depends on selected_assistant
+        window.dispatchEvent(new Event('storage'));
       }
     } catch (error) {
       console.error('Erro ao selecionar assistente:', error);
