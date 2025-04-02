@@ -46,146 +46,139 @@ interface AssistantCreationParams {
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
 
-
 export const webhookService = {
   // Webhook para criar assistente virtual
-    async createAssistant(params: AssistantCreationParams): Promise<WebhookResponse> {
-      try {
-        console.log('Criando assistente com parâmetros:', params);
-        
-        // Correctly format the API request to match Vapi's expected format
-        const response = await fetch(`${VAPI_API_URL}/assistant`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: params.assistant_name,
-            first_message: params.first_message,
-            prompt: params.system_prompt,
-          }),
-        });
-  
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Resposta de erro da Vapi:', errorText);
-          throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
-        }
-  
-        const data = await response.json();
-        console.log('Assistente criado com sucesso via API da Vapi:', data);
-        
-        // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
-        if (data && data.id) {
-          try {
-            // Obter o usuário atual
-            const { data: authData } = await supabase.auth.getSession();
-            const userId = authData?.session?.user?.id;
-            
-            // Inserir o assistente no banco de dados
-            const { data: assistantData, error: dbError } = await supabase
-              .from('assistants')
-              .insert({
-                name: params.assistant_name,
-                assistant_id: data.id,
-                system_prompt: params.system_prompt,
-                first_message: params.first_message,
-                user_id: userId,
-                status: 'ready'
-              })
-              .select()
-              .single();
-              
-            if (dbError) {
-              console.error('Erro ao salvar assistente no banco de dados:', dbError);
-            } else {
-              console.log('Assistente salvo no banco de dados:', assistantData);
-              // Selecionar o assistente recém-criado
-              localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
-            }
-          } catch (dbSaveError) {
-            console.error('Erro ao salvar assistente no banco de dados:', dbSaveError);
-          }
-        }
-        
-        return {
-          success: true,
-          message: 'Assistente criado com sucesso',
-          data,
-        };
-      } catch (error) {
-        console.error('Erro ao criar assistente:', error);
-        return {
-          success: false,
-          message: error instanceof Error ? error.message : 'Erro desconhecido',
-        };
-      }
-    },
+  async createAssistant(params: AssistantCreationParams): Promise<WebhookResponse> {
+    try {
+      console.log('Criando assistente com parâmetros:', params);
 
-    async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
-      try {
-        console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
-        
-        // Fazer chamada direta para a API da Vapi para buscar todos os assistentes
-        const response = await fetch(`${VAPI_API_URL}/assistants`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Erro ao buscar assistentes da Vapi:', errorText);
-          throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
-        }
-        
-        const assistantsData = await response.json();
-        console.log('Todos os assistentes recuperados da Vapi:', assistantsData);
-        
-        // Converter para o formato VapiAssistant
-        const assistants: VapiAssistant[] = assistantsData.map((assistant: any) => ({
-          id: assistant.id,
-          name: assistant.name || 'Assistente sem nome',
-          assistant_id: assistant.id,
-          user_id: userId,
-          status: assistant.status || 'ready',
-          created_at: assistant.created_at || new Date().toISOString(),
-          system_prompt: assistant.prompt || assistant.system_prompt,
-          first_message: assistant.first_message || assistant.firstMessage
-        }));
-        
-        console.log(`Encontrados ${assistants.length} assistentes da Vapi`);
-        return assistants;
-      } catch (error) {
-        console.error('Erro ao buscar assistentes da Vapi:', error);
-        
-        // Fallback: tentar buscar do banco de dados local caso a API falhe
-        console.log('Tentando buscar do banco de dados local como fallback');
+      // Atualizado para usar os campos `instructions` e `default_message`
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: params.assistant_name,
+          instructions: params.system_prompt, // Usando `instructions` no lugar de `prompt`
+          default_message: params.first_message, // Usando `default_message` no lugar de `first_message`
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Resposta de erro da Vapi:', errorText);
+        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Assistente criado com sucesso via API da Vapi:', data);
+
+      // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
+      if (data && data.id) {
         try {
-          const { data, error } = await supabase
+          const { data: authData } = await supabase.auth.getSession();
+          const userId = authData?.session?.user?.id;
+
+          const { data: assistantData, error: dbError } = await supabase
             .from('assistants')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-          
-          if (error) {
-            console.error('Erro ao buscar assistentes do banco local:', error);
-            return [];
+            .insert({
+              name: params.assistant_name,
+              assistant_id: data.id,
+              system_prompt: params.system_prompt,
+              first_message: params.first_message,
+              user_id: userId,
+              status: 'ready',
+            })
+            .select()
+            .single();
+
+          if (dbError) {
+            console.error('Erro ao salvar assistente no banco de dados:', dbError);
+          } else {
+            console.log('Assistente salvo no banco de dados:', assistantData);
+            localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
           }
-          
-          console.log(`Encontrados ${data?.length || 0} assistentes no banco local:`, data);
-          return data || [];
-        } catch (dbError) {
-          console.error('Erro ao buscar assistentes do banco local:', dbError);
+        } catch (dbSaveError) {
+          console.error('Erro ao salvar assistente no banco de dados:', dbSaveError);
+        }
+      }
+
+      return {
+        success: true,
+        message: 'Assistente criado com sucesso',
+        data,
+      };
+    } catch (error) {
+      console.error('Erro ao criar assistente:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+      };
+    }
+  },
+
+  async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
+    try {
+      console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
+
+      const response = await fetch(`${VAPI_API_URL}/assistants`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Erro ao buscar assistentes da Vapi:', errorText);
+        throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
+      }
+
+      const assistantsData = await response.json();
+      console.log('Todos os assistentes recuperados da Vapi:', assistantsData);
+
+      const assistants: VapiAssistant[] = assistantsData.map((assistant: any) => ({
+        id: assistant.id,
+        name: assistant.name || 'Assistente sem nome',
+        assistant_id: assistant.id,
+        user_id: userId,
+        status: assistant.status || 'ready',
+        created_at: assistant.created_at || new Date().toISOString(),
+        system_prompt: assistant.prompt || assistant.system_prompt,
+        first_message: assistant.first_message || assistant.firstMessage,
+      }));
+
+      console.log(`Encontrados ${assistants.length} assistentes da Vapi`);
+      return assistants;
+    } catch (error) {
+      console.error('Erro ao buscar assistentes da Vapi:', error);
+
+      console.log('Tentando buscar do banco de dados local como fallback');
+      try {
+        const { data, error } = await supabase
+          .from('assistants')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Erro ao buscar assistentes do banco local:', error);
           return [];
         }
+
+        console.log(`Encontrados ${data?.length || 0} assistentes no banco local:`, data);
+        return data || [];
+      } catch (dbError) {
+        console.error('Erro ao buscar assistentes do banco local:', dbError);
+        return [];
       }
-    },
+    }
+  },
 
-
+  
   // Webhook para fazer a ligação
   async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<WebhookResponse> {
     try {
