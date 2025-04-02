@@ -67,6 +67,39 @@ export const webhookService = {
       const data = await response.json();
       console.log('Assistente criado com sucesso:', data);
       
+      // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
+      if (data && data.id) {
+        try {
+          // Obter o usuário atual
+          const { data: authData } = await supabase.auth.getSession();
+          const userId = authData?.session?.user?.id;
+          
+          // Inserir o assistente no banco de dados
+          const { data: assistantData, error: dbError } = await supabase
+            .from('assistants')
+            .insert({
+              name: params.assistant_name,
+              assistant_id: data.id,
+              system_prompt: params.system_prompt,
+              first_message: params.first_message,
+              user_id: userId,
+              status: 'ready'
+            })
+            .select()
+            .single();
+            
+          if (dbError) {
+            console.error('Erro ao salvar assistente no banco de dados:', dbError);
+          } else {
+            console.log('Assistente salvo no banco de dados:', assistantData);
+            // Selecionar o assistente recém-criado
+            localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+          }
+        } catch (dbSaveError) {
+          console.error('Erro ao salvar assistente no banco de dados:', dbSaveError);
+        }
+      }
+      
       return {
         success: true,
         message: 'Assistente criado com sucesso',
@@ -92,7 +125,7 @@ export const webhookService = {
         query = query.eq('user_id', userId);
       }
       
-      const { data, error } = await query;
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) {
         console.error('Erro ao buscar assistentes:', error);
