@@ -53,7 +53,8 @@ export const webhookService = {
       try {
         console.log('Criando assistente com parâmetros:', params);
         
-        const response = await fetch(`${VAPI_API_URL}/assistants`, {
+        // Correctly format the API request to match Vapi's expected format
+        const response = await fetch(`${VAPI_API_URL}/assistant`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${VAPI_API_KEY}`,
