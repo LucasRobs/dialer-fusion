@@ -118,31 +118,73 @@ export const webhookService = {
 
     async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
       try {
-        console.log('Buscando assistentes para o usuário:', userId);
+        console.log('Buscando assistentes diretamente do Vapi para o usuário:', userId);
         
         if (!userId) {
           console.log('ID do usuário não fornecido, retornando lista vazia');
           return [];
         }
         
-        const { data, error } = await supabase
-          .from('assistants')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
+        // Buscar assistentes diretamente do Vapi em vez do banco de dados
+        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/getassistants', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_id: userId
+          }),
+        });
         
-        if (error) {
-          console.error('Erro ao buscar assistentes:', error);
-          return [];
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Erro ao buscar assistentes do Vapi:', errorText);
+          throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
         }
         
-        console.log(`Encontrados ${data?.length || 0} assistentes:`, data);
-        return data || [];
+        const data = await response.json();
+        console.log('Assistentes recuperados do Vapi:', data);
+        
+        // Converter para o formato VapiAssistant
+        const assistants: VapiAssistant[] = data.map((assistant: any) => ({
+          id: assistant.id,
+          name: assistant.name || 'Assistente sem nome',
+          assistant_id: assistant.id,
+          user_id: userId,
+          status: assistant.status || 'ready',
+          created_at: assistant.created_at || new Date().toISOString(),
+          system_prompt: assistant.prompt || assistant.system_prompt,
+          first_message: assistant.first_message || assistant.firstMessage
+        }));
+        
+        console.log(`Encontrados ${assistants.length} assistentes do Vapi`);
+        return assistants;
       } catch (error) {
-        console.error('Erro ao buscar assistentes:', error);
-        return [];
+        console.error('Erro ao buscar assistentes do Vapi:', error);
+        
+        // Fallback: tentar buscar do banco de dados local caso a API falhe
+        console.log('Tentando buscar do banco de dados local como fallback');
+        try {
+          const { data, error } = await supabase
+            .from('assistants')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+          
+          if (error) {
+            console.error('Erro ao buscar assistentes do banco local:', error);
+            return [];
+          }
+          
+          console.log(`Encontrados ${data?.length || 0} assistentes no banco local:`, data);
+          return data || [];
+        } catch (dbError) {
+          console.error('Erro ao buscar assistentes do banco local:', dbError);
+          return [];
+        }
       }
     },
+
 
   // Webhook para fazer a ligação
   async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<WebhookResponse> {

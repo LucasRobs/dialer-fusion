@@ -23,6 +23,7 @@ const AITraining = () => {
   const [firstMessage, setFirstMessage] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
+  const [isLoadingAssistants, setIsLoadingAssistants] = useState(false);
 
   console.log('Current user:', user);
 
@@ -48,9 +49,19 @@ const AITraining = () => {
     error: fetchError
   } = useQuery({
     queryKey: ['assistants', user?.id],
-    queryFn: () => {
-      console.log('Fetching assistants for user ID:', user?.id);
-      return webhookService.getAllAssistants(user?.id);
+    queryFn: async () => {
+      console.log('Buscando assistentes para o usuário ID:', user?.id);
+      setIsLoadingAssistants(true);
+      try {
+        const results = await webhookService.getAllAssistants(user?.id);
+        console.log('Assistentes retornados da API:', results);
+        return results;
+      } catch (error) {
+        console.error('Erro na busca de assistentes:', error);
+        throw error;
+      } finally {
+        setIsLoadingAssistants(false);
+      }
     },
     enabled: !!user?.id,
   });
@@ -59,6 +70,7 @@ const AITraining = () => {
   useEffect(() => {
     if (fetchError) {
       console.error('Error fetching assistants:', fetchError);
+      toast.error("Erro ao buscar assistentes do Vapi");
     }
   }, [fetchError]);
 
@@ -92,13 +104,9 @@ const AITraining = () => {
       if (response.success && response.data) {
         console.log('Assistente criado no Vapi:', response.data);
         
-        uiToast({
-          title: "Assistente criado com sucesso",
-          description: "Seu assistente foi criado e está pronto para uso.",
-        });
+        toast.success("Assistente criado com sucesso");
 
         // Atualizar a lista de assistentes
-        queryClient.invalidateQueries({ queryKey: ['assistants', user?.id] });
         await refetch();
 
         // Resetar o formulário
@@ -106,19 +114,11 @@ const AITraining = () => {
         setFirstMessage('');
         setSystemPrompt('');
       } else {
-        uiToast({
-          title: "Erro ao criar assistente",
-          description: response.message || "Houve um problema ao criar o assistente no Vapi.",
-          variant: "destructive",
-        });
+        toast.error(response.message || "Houve um problema ao criar o assistente no Vapi.");
       }
     } catch (error) {
       console.error("Erro ao criar assistente:", error);
-      uiToast({
-        title: "Erro ao criar assistente",
-        description: "Houve um problema ao criar o assistente. Por favor, tente novamente.",
-        variant: "destructive",
-      });
+      toast.error("Erro ao criar assistente. Por favor, tente novamente.");
     } finally {
       setIsSubmitting(false);
     }
@@ -126,7 +126,7 @@ const AITraining = () => {
 
   const handleSelectAssistant = async (assistantId: string) => {
     try {
-      const assistant = assistants.find(a => a.id === assistantId);
+      const assistant = assistants.find(a => a.id === assistantId || a.assistant_id === assistantId);
       
       if (assistant) {
         localStorage.setItem('selected_assistant', JSON.stringify(assistant));
@@ -140,6 +140,20 @@ const AITraining = () => {
     } catch (error) {
       console.error('Erro ao selecionar assistente:', error);
       toast.error("Não foi possível selecionar o assistente.");
+    }
+  };
+
+  const handleForceRefresh = async () => {
+    setIsLoadingAssistants(true);
+    toast.info("Atualizando lista de assistentes...");
+    try {
+      await refetch();
+      toast.success("Lista de assistentes atualizada!");
+    } catch (error) {
+      toast.error("Erro ao atualizar assistentes");
+      console.error("Erro ao atualizar assistentes:", error);
+    } finally {
+      setIsLoadingAssistants(false);
     }
   };
 
@@ -158,7 +172,7 @@ const AITraining = () => {
           <Info className="h-4 w-4 text-primary" />
           <AlertTitle>Assistente Ativo</AlertTitle>
           <AlertDescription>
-            {assistants.find(a => a.id === selectedAssistantId)?.name || 'Assistente selecionado'} está 
+            {assistants.find(a => a.id === selectedAssistantId || a.assistant_id === selectedAssistantId)?.name || 'Assistente selecionado'} está 
             configurado como seu assistente padrão para campanhas.
           </AlertDescription>
         </Alert>
@@ -176,16 +190,21 @@ const AITraining = () => {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => refetch()}
+            onClick={handleForceRefresh}
+            disabled={isLoadingAssistants}
             className="text-xs"
           >
-            <RefreshCw className="h-3 w-3 mr-1" />
+            {isLoadingAssistants ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
             Atualizar
           </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {isLoading ? (
+            {isLoading || isLoadingAssistants ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
@@ -196,9 +215,9 @@ const AITraining = () => {
             ) : (
               assistants.map((assistant) => (
                 <div 
-                  key={assistant.id} 
+                  key={assistant.id || assistant.assistant_id} 
                   className={`p-4 border rounded-lg transition-all ${
-                    selectedAssistantId === assistant.id 
+                    selectedAssistantId === assistant.id || selectedAssistantId === assistant.assistant_id
                       ? 'border-primary bg-primary/5' 
                       : 'hover:border-primary/50'
                   }`}
@@ -221,19 +240,19 @@ const AITraining = () => {
                       <div className="text-sm text-muted-foreground mt-1">
                         Criado em: {new Date(assistant.created_at || '').toLocaleDateString()}
                       </div>
-                      <div className="text-sm mt-2 text-muted-foreground line-clamp-2">
-                        {assistant.system_prompt && (
+                      {assistant.system_prompt && (
+                        <div className="text-sm mt-2 text-muted-foreground line-clamp-2">
                           <span>Prompt: {assistant.system_prompt}</span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                     <Button
                       size="sm"
-                      variant={selectedAssistantId === assistant.id ? "default" : "outline"}
-                      onClick={() => handleSelectAssistant(assistant.id)}
+                      variant={selectedAssistantId === assistant.id || selectedAssistantId === assistant.assistant_id ? "default" : "outline"}
+                      onClick={() => handleSelectAssistant(assistant.id || assistant.assistant_id || '')}
                       className="shrink-0"
                     >
-                      {selectedAssistantId === assistant.id ? (
+                      {selectedAssistantId === assistant.id || selectedAssistantId === assistant.assistant_id ? (
                         <>
                           <Check className="h-4 w-4 mr-1" />
                           Selecionado
