@@ -186,7 +186,7 @@ export const webhookService = {
       console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
 
       // Usando o endpoint correto para listar assistentes
-      const response = await fetch(`${VAPI_API_URL}/assistant/list`, {
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
