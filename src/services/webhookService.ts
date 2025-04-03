@@ -42,8 +42,8 @@ interface AssistantCreationParams {
   system_prompt: string;
 }
 
-// Vapi API key
-const VAPI_API_KEY = "6baebf53-98a0-43e0-b031-e8ab65b830a0";
+// Vapi API key - updated with the provided public key
+const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
 
 export const webhookService = {
@@ -52,7 +52,7 @@ export const webhookService = {
     try {
       console.log('Criando assistente com parâmetros:', params);
 
-      // Corrigindo os nomes dos parâmetros para se adequar à API da Vapi
+      // Usando os campos corretos que a API da Vapi espera
       const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'POST',
         headers: {
@@ -61,8 +61,8 @@ export const webhookService = {
         },
         body: JSON.stringify({
           name: params.assistant_name,
-          system_prompt: params.system_prompt,  // Alterado de prompt para system_prompt
-          firstMessage: params.first_message,   // Alterado de first_message para firstMessage
+          prompt: params.system_prompt,
+          first_message: params.first_message,
         }),
       });
 
@@ -123,7 +123,7 @@ export const webhookService = {
     try {
       console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
 
-      // Use the correct endpoint to list all assistants from the second document
+      // Usando o endpoint correto para listar assistentes
       const response = await fetch(`${VAPI_API_URL}/assistant/list`, {
         method: 'GET',
         headers: {
@@ -148,8 +148,8 @@ export const webhookService = {
         user_id: userId,
         status: assistant.status || 'ready',
         created_at: assistant.created_at || new Date().toISOString(),
-        system_prompt: assistant.system_prompt || assistant.prompt,
-        first_message: assistant.firstMessage || assistant.first_message,
+        system_prompt: assistant.prompt || assistant.system_prompt,
+        first_message: assistant.first_message || assistant.firstMessage,
       }));
 
       console.log(`Encontrados ${assistants.length} assistentes da Vapi`);
