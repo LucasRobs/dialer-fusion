@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
   StopCircle,
-  PlayCircle,
+  Users,
+  Settings,
+  Save,
+  BarChart3,
+  Calendar,
   Trash2,
   RefreshCw,
   Loader2,
@@ -28,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import WorkflowStatus from '@/components/WorkflowStatus';
+import { webhookService } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,35 +62,21 @@ const CampaignControls = () => {
   const [campaigns, setCampaigns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
     name: '',
     clientGroup: '',
     aiProfile: '',
   });
 
-  const fetchGroupClients = async (groupId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('client_group_members')
-        .select('client:clients(name, phone)')
-        .eq('group_id', groupId);
-
-      if (error) throw error;
-      return data?.map(item => item.client) || [];
-    } catch (error) {
-      console.error('Erro ao buscar clientes do grupo:', error);
-      return [];
-    }
-  };
-
   // Buscar grupos de clientes e contar os clientes em cada grupo
   const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['userClientGroups'],
     queryFn: async () => {
       try {
+        // Buscar grupos de clientes
         const groups = await clientGroupService.getClientGroups();
 
+        // Contar os clientes em cada grupo
         const groupsWithCounts = await Promise.all(
           groups.map(async (group) => {
             const { count, error } = await supabase
@@ -118,6 +109,16 @@ const CampaignControls = () => {
     staleTime: 0,
   });
 
+  // Fetch assistants
+  const { data: assistants = [], isLoading: isLoadingAssistants, refetch: refetchAssistants } = useQuery({
+    queryKey: ['assistants', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return await webhookService.getAllAssistants(user.id);
+    },
+    enabled: !!user?.id,
+  });
+
   useEffect(() => {
     if (supabaseCampaignsData) {
       const formattedCampaigns = supabaseCampaignsData.map((campaign) => ({
@@ -128,10 +129,10 @@ const CampaignControls = () => {
           campaign.total_calls > 0
             ? Math.round((campaign.answered_calls / campaign.total_calls) * 100)
             : 0,
-        clientGroup: campaign.client_group_id || '',
+        clientGroup: 'Active Clients',
         clientCount: campaign.total_calls || 0,
         completedCalls: campaign.answered_calls || 0,
-        aiProfile: campaign.assistant_id || '',
+        aiProfile: 'Sales Assistant',
         startDate: campaign.start_date
           ? new Date(campaign.start_date).toLocaleDateString()
           : new Date().toLocaleDateString(),
@@ -142,52 +143,75 @@ const CampaignControls = () => {
     }
   }, [supabaseCampaignsData]);
 
-  const handleCampaignAction = async (action: string, campaignId: number) => {
-    setIsProcessingAction(true);
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newCampaign.name || !newCampaign.clientGroup || !newCampaign.aiProfile) {
+      toast({
+        title: 'Erro',
+        description: 'Por favor, preencha todos os campos obrigatórios',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const selectedGroup = userClientGroups.find(
+      (group) => group.id.toString() === newCampaign.clientGroup
+    );
+    const clientCount = selectedGroup ? selectedGroup.client_count || 0 : 0;
+
+    const selectedAssistant = assistants.find(
+      (assistant) => assistant.id.toString() === newCampaign.aiProfile
+    );
+
+    if (!selectedAssistant) {
+      toast({
+        title: 'Erro',
+        description: 'Por favor, selecione um assistente de IA válido',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
-      let newStatus = '';
-      let successMessage = '';
+      // Salvar o assistente selecionado no localStorage
+      localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistant));
+      console.log('Assistente selecionado para campanha:', selectedAssistant);
 
-      switch (action) {
-        case 'start':
-          newStatus = 'active';
-          successMessage = 'Campanha iniciada com sucesso!';
-          break;
-        case 'pause':
-          newStatus = 'paused';
-          successMessage = 'Campanha pausada com sucesso!';
-          break;
-        case 'stop':
-          newStatus = 'completed';
-          successMessage = 'Campanha finalizada com sucesso!';
-          break;
-        case 'delete':
-          await campaignService.deleteCampaign(campaignId);
-          successMessage = 'Campanha excluída com sucesso!';
-          break;
-        default:
-          throw new Error('Ação inválida');
-      }
+      setIsSubmitting(true);
 
-      if (action !== 'delete') {
-        await campaignService.updateCampaign(campaignId, { status: newStatus });
-      }
+      const createdCampaign = await campaignService.createCampaign({
+        name: newCampaign.name,
+        status: 'draft',
+        total_calls: clientCount,
+        answered_calls: 0,
+        start_date: null,
+        end_date: null,
+        user_id: user?.id,
+        client_group_id: newCampaign.clientGroup !== 'all' ? newCampaign.clientGroup : null,
+      });
 
       toast({
-        title: 'Sucesso',
-        description: successMessage,
+        title: 'Campanha Criada',
+        description: `Sua campanha "${newCampaign.name}" foi criada com o assistente "${selectedAssistant.name}"`,
+      });
+
+      setNewCampaign({
+        name: '',
+        clientGroup: '',
+        aiProfile: '',
       });
 
       await refetchCampaigns();
     } catch (error) {
-      console.error(`Erro ao ${action} campanha:`, error);
+      console.error('Erro ao criar campanha:', error);
       toast({
-        title: 'Erro',
-        description: `Houve um problema ao ${action} a campanha. Por favor, tente novamente.`,
+        title: 'Erro ao Criar Campanha',
+        description: 'Houve um problema ao criar sua campanha. Por favor, tente novamente.',
         variant: 'destructive',
       });
     } finally {
-      setIsProcessingAction(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -197,17 +221,27 @@ const CampaignControls = () => {
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold">Suas Campanhas</h2>
-            <Button size="sm" onClick={() => refetchCampaigns()}>
+            <Button size="sm" onClick={() => {
+              refetchAssistants();
+              toast({
+                title: "Assistentes Atualizados",
+                description: "Lista de assistentes foi atualizada com sucesso."
+              });
+            }}>
               <RefreshCw className="h-4 w-4 mr-2" />
-              Atualizar
+              Atualizar Assistentes
             </Button>
           </div>
+
+          <WorkflowStatus />
 
           {isLoading ? (
             <Card>
               <CardContent className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="text-muted-foreground mt-4">Carregando campanhas...</p>
+                <div className="text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="text-muted-foreground mt-4">Carregando campanhas...</p>
+                </div>
               </CardContent>
             </Card>
           ) : campaigns.length > 0 ? (
@@ -220,52 +254,11 @@ const CampaignControls = () => {
                       <div>
                         <CardTitle className="text-xl">{campaign.name}</CardTitle>
                         <CardDescription>
-                          {campaign.completedCalls} de {campaign.clientCount} chamadas concluídas
+                          Iniciada: {campaign.startDate} · {campaign.clientGroup} ({campaign.clientCount} clientes)
                         </CardDescription>
                       </div>
-                      <div className="flex gap-2">
-                        {campaign.status !== 'active' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCampaignAction('start', campaign.id)}
-                            disabled={isProcessingAction}
-                          >
-                            <PlayCircle className="h-4 w-4 mr-1" />
-                            Iniciar
-                          </Button>
-                        )}
-                        {campaign.status === 'active' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCampaignAction('pause', campaign.id)}
-                            disabled={isProcessingAction}
-                          >
-                            <PauseCircle className="h-4 w-4 mr-1" />
-                            Pausar
-                          </Button>
-                        )}
-                        {campaign.status !== 'completed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCampaignAction('stop', campaign.id)}
-                            disabled={isProcessingAction}
-                          >
-                            <StopCircle className="h-4 w-4 mr-1" />
-                            Parar
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleCampaignAction('delete', campaign.id)}
-                          disabled={isProcessingAction}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Excluir
-                        </Button>
+                      <div className={`px-2 py-1 rounded text-xs uppercase font-semibold ${getStatusColor(campaign.status)}`}>
+                        {campaign.status}
                       </div>
                     </div>
                   </CardHeader>
@@ -273,7 +266,7 @@ const CampaignControls = () => {
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between mb-1 text-sm">
-                          <span>Progresso</span>
+                          <span>Progresso: {campaign.completedCalls} de {campaign.clientCount} chamadas concluídas</span>
                           <span>{campaign.progress}%</span>
                         </div>
                         <Progress value={campaign.progress} className="h-2" />
@@ -286,10 +279,118 @@ const CampaignControls = () => {
           ) : (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <p className="text-muted-foreground">Nenhuma campanha encontrada.</p>
+                <div className="rounded-full bg-muted p-3 mb-4">
+                  <Calendar className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Nenhuma Campanha</h3>
+                <p className="text-muted-foreground text-center mb-4">
+                  Crie sua primeira campanha para começar a alcançar seus clientes.
+                </p>
               </CardContent>
             </Card>
           )}
+        </div>
+
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Criar Nova Campanha</CardTitle>
+              <CardDescription>
+                Configure uma nova campanha de chamadas usando seu assistente de IA
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreateCampaign} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome da Campanha</Label>
+                  <Input
+                    id="name"
+                    placeholder="Promoção de Verão 2023"
+                    value={newCampaign.name}
+                    onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="clientGroup">Selecionar Grupo de Clientes</Label>
+                  <Select
+                    value={newCampaign.clientGroup}
+                    onValueChange={(value) => setNewCampaign({ ...newCampaign, clientGroup: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um grupo de clientes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isLoadingGroups ? (
+                        <SelectItem value="loading" disabled>Carregando grupos de clientes...</SelectItem>
+                      ) : userClientGroups.length === 0 ? (
+                        <SelectItem value="no-groups" disabled>Nenhum grupo de clientes disponível</SelectItem>
+                      ) : (
+                        userClientGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id.toString()}>
+                            {group.name} ({group.client_count || 0} clientes)
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="aiProfile">Selecionar Assistente de IA</Label>
+                  <Select
+                    value={newCampaign.aiProfile}
+                    onValueChange={(value) => setNewCampaign({ ...newCampaign, aiProfile: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um assistente de IA" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isLoadingAssistants ? (
+                        <SelectItem value="loading" disabled>Carregando assistentes...</SelectItem>
+                      ) : assistants.length === 0 ? (
+                        <SelectItem value="no-assistants" disabled>
+                          Nenhum assistente disponível - crie um na seção de Treinamento
+                        </SelectItem>
+                      ) : (
+                        assistants.map((assistant) => (
+                          <SelectItem key={assistant.id} value={assistant.id.toString()}>
+                            {assistant.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {assistants.length === 0 && (
+                    <div className="p-2 bg-amber-50 text-amber-800 rounded text-xs mt-1">
+                      Você precisa criar um assistente na seção de Treinamento de IA antes de criar uma campanha.
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4">
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={assistants.length === 0 || isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Criando Campanha...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Criar Campanha
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
