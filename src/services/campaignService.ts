@@ -12,6 +12,7 @@ interface Campaign {
   average_duration?: number;
   user_id?: string;
   client_group_id?: string | null;
+  assistant_id?: string;  // Adicionada esta propriedade para resolver o erro
 }
 
 interface AnalyticsData {
