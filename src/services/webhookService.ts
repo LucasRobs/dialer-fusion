@@ -167,61 +167,30 @@ export const webhookService = {
 
   async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
     try {
-      console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
-
-      // Usando o endpoint correto para listar assistentes
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Erro ao buscar assistentes da Vapi:', errorText);
-        throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
-      }
-
-      const assistantsData = await response.json();
-      console.log('Todos os assistentes recuperados da Vapi:', assistantsData);
-
-      const assistants: VapiAssistant[] = assistantsData.map((assistant: any) => ({
-        id: assistant.id,
-        name: assistant.name || 'Assistente sem nome',
-        assistant_id: assistant.id,
-        user_id: userId,
-        status: assistant.status || 'ready',
-        created_at: assistant.created_at || new Date().toISOString(),
-        system_prompt: assistant.prompt || assistant.system_prompt,
-        first_message: assistant.first_message || assistant.firstMessage,
-      }));
-
-      console.log(`Encontrados ${assistants.length} assistentes da Vapi`);
-      return assistants;
-    } catch (error) {
-      console.error('Erro ao buscar assistentes da Vapi:', error);
-
-      console.log('Tentando buscar do banco de dados local como fallback');
-      try {
-        const { data, error } = await supabase
-          .from('assistants')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Erro ao buscar assistentes do banco local:', error);
-          return [];
-        }
-
-        console.log(`Encontrados ${data?.length || 0} assistentes no banco local:`, data);
-        return data || [];
-      } catch (dbError) {
-        console.error('Erro ao buscar assistentes do banco local:', dbError);
+      console.log('Buscando assistentes para o usuário:', userId);
+  
+      if (!userId) {
+        console.log('ID do usuário não fornecido, retornando lista vazia');
         return [];
       }
+  
+      // Buscar assistentes diretamente do banco de dados filtrando pelo user_id
+      const { data, error } = await supabase
+        .from('assistants')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+  
+      if (error) {
+        console.error('Erro ao buscar assistentes:', error);
+        return [];
+      }
+  
+      console.log(`Encontrados ${data?.length || 0} assistentes para o usuário ${userId}`);
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao buscar assistentes:', error);
+      return [];
     }
   },
 

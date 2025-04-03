@@ -35,14 +35,6 @@ import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3emxmam9pdW9vY2JhdGZpemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzNTY5ODEsImV4cCI6MjA1ODkzMjk4MX0.D10AhJ4BeF4vWtH--RYM7WKwePOlZOhEX2tRF0hTfHU';
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
-
-import assistantService from '@/services/assistantService';
 import { useAuth } from '@/contexts/AuthContext';
 import { clientGroupService } from '@/services/clientGroupService';
 
@@ -83,34 +75,13 @@ const CampaignControls = () => {
   });
 
   // Fetch assistants
-  const { data: customAssistants = [], isLoading: isLoadingAssistants, refetch: refetchAssistants } = useQuery({
+  const { data: assistants = [], isLoading: isLoadingAssistants, refetch: refetchAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
-    queryFn: () => assistantService.getAllAssistants(user?.id),
-    enabled: !!user?.id,
-    staleTime: 0,
-  });
-
-  // Map assistants to AI profiles
-  const { data: aiProfiles = [] } = useQuery({
-    queryKey: ['aiProfiles', customAssistants.length],
-    queryFn: () => {
-      const readyAssistants = customAssistants.filter(
-        (assistant) =>
-          (assistant.status === 'ready' || !assistant.status) &&
-          (assistant.user_id === user?.id || !assistant.user_id)
-      );
-
-      return readyAssistants.map((assistant) => ({
-        id: assistant.id,
-        name: assistant.name,
-        assistant_id: assistant.assistant_id,
-        description: `Assistente criado em ${
-          assistant.created_at ? new Date(assistant.created_at).toLocaleDateString() : 'data desconhecida'
-        }`,
-      }));
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return await webhookService.getAllAssistants(user.id);
     },
-    enabled: customAssistants.length > 0,
-    staleTime: 0,
+    enabled: !!user?.id,
   });
 
   // Fetch client groups
@@ -119,18 +90,10 @@ const CampaignControls = () => {
     queryFn: async () => {
       try {
         const groups = await clientGroupService.getClientGroups();
-        const { count: totalCount } = await supabase
-          .from('clients')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user?.id);
-
-        return [
-          { id: 'all', name: 'All Clients', client_count: totalCount || 0 },
-          ...groups,
-        ];
+        return groups;
       } catch (error) {
         console.error('Error fetching user client groups:', error);
-        return [{ id: 'all', name: 'All Clients', client_count: 0 }];
+        return [];
       }
     },
     enabled: !!user?.id,
@@ -177,11 +140,11 @@ const CampaignControls = () => {
     );
     const clientCount = selectedGroup ? selectedGroup.client_count || 0 : 0;
 
-    const selectedAssistantProfile = aiProfiles.find(
-      (profile) => profile.id.toString() === newCampaign.aiProfile
+    const selectedAssistant = assistants.find(
+      (assistant) => assistant.id.toString() === newCampaign.aiProfile
     );
 
-    if (!selectedAssistantProfile) {
+    if (!selectedAssistant) {
       toast({
         title: 'Erro',
         description: 'Por favor, selecione um assistente de IA válido',
@@ -192,8 +155,8 @@ const CampaignControls = () => {
 
     try {
       // Salvar o assistente selecionado no localStorage
-      localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistantProfile));
-      console.log('Assistente selecionado para campanha:', selectedAssistantProfile);
+      localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistant));
+      console.log('Assistente selecionado para campanha:', selectedAssistant);
 
       setIsSubmitting(true);
 
@@ -210,7 +173,7 @@ const CampaignControls = () => {
 
       toast({
         title: 'Campanha Criada',
-        description: `Sua campanha "${newCampaign.name}" foi criada com o assistente "${selectedAssistantProfile.name}"`,
+        description: `Sua campanha "${newCampaign.name}" foi criada com o assistente "${selectedAssistant.name}"`,
       });
 
       setNewCampaign({
@@ -366,20 +329,20 @@ const CampaignControls = () => {
                     <SelectContent>
                       {isLoadingAssistants ? (
                         <SelectItem value="loading" disabled>Carregando assistentes...</SelectItem>
-                      ) : aiProfiles.length === 0 ? (
+                      ) : assistants.length === 0 ? (
                         <SelectItem value="no-assistants" disabled>
                           Nenhum assistente disponível - crie um na seção de Treinamento
                         </SelectItem>
                       ) : (
-                        aiProfiles.map((profile) => (
-                          <SelectItem key={profile.id} value={profile.id.toString()}>
-                            {profile.name}
+                        assistants.map((assistant) => (
+                          <SelectItem key={assistant.id} value={assistant.id.toString()}>
+                            {assistant.name}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
-                  {aiProfiles.length === 0 && (
+                  {assistants.length === 0 && (
                     <div className="p-2 bg-amber-50 text-amber-800 rounded text-xs mt-1">
                       Você precisa criar um assistente na seção de Treinamento de IA antes de criar uma campanha.
                     </div>
@@ -390,7 +353,7 @@ const CampaignControls = () => {
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={aiProfiles.length === 0 || isSubmitting}
+                    disabled={assistants.length === 0 || isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
