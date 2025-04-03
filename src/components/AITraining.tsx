@@ -5,12 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Badge } from '@/components/ui/badge';
+import { Loader2, PlusCircle, Check, RefreshCw } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { webhookService } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { PlusCircle, Check, RefreshCw, Loader2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 const AITraining = () => {
@@ -37,14 +36,15 @@ const AITraining = () => {
     }
   }, []);
 
-  // Buscar assistentes criados pelo usuário
-  const { data: assistants = [], isLoading, refetch } = useQuery({
+  // Buscar assistentes criados pelo usuário ou por conta padrão
+  const { data: assistants = [], isLoading, refetch, isError } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
-      return await webhookService.getAllAssistants(user.id);
+      const accountId = user?.id || "CONTA_PADRAO"; // Fallback para conta padrão
+      console.log(`Carregando assistentes para a conta: ${accountId}`);
+      return await webhookService.getAllAssistants(accountId);
     },
-    enabled: !!user?.id,
+    enabled: true,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,7 +62,6 @@ const AITraining = () => {
     setIsSubmitting(true);
 
     try {
-      // Criar assistente na API
       const response = await webhookService.createAssistant({
         assistant_name: aiName,
         first_message: firstMessage,
@@ -70,13 +69,9 @@ const AITraining = () => {
       });
 
       if (response.success && response.data) {
-        console.log('Assistente criado na Vapi:', response.data);
+        console.log('Assistente criado:', response.data);
         toast.success("Assistente criado com sucesso!");
-
-        // Atualizar lista de assistentes
         await refetch();
-
-        // Resetar formulário
         setAiName('');
         setFirstMessage('');
         setSystemPrompt('');
@@ -137,6 +132,10 @@ const AITraining = () => {
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : isError ? (
+            <div className="text-center py-6 text-red-500">
+              <p>Erro ao carregar assistentes. Tente novamente mais tarde.</p>
             </div>
           ) : assistants.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground">
