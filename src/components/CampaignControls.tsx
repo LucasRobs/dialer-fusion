@@ -74,32 +74,7 @@ const CampaignControls = () => {
   const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['userClientGroups'],
     queryFn: async () => {
-      try {
-        // Buscar grupos de clientes
-        const groups = await clientGroupService.getClientGroups();
-
-        // Contar os clientes em cada grupo
-        const groupsWithCounts = await Promise.all(
-          groups.map(async (group) => {
-            const { count, error } = await supabase
-              .from('client_group_members')
-              .select('*', { count: 'exact', head: true })
-              .eq('group_id', group.id);
-
-            if (error) {
-              console.error(`Erro ao contar clientes no grupo ${group.id}:`, error);
-              return { ...group, client_count: 0 };
-            }
-
-            return { ...group, client_count: count || 0 };
-          })
-        );
-
-        return groupsWithCounts;
-      } catch (error) {
-        console.error('Erro ao buscar grupos de clientes:', error);
-        return [];
-      }
+      return await clientGroupService.getClientGroups(); // Filtrar pelo user_id no serviço
     },
     enabled: !!user?.id,
   });
@@ -111,12 +86,11 @@ const CampaignControls = () => {
     staleTime: 0,
   });
 
-  // Fetch assistants
-  const { data: assistants = [], isLoading: isLoadingAssistants, refetch: refetchAssistants } = useQuery({
+  const { data: assistants = [], isLoading: isLoadingAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      return await webhookService.getAllAssistants(user.id);
+      return await webhookService.getAllAssistants(user.id); // Filtrar pelo user_id
     },
     enabled: !!user?.id,
   });
@@ -388,8 +362,8 @@ const CampaignControls = () => {
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold">Suas Campanhas</h2>
-            <Button size="sm" onClick={() => {
-              refetchAssistants();
+            <Button size="sm" onClick={async () => {
+              await queryClient.invalidateQueries({ queryKey: ['assistants'] });
               toast({
                 title: "Assistentes Atualizados",
                 description: "Lista de assistentes foi atualizada com sucesso."

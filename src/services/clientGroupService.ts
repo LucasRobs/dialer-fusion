@@ -18,24 +18,26 @@ export interface ClientGroupMember {
 }
 
 export const clientGroupService = {
-  getClientGroups: async (): Promise<ClientGroup[]> => {
+  async getClientGroups(): Promise<ClientGroup[]> {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
+
       if (!userId) return [];
-      
+
       const { data, error } = await supabase
         .from('client_groups')
         .select('*')
-        .eq('user_id', userId);
-      
+        .eq('user_id', userId); // Filtrar pelo user_id
+
       if (error) {
-        console.error('Error fetching client groups:', error);
+        console.error('Erro ao buscar grupos de clientes:', error);
         throw error;
       }
+
       return data || [];
     } catch (error) {
-      console.error('Error in getClientGroups:', error);
+      console.error('Erro no serviço de grupos de clientes:', error);
       throw error;
     }
   },
