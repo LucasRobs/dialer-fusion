@@ -167,19 +167,21 @@ export const webhookService = {
 
   async getAllAssistants(userId: string) {
     try {
+      console.log(`Buscando assistentes para o usuário: ${userId}`);
       const { data, error } = await supabase
         .from('assistants')
         .select('*')
         .eq('user_id', userId);
-
+  
       if (error) {
-        console.error('Erro ao buscar assistentes:', error);
+        console.error('Erro ao buscar assistentes no banco de dados:', error);
         throw error;
       }
-
+  
+      console.log('Assistentes recuperados do banco de dados:', data);
       return data || [];
     } catch (error) {
-      console.error('Erro no serviço de assistentes:', error);
+      console.error('Erro ao recuperar assistentes:', error);
       throw error;
     }
   },
