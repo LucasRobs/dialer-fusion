@@ -123,7 +123,8 @@ export const webhookService = {
     try {
       console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
 
-      const response = await fetch(`${VAPI_API_URL}/assistants`, {
+      // Fixed endpoint: changed from "/assistants" to "/assistant/list"
+      const response = await fetch(`${VAPI_API_URL}/assistant/list`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
