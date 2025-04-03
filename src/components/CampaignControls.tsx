@@ -37,6 +37,7 @@ import { campaignService } from '@/services/campaignService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { clientGroupService } from '@/services/clientGroupService';
+import { supabase } from '@/lib/supabase';
 
 const getStatusColor = (status: string): string => {
   switch (status) {
@@ -67,6 +68,40 @@ const CampaignControls = () => {
     aiProfile: '',
   });
 
+  // Buscar grupos de clientes e contar os clientes em cada grupo
+  const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
+    queryKey: ['userClientGroups'],
+    queryFn: async () => {
+      try {
+        // Buscar grupos de clientes
+        const groups = await clientGroupService.getClientGroups();
+
+        // Contar os clientes em cada grupo
+        const groupsWithCounts = await Promise.all(
+          groups.map(async (group) => {
+            const { count, error } = await supabase
+              .from('client_group_members')
+              .select('*', { count: 'exact', head: true })
+              .eq('group_id', group.id);
+
+            if (error) {
+              console.error(`Erro ao contar clientes no grupo ${group.id}:`, error);
+              return { ...group, client_count: 0 };
+            }
+
+            return { ...group, client_count: count || 0 };
+          })
+        );
+
+        return groupsWithCounts;
+      } catch (error) {
+        console.error('Erro ao buscar grupos de clientes:', error);
+        return [];
+      }
+    },
+    enabled: !!user?.id,
+  });
+
   // Fetch campaigns
   const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
@@ -80,21 +115,6 @@ const CampaignControls = () => {
     queryFn: async () => {
       if (!user?.id) return [];
       return await webhookService.getAllAssistants(user.id);
-    },
-    enabled: !!user?.id,
-  });
-
-  // Fetch client groups
-  const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
-    queryKey: ['userClientGroups', user?.id],
-    queryFn: async () => {
-      try {
-        const groups = await clientGroupService.getClientGroups();
-        return groups;
-      } catch (error) {
-        console.error('Error fetching user client groups:', error);
-        return [];
-      }
     },
     enabled: !!user?.id,
   });

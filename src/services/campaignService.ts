@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { clientGroupService } from '@/services/clientGroupService';
 
 interface Campaign {
   id?: number;
@@ -31,24 +32,24 @@ interface AnalyticsData {
   }[];
 }
 
+
 export const campaignService = {
   async getCampaigns() {
     try {
-      // Fetch campaigns for the current user only
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
-      
+
       if (!userId) {
         console.error('No authenticated user found');
         return [];
       }
-      
+
       const { data, error } = await supabase
         .from('campaigns')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
       return data;
     } catch (error) {
@@ -56,6 +57,118 @@ export const campaignService = {
       return [];
     }
   },
+
+
+  // Adicionando a função solicitada
+  async getClientGroupsWithCounts() {
+    try {
+      // Buscar grupos de clientes
+      const groups = await clientGroupService.getClientGroups();
+
+      // Contar os clientes em cada grupo
+      const groupsWithCounts = await Promise.all(
+        groups.map(async (group) => {
+          const { count, error } = await supabase
+            .from('client_group_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('group_id', group.id);
+
+          if (error) {
+            console.error(`Erro ao contar clientes no grupo ${group.id}:`, error);
+            return { ...group, client_count: 0 };
+          }
+
+          return { ...group, client_count: count || 0 };
+        })
+      );
+
+      return groupsWithCounts;
+    } catch (error) {
+      console.error('Erro ao buscar grupos de clientes:', error);
+      return [];
+    }
+  },
+
+    // Outras funções existentes no serviço...
+    async createCampaign(campaign: Campaign) {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+  
+        if (!userId) {
+          throw new Error('No authenticated user found');
+        }
+  
+        const campaignWithUserId = {
+          ...campaign,
+          user_id: userId,
+        };
+  
+        const { data, error } = await supabase
+          .from('campaigns')
+          .insert([campaignWithUserId])
+          .select()
+          .single();
+  
+        if (error) throw error;
+  
+        if (data && data.id && campaign.client_group_id && campaign.client_group_id !== 'all') {
+          await this.prepareCampaignClientsFromGroup(data.id, campaign.client_group_id);
+        }
+  
+        return data;
+      } catch (error) {
+        console.error('Error creating campaign:', error);
+        throw error;
+      }
+    },
+
+
+    async prepareCampaignClientsFromGroup(campaignId: number, groupId: string) {
+      try {
+        const { data: groupMembers, error: groupError } = await supabase
+          .from('client_group_members')
+          .select('client_id')
+          .eq('group_id', groupId);
+  
+        if (groupError) {
+          console.error('Erro ao buscar membros do grupo:', groupError);
+          throw groupError;
+        }
+  
+        if (!groupMembers || groupMembers.length === 0) {
+          console.log('Nenhum cliente encontrado neste grupo.');
+          return;
+        }
+  
+        const clientIds = groupMembers.map((member) => member.client_id);
+  
+        const campaignClients = clientIds.map((clientId) => ({
+          campaign_id: campaignId,
+          client_id: clientId,
+          status: 'pending',
+        }));
+  
+        const { error: insertError } = await supabase
+          .from('campaign_clients')
+          .insert(campaignClients);
+  
+        if (insertError) {
+          console.error('Erro ao inserir clientes na campanha:', insertError);
+          throw insertError;
+        }
+  
+        await supabase
+          .from('campaigns')
+          .update({ total_calls: clientIds.length })
+          .eq('id', campaignId);
+  
+        console.log(`Clientes do grupo ${groupId} associados à campanha ${campaignId}.`);
+      } catch (error) {
+        console.error('Erro ao preparar clientes da campanha a partir do grupo:', error);
+        throw error;
+      }
+    },
   
   // Get active campaigns (status = 'active') for current user only
   async getActiveCampaigns() {
@@ -206,85 +319,6 @@ export const campaignService = {
     } catch (error) {
       console.error(`Error fetching campaign ${id}:`, error);
       return null;
-    }
-  },
-  
-  async createCampaign(campaign: Campaign) {
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id;
-      
-      if (!userId) {
-        throw new Error('No authenticated user found');
-      }
-      
-      // Ensure user_id is set
-      const campaignWithUserId = {
-        ...campaign,
-        user_id: userId
-      };
-      
-      const { data, error } = await supabase
-        .from('campaigns')
-        .insert([campaignWithUserId])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // If a client group is specified, prepare data for calls
-      if (data && data.id && campaign.client_group_id && campaign.client_group_id !== 'all') {
-        await this.prepareCampaignClientsFromGroup(data.id, campaign.client_group_id);
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error creating campaign:', error);
-      throw error;
-    }
-  },
-  
-  // Helper function to prepare clients from a specific group for a campaign
-  async prepareCampaignClientsFromGroup(campaignId: number, groupId: string) {
-    try {
-      // Get clients from the specified group
-      const { data: groupMembers, error: groupError } = await supabase
-        .from('client_group_members')
-        .select('client_id')
-        .eq('group_id', groupId);
-      
-      if (groupError) throw groupError;
-      
-      if (!groupMembers || groupMembers.length === 0) {
-        console.log('No clients found in this group');
-        return;
-      }
-      
-      // Get client details
-      const clientIds = groupMembers.map(member => member.client_id);
-      
-      // Associate these clients with the campaign in campaign_clients table
-      const campaignClients = clientIds.map(clientId => ({
-        campaign_id: campaignId,
-        client_id: clientId,
-        status: 'pending'
-      }));
-      
-      const { error: insertError } = await supabase
-        .from('campaign_clients')
-        .insert(campaignClients);
-      
-      if (insertError) throw insertError;
-      
-      // Update the campaign's total_calls count
-      await supabase
-        .from('campaigns')
-        .update({ total_calls: clientIds.length })
-        .eq('id', campaignId);
-      
-    } catch (error) {
-      console.error('Error preparing campaign clients from group:', error);
-      throw error;
     }
   },
   
