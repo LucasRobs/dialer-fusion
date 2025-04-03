@@ -75,13 +75,16 @@ export const webhookService = {
       const data = await response.json();
       console.log('Assistente criado com sucesso via API da Vapi:', data);
 
+      let userId = null;
+      let assistantData = null;
+
       // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
       if (data && data.id) {
         try {
           const { data: authData } = await supabase.auth.getSession();
-          const userId = authData?.session?.user?.id;
+          userId = authData?.session?.user?.id;
 
-          const { data: assistantData, error: dbError } = await supabase
+          const { data: dbAssistantData, error: dbError } = await supabase
             .from('assistants')
             .insert({
               name: params.assistant_name,
@@ -97,11 +100,27 @@ export const webhookService = {
           if (dbError) {
             console.error('Erro ao salvar assistente no banco de dados:', dbError);
           } else {
-            console.log('Assistente salvo no banco de dados:', assistantData);
-            localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+            console.log('Assistente salvo no banco de dados:', dbAssistantData);
+            localStorage.setItem('selected_assistant', JSON.stringify(dbAssistantData));
+            assistantData = dbAssistantData;
           }
         } catch (dbSaveError) {
           console.error('Erro ao salvar assistente no banco de dados:', dbSaveError);
+        }
+        
+        // Notificar webhook externo sobre a criação do assistente
+        try {
+          await this.notifyAssistantCreation({
+            assistant_id: data.id,
+            assistant_name: params.assistant_name,
+            system_prompt: params.system_prompt,
+            first_message: params.first_message,
+            user_id: userId,
+            vapi_data: data
+          });
+        } catch (webhookError) {
+          console.error('Erro ao notificar webhook sobre criação do assistente:', webhookError);
+          // Não interromper o fluxo caso o webhook falhe
         }
       }
 
@@ -116,6 +135,49 @@ export const webhookService = {
         success: false,
         message: error instanceof Error ? error.message : 'Erro desconhecido',
       };
+    }
+  },
+  
+  // Nova função para enviar os dados do assistente para o webhook externo
+  async notifyAssistantCreation(assistantData: {
+    assistant_id: string;
+    assistant_name: string;
+    system_prompt: string;
+    first_message: string;
+    user_id?: string;
+    vapi_data?: any;
+  }): Promise<void> {
+    try {
+      console.log('Notificando webhook sobre criação de assistente:', assistantData);
+      
+      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/createassistant', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'assistant_created',
+          timestamp: new Date().toISOString(),
+          assistant_id: assistantData.assistant_id,
+          assistant_name: assistantData.assistant_name,
+          system_prompt: assistantData.system_prompt,
+          first_message: assistantData.first_message,
+          user_id: assistantData.user_id,
+          vapi_data: assistantData.vapi_data
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Erro ao notificar webhook externo:', errorText);
+        throw new Error(`Falha ao notificar webhook: ${response.statusText} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Webhook notificado com sucesso:', data);
+    } catch (error) {
+      console.error('Erro ao notificar webhook sobre criação do assistente:', error);
+      throw error;
     }
   },
 
