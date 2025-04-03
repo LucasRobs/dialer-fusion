@@ -52,7 +52,7 @@ export const webhookService = {
     try {
       console.log('Criando assistente com parâmetros:', params);
 
-      // Simplificando para usar os campos exatos que a API espera
+      // Corrigindo os nomes dos parâmetros para se adequar à API da Vapi
       const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'POST',
         headers: {
@@ -61,8 +61,8 @@ export const webhookService = {
         },
         body: JSON.stringify({
           name: params.assistant_name,
-          prompt: params.system_prompt,
-          first_message: params.first_message,
+          system_prompt: params.system_prompt,  // Alterado de prompt para system_prompt
+          firstMessage: params.first_message,   // Alterado de first_message para firstMessage
         }),
       });
 
@@ -148,8 +148,8 @@ export const webhookService = {
         user_id: userId,
         status: assistant.status || 'ready',
         created_at: assistant.created_at || new Date().toISOString(),
-        system_prompt: assistant.prompt || assistant.system_prompt,
-        first_message: assistant.first_message || assistant.firstMessage,
+        system_prompt: assistant.system_prompt || assistant.prompt,
+        first_message: assistant.firstMessage || assistant.first_message,
       }));
 
       console.log(`Encontrados ${assistants.length} assistentes da Vapi`);
