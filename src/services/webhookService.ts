@@ -43,7 +43,7 @@ interface AssistantCreationParams {
 }
 
 // Vapi API key - updated with the provided public key
-const VAPI_API_KEY = "6baebf53-98a0-43e0-b031-e8ab65b830a0";
+const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
 
 export const webhookService = {
