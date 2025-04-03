@@ -123,8 +123,8 @@ export const webhookService = {
     try {
       console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
 
-      // Use the correct endpoint to list all assistants
-      const response = await fetch(`${VAPI_API_URL}/assistants`, {
+      // Use the correct endpoint to list all assistants from the second document
+      const response = await fetch(`${VAPI_API_URL}/assistant/list`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -178,7 +178,6 @@ export const webhookService = {
       }
     }
   },
-
 
   // Webhook para fazer a ligação
   async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<WebhookResponse> {
