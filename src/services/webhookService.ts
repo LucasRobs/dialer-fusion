@@ -53,7 +53,7 @@ export const webhookService = {
       console.log('Criando assistente com parâmetros:', params);
 
       // Usando os campos corretos que a API da Vapi espera
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+      const response = await fetch(`${VAPI_API_URL}/assistants`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -124,7 +124,7 @@ export const webhookService = {
       console.log('Buscando assistentes diretamente da Vapi para o usuário:', userId);
 
       // Usando o endpoint correto para listar assistentes
-      const response = await fetch(`${VAPI_API_URL}/assistant/list`, {
+      const response = await fetch(`${VAPI_API_URL}/assistants`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
