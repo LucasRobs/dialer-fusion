@@ -46,45 +46,45 @@ interface AssistantCreationParams {
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
 
+// Webhook URLs
+const CREATE_ASSISTANT_WEBHOOK = "https://primary-production-31de.up.railway.app/webhook/createassistant";
+const MAKE_CALL_WEBHOOK = "https://primary-production-31de.up.railway.app/webhook/collowop";
+
 export const webhookService = {
   // Webhook para criar assistente virtual
   async createAssistant(params: AssistantCreationParams): Promise<WebhookResponse> {
     try {
       console.log('Criando assistente com parâmetros:', params);
 
-      // Usando os campos corretos que a API da Vapi espera
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+      // Usando o webhook correto para criar assistentes
+      const response = await fetch(CREATE_ASSISTANT_WEBHOOK, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           name: params.assistant_name,
-          prompt: params.system_prompt,
-          first_message: params.first_message,
+          instructions: params.system_prompt, // Usando `instructions` no lugar de `prompt`
+          default_message: params.first_message, // Usando `default_message` no lugar de `first_message`
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Resposta de erro da Vapi:', errorText);
+        console.error('Resposta de erro do webhook:', errorText);
         throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('Assistente criado com sucesso via API da Vapi:', data);
-
-      let userId = null;
-      let assistantData = null;
+      console.log('Assistente criado com sucesso via webhook:', data);
 
       // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
       if (data && data.id) {
         try {
           const { data: authData } = await supabase.auth.getSession();
-          userId = authData?.session?.user?.id;
+          const userId = authData?.session?.user?.id;
 
-          const { data: dbAssistantData, error: dbError } = await supabase
+          const { data: assistantData, error: dbError } = await supabase
             .from('assistants')
             .insert({
               name: params.assistant_name,
@@ -100,27 +100,11 @@ export const webhookService = {
           if (dbError) {
             console.error('Erro ao salvar assistente no banco de dados:', dbError);
           } else {
-            console.log('Assistente salvo no banco de dados:', dbAssistantData);
-            localStorage.setItem('selected_assistant', JSON.stringify(dbAssistantData));
-            assistantData = dbAssistantData;
+            console.log('Assistente salvo no banco de dados:', assistantData);
+            localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
           }
         } catch (dbSaveError) {
           console.error('Erro ao salvar assistente no banco de dados:', dbSaveError);
-        }
-        
-        // Notificar webhook externo sobre a criação do assistente
-        try {
-          await this.notifyAssistantCreation({
-            assistant_id: data.id,
-            assistant_name: params.assistant_name,
-            system_prompt: params.system_prompt,
-            first_message: params.first_message,
-            user_id: userId,
-            vapi_data: data
-          });
-        } catch (webhookError) {
-          console.error('Erro ao notificar webhook sobre criação do assistente:', webhookError);
-          // Não interromper o fluxo caso o webhook falhe
         }
       }
 
@@ -245,20 +229,20 @@ export const webhookService = {
   async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<WebhookResponse> {
     try {
       console.log(`Iniciando chamada para cliente ${clientId} - ${phoneNumber} - campanha ${campaignId}`);
-      
-      // Get selected assistant from localStorage
+
+      // Obter assistente selecionado do localStorage
       let selectedAssistant = null;
       try {
         const storedAssistant = localStorage.getItem('selected_assistant');
         if (storedAssistant) {
           selectedAssistant = JSON.parse(storedAssistant);
-          console.log('Using stored assistant for call:', selectedAssistant);
+          console.log('Usando assistente selecionado para a chamada:', selectedAssistant);
         }
       } catch (e) {
-        console.error('Error parsing stored assistant data:', e);
+        console.error('Erro ao analisar dados do assistente armazenado:', e);
       }
-      
-      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+
+      const response = await fetch(MAKE_CALL_WEBHOOK, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -268,7 +252,7 @@ export const webhookService = {
           phoneNumber,
           campaignId,
           assistant_id: selectedAssistant?.assistant_id,
-          assistant_name: selectedAssistant?.name
+          assistant_name: selectedAssistant?.name,
         }),
       });
 
