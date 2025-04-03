@@ -81,9 +81,19 @@ export const webhookService = {
       // Se o assistente foi criado com sucesso, vamos salvá-lo no banco de dados
       if (data && data.id) {
         try {
-          const { data: authData } = await supabase.auth.getSession();
+          const { data: authData, error: authError } = await supabase.auth.getSession();
+          if (authError) {
+            console.error('Erro ao obter sessão do usuário:', authError);
+            throw authError;
+          }
+      
           const userId = authData?.session?.user?.id;
-
+          if (!userId) {
+            throw new Error('ID do usuário não encontrado na sessão.');
+          }
+      
+          console.log('Salvando assistente no banco de dados com user_id:', userId);
+      
           const { data: assistantData, error: dbError } = await supabase
             .from('assistants')
             .insert({
@@ -96,7 +106,7 @@ export const webhookService = {
             })
             .select()
             .single();
-
+      
           if (dbError) {
             console.error('Erro ao salvar assistente no banco de dados:', dbError);
           } else {
