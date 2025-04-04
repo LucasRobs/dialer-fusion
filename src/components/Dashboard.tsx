@@ -45,19 +45,21 @@ const Dashboard = () => {
   const handleCreateAssistant = async () => {
     setIsSubmitting(true);
     try {
+      const userId = 'exampleUserId'; // Replace with actual logic to fetch userId
       const response = await webhookService.createAssistant({
-        assistant_name: assistantName,
+        name: assistantName,
         first_message: firstMessage,
         system_prompt: systemPrompt,
+        userId: userId,
       });
 
-      if (response.success) {
+      if (response && response.status === 'success') { // Adjusted to check the actual structure
         alert('Assistente criado com sucesso!');
         setAssistantName('');
         setFirstMessage('');
         setSystemPrompt('');
       } else {
-        alert(`Erro ao criar assistente: ${response.message}`);
+        alert(`Erro ao criar assistente || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Erro ao criar assistente:', error);

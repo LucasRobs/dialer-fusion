@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { PhoneOff, BarChart3 } from 'lucide-react';
@@ -7,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { webhookService } from '@/services/webhookService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CampaignStatus {
   id: number;
@@ -16,6 +16,7 @@ interface CampaignStatus {
   callsMade: number;
   callsRemaining: number;
   active: boolean;
+  assistantName?: string;
 }
 
 interface ActiveCampaignProps {
@@ -25,6 +26,7 @@ interface ActiveCampaignProps {
 
 const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignStopped }) => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const handleStopCampaign = async () => {
     if (!campaign.id) {
@@ -37,6 +39,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
       await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
+        user_id: user?.id,
         additional_data: {
           campaign_name: campaign.name,
           progress: campaign.progress,

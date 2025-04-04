@@ -1,297 +1,228 @@
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Bot, Plus, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
 
-export interface VapiAssistant {
-  id: string;
-  name: string;
-  assistant_id: string;
-  user_id: string;
-  status?: string;
-  created_at?: string;
-  system_prompt?: string;
-  first_message?: string;
-  model?: string;
-  voice?: string;
-  metadata?: Record<string, any>;
-}
+const AITraining = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [firstMessage, setFirstMessage] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
 
-interface WebhookResponse {
-  success: boolean;
-  message?: string;
-  data?: any;
-}
+  // Fetch assistants
+  const { data: assistants, isLoading, refetch } = useQuery({
+    queryKey: ['assistants', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return await webhookService.getAllAssistants(user.id);
+    },
+    enabled: !!user?.id
+  });
 
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
-const VAPI_API_URL = "https://api.vapi.ai";
-const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook';
-
-export const webhookService = {
-  /**
-   * Busca todos os assistentes de um usuário
-   */
-  async getAllAssistants(userId: string): Promise<VapiAssistant[]> {
+  // Load selected assistant from localStorage
+  useEffect(() => {
     try {
-      console.log(`Buscando assistentes para o usuário ${userId}`);
-
-      // 1. Busca assistentes no banco de dados local primeiro
-      const localAssistants = await this.getLocalAssistants(userId);
-      
-      // 2. Busca na API do VAPI
-      try {
-        const response = await fetch(`${VAPI_API_URL}/assistant`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          console.error('Falha ao buscar assistentes da VAPI:', response.status, response.statusText);
-          return localAssistants;
+      const storedAssistant = localStorage.getItem('selected_assistant');
+      if (storedAssistant) {
+        setSelectedAssistant(JSON.parse(storedAssistant));
+      } else if (assistants && assistants.length > 0) {
+        // Filter out pending assistants
+        const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
+        if (readyAssistants.length > 0) {
+          setSelectedAssistant(readyAssistants[0]);
+          localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
         }
-
-        const vapiAssistants = await response.json();
-        console.log('Assistentes recuperados da VAPI:', vapiAssistants);
-        
-        const userAssistants = vapiAssistants.filter((assistant: any) => 
-          assistant.metadata?.user_id === userId
-        );
-        
-        console.log(`Filtrados ${userAssistants.length} assistentes para o usuário ${userId}:`, userAssistants);
-
-        // Combina e remove duplicatas
-        const combined = this.combineAssistants(localAssistants, userAssistants);
-        
-        // Atualiza cache
-        if (userAssistants.length > 0) {
-          await this.cacheAssistants(userAssistants, userId);
-        }
-        
-        return combined;
-      } catch (apiError) {
-        console.error('Erro na API VAPI:', apiError);
-        return localAssistants;
       }
-      
     } catch (error) {
-      console.error('Erro ao buscar assistentes:', error);
-      throw error;
+      console.error("Erro ao carregar assistente selecionado:", error);
     }
-  },
+  }, [assistants]);
 
-  /**
-   * Busca assistentes locais
-   */
-  async getLocalAssistants(userId: string): Promise<VapiAssistant[]> {
-    try {
-      const { data, error } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Erro ao buscar assistentes locais:', error);
-        return [];
-      }
-
-      console.log(`Encontrados ${data?.length || 0} assistentes locais para o usuário ${userId}:`, data);
-      return data || [];
-    } catch (error) {
-      console.error('Erro ao buscar assistentes locais:', error);
-      return [];
+  const handleCreateAssistant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!name || !firstMessage || !systemPrompt) {
+      toast.error('Por favor, preencha todos os campos');
+      return;
     }
-  },
 
-  /**
-   * Cria um novo assistente para o usuário (completo)
-   */
-  async createAssistant(params: {
-    name: string;
-    first_message: string;
-    system_prompt: string;
-    userId: string;
-  }): Promise<VapiAssistant> {
+    if (!user?.id) {
+      toast.error('Você precisa estar logado para criar um assistente');
+      return;
+    }
+
+    setIsSubmitting(true);
+    
     try {
-      console.log('Iniciando criação de assistente com parâmetros:', params);
-      
-      const response = await fetch(`${WEBHOOK_BASE_URL}/createassistant`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: params.name,
-          model: { provider: 'openai', model: 'gpt-3.5-turbo' },
-          voice: { provider: '11labs', voiceId: 'rachel' },
-          firstMessage: params.first_message,
-          instructions: params.system_prompt,
-          metadata: {
-            user_id: params.userId,
-            created_at: new Date().toISOString()
-          }
-        }),
+      const newAssistant = await webhookService.createAssistant({
+        name,
+        first_message: firstMessage,
+        system_prompt: systemPrompt,
+        userId: user.id
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Erro na resposta do webhook de criação:', response.status, response.statusText, errorText);
-        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
+      
+      // Refetch assistants and update selected assistant
+      await refetch();
+      
+      // Select the newly created assistant
+      if (newAssistant) {
+        setSelectedAssistant(newAssistant);
+        localStorage.setItem('selected_assistant', JSON.stringify(newAssistant));
       }
-
-      const vapiAssistant = await response.json();
-      console.log('Resposta do webhook de criação:', vapiAssistant);
-
-      // Salva no banco de dados local
-      const { data: assistantData, error: dbError } = await supabase
-        .from('assistants')
-        .insert({
-          name: params.name,
-          assistant_id: vapiAssistant.id,
-          system_prompt: params.system_prompt,
-          first_message: params.first_message,
-          user_id: params.userId,
-          status: 'ready',
-          metadata: {
-            vapi_data: vapiAssistant,
-            created_at: new Date().toISOString()
-          }
-        })
-        .select()
-        .single();
-
-      if (dbError) {
-        console.error('Erro ao salvar assistente no banco de dados:', dbError);
-        throw dbError;
-      }
-
-      console.log('Assistente salvo no banco de dados:', assistantData);
       
-      // Atualiza o localStorage com o novo assistente
-      localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+      // Reset form
+      setName('');
+      setFirstMessage('');
+      setSystemPrompt('');
       
-      // Notificar sucesso
-      toast.success(`Assistente "${params.name}" criado com sucesso!`);
-      
-      return assistantData;
+      toast.success('Assistente criado com sucesso!');
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
-      toast.error(`Erro ao criar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-      throw error;
+      toast.error(error instanceof Error ? error.message : 'Erro ao criar assistente');
+    } finally {
+      setIsSubmitting(false);
     }
-  },
+  };
 
-  /**
-   * Dispara webhook de chamada
-   */
-  async triggerCallWebhook(payload: {
-    action: string;
-    campaign_id: number;
-    client_id: number;
-    client_name: string;
-    client_phone: string;
-    user_id: string | undefined;
-    additional_data: Record<string, any>;
-  }): Promise<{ success: boolean }> {
-    try {
-      // Get selected assistant from localStorage if available
-      try {
-        const storedAssistant = localStorage.getItem('selected_assistant');
-        if (storedAssistant) {
-          const assistantData = JSON.parse(storedAssistant);
-          // Append selected assistant data to additional_data if not already present
-          if (!payload.additional_data) {
-            payload.additional_data = {};
-          }
-          payload.additional_data.assistant_id = assistantData.assistant_id;
-          payload.additional_data.assistant_name = assistantData.name;
-          console.log('Added selected assistant data to webhook payload:', assistantData);
-        }
-      } catch (e) {
-        console.error('Error parsing stored assistant data:', e);
-      }
-      
-      const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+  const handleSelectAssistant = (assistant: VapiAssistant) => {
+    setSelectedAssistant(assistant);
+    localStorage.setItem('selected_assistant', JSON.stringify(assistant));
+    toast.success(`Assistente "${assistant.name}" selecionado como padrão`);
+  };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Erro na resposta do webhook de chamada:', response.status, response.statusText, errorText);
-        throw new Error(`Erro no webhook: ${response.statusText} - ${errorText}`);
-      }
+  return (
+    <div className="container mx-auto px-4 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Treinamento de IA</h1>
+        <p className="text-foreground/70">Crie e gerencie seus assistentes virtuais.</p>
+      </div>
 
-      const result = await response.json();
-      return result;
-    } catch (error) {
-      console.error('Erro ao acionar webhook:', error);
-      throw error;
-    }
-  },
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Lista de Assistentes */}
+        <div className="md:col-span-1">
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Assistentes</CardTitle>
+              <CardDescription>
+                {selectedAssistant 
+                  ? `Assistente atual: ${selectedAssistant.name}`
+                  : 'Selecione ou crie um assistente'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : assistants && assistants.length > 0 ? (
+                <div className="space-y-2">
+                  {assistants.map((assistant) => (
+                    <Button
+                      key={assistant.id}
+                      variant={selectedAssistant?.id === assistant.id ? "default" : "outline"}
+                      className="w-full justify-start text-left"
+                      onClick={() => handleSelectAssistant(assistant)}
+                    >
+                      <Bot className="mr-2 h-4 w-4" />
+                      <span className="truncate">{assistant.name}</span>
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  Nenhum assistente encontrado. Crie seu primeiro assistente!
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-  /**
-   * Métodos auxiliares
-   */
-  async cacheAssistants(assistants: any[], userId: string): Promise<void> {
-    try {
-      await Promise.all(
-        assistants.map(async (assistant) => {
-          const { error } = await supabase
-            .from('assistants')
-            .upsert({
-              assistant_id: assistant.id,
-              name: assistant.name,
-              user_id: userId,
-              status: assistant.status,
-              created_at: assistant.createdAt,
-              system_prompt: assistant.instructions,
-              first_message: assistant.firstMessage,
-              metadata: assistant.metadata
-            }, { onConflict: 'assistant_id' });
-
-          if (error) {
-            console.error('Erro ao salvar assistente no cache:', error);
-          }
-        })
-      );
-    } catch (error) {
-      console.error('Erro ao armazenar assistentes em cache:', error);
-    }
-  },
-
-  mapVapiAssistantToLocalFormat(assistant: any): VapiAssistant {
-    return {
-      id: assistant.id,
-      name: assistant.name,
-      assistant_id: assistant.id,
-      user_id: assistant.metadata?.user_id || '',
-      status: assistant.status,
-      created_at: assistant.createdAt,
-      system_prompt: assistant.instructions,
-      first_message: assistant.firstMessage,
-      model: assistant.model,
-      voice: assistant.voice,
-      metadata: assistant.metadata
-    };
-  },
-
-  combineAssistants(local: VapiAssistant[], remote: any[]): VapiAssistant[] {
-    const remoteMapped: VapiAssistant[] = remote.map(this.mapVapiAssistantToLocalFormat);
-    const combined = [...local];
-    
-    remoteMapped.forEach(remoteAssistant => {
-      if (!combined.some(a => a.assistant_id === remoteAssistant.assistant_id)) {
-        combined.push(remoteAssistant);
-      }
-    });
-
-    console.log(`Combinados ${combined.length} assistentes (${local.length} locais + ${remoteMapped.length} remotos)`);
-    return combined;
-  },
+        {/* Formulário de Criação */}
+        <div className="md:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Criar Novo Assistente</CardTitle>
+              <CardDescription>
+                Configure as respostas e comportamento do seu assistente virtual
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleCreateAssistant}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="name" className="text-sm font-medium">
+                    Nome do Assistente
+                  </label>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Ex: Assistente de Vendas"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="firstMessage" className="text-sm font-medium">
+                    Primeira Mensagem
+                  </label>
+                  <Textarea
+                    id="firstMessage"
+                    value={firstMessage}
+                    onChange={(e) => setFirstMessage(e.target.value)}
+                    placeholder="Ex: Olá! Sou o assistente da empresa. Como posso ajudar hoje?"
+                    rows={3}
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Esta será a primeira mensagem que o assistente enviará ao iniciar uma conversa.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="systemPrompt" className="text-sm font-medium">
+                    Prompt do Sistema
+                  </label>
+                  <Textarea
+                    id="systemPrompt"
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder="Ex: Você é um assistente virtual especializado em vendas. Seja cordial e profissional."
+                    rows={5}
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Instruções de como o assistente deve se comportar. O usuário não verá estas instruções.
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={isSubmitting} className="w-full">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Criando Assistente...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Criar Assistente
+                    </>
+                  )}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-export default webhookService;
+export default AITraining;

@@ -15,10 +15,14 @@ export interface VapiAssistant {
   metadata?: Record<string, any>;
 }
 
-interface WebhookResponse {
-  success: boolean;
-  message?: string;
-  data?: any;
+export interface WebhookPayload {
+  action: string;
+  campaign_id: number;
+  client_id?: number;
+  client_name?: string;
+  client_phone?: string;
+  user_id?: string;
+  additional_data?: Record<string, any>;
 }
 
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -189,11 +193,11 @@ export const webhookService = {
   async triggerCallWebhook(payload: {
     action: string;
     campaign_id: number;
-    client_id: number;
-    client_name: string;
-    client_phone: string;
-    user_id: string | undefined;
-    additional_data: Record<string, any>;
+    client_id?: number;
+    client_name?: string;
+    client_phone?: string;
+    user_id?: string | undefined;
+    additional_data?: Record<string, any>;
   }): Promise<{ success: boolean }> {
     try {
       // Get selected assistant from localStorage if available
@@ -230,6 +234,97 @@ export const webhookService = {
     } catch (error) {
       console.error('Erro ao acionar webhook:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Recuperar assistentes da API da Vapi
+   */
+  async getAssistantsFromVapi(): Promise<{ success: boolean, data?: any, message?: string }> {
+    try {
+      console.log('Buscando assistentes da Vapi API');
+      
+      // Get assistants from API
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Erro ao obter assistentes da API Vapi:', response.status, response.statusText);
+        throw new Error(`Erro ao obter assistentes: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Assistentes recuperados da API da Vapi:', data);
+      
+      return {
+        success: true,
+        data
+      };
+    } catch (error) {
+      console.error('Erro ao buscar assistentes da Vapi:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+      };
+    }
+  },
+
+  /**
+   * Fazer uma chamada para um cliente
+   */
+  async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<{ success: boolean, message?: string, data?: any }> {
+    try {
+      console.log(`Iniciando chamada para cliente ${clientId} - ${phoneNumber} - campanha ${campaignId}`);
+      
+      // Get selected assistant from localStorage
+      let selectedAssistant = null;
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          selectedAssistant = JSON.parse(storedAssistant);
+          console.log('Using stored assistant for call:', selectedAssistant);
+        }
+      } catch (e) {
+        console.error('Error parsing stored assistant data:', e);
+      }
+      
+      const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'make_call',
+          clientId,
+          phoneNumber,
+          campaignId,
+          assistant_id: selectedAssistant?.assistant_id,
+          assistant_name: selectedAssistant?.name
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao fazer ligação: ${response.statusText} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        message: 'Ligação iniciada com sucesso',
+        data,
+      };
+    } catch (error) {
+      console.error('Erro ao fazer ligação:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+      };
     }
   },
 

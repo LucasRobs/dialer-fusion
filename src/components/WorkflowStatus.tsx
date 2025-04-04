@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -9,6 +8,7 @@ import { RotateCw, CheckCircle, AlertCircle, Phone, Settings, Info } from 'lucid
 import { webhookService, WebhookPayload } from '@/services/webhookService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WorkflowStatusProps {
   campaignId?: number;
@@ -19,6 +19,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   campaignId,
   refreshInterval = 30000 // 30 segundos por padrão
 }) => {
+  const { user } = useAuth();
   const [workflowStatus, setWorkflowStatus] = useState<{
     status: 'idle' | 'running' | 'completed' | 'failed';
     completedTasks: number;
