@@ -17,7 +17,7 @@ interface CampaignStatus {
   callsRemaining: number;
   active: boolean;
   assistantName?: string;
-  assistantId?: string; // Add this property
+  assistantId?: string;
 }
 
 interface ActiveCampaignProps {
@@ -36,6 +36,24 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
 
     try {
+      // Verificar ID do assistente
+      let assistantId = campaign.assistantId;
+      if (!assistantId) {
+        // Tentar recuperar do localStorage como fallback
+        try {
+          const storedAssistant = localStorage.getItem('selected_assistant');
+          if (storedAssistant) {
+            const parsedAssistant = JSON.parse(storedAssistant);
+            assistantId = parsedAssistant.assistant_id || parsedAssistant.id;
+            console.log('Using assistant ID from localStorage for stop campaign:', assistantId);
+          }
+        } catch (e) {
+          console.error('Error parsing stored assistant data:', e);
+        }
+      }
+
+      console.log('Using assistant ID for stopping campaign:', assistantId);
+      
       // Enviar dados para webhook
       await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
@@ -45,7 +63,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: campaign.assistantId // Pass the assistant ID
+          assistant_id: assistantId, // Use the assistantId variable
+          assistant_name: campaign.assistantName
         }
       });
       

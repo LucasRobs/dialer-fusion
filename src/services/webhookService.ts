@@ -39,24 +39,37 @@ export const webhookService = {
 
       // 1. Busca assistentes no banco de dados local primeiro
       const localAssistants = await this.getLocalAssistants(userId);
+      console.log(`Encontrados ${localAssistants.length} assistentes locais`);
       
-      // 2. Busca na API do VAPI
+      // 2. Busca na API do VAPI - com tratamento de CORS
       try {
+        console.log('Tentando buscar assistentes da API VAPI...');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
         const response = await fetch(`${VAPI_API_URL}/assistant`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${VAPI_API_KEY}`,
             'Content-Type': 'application/json',
           },
+          signal: controller.signal,
+          mode: 'cors', // Explicitly set CORS mode
+        }).catch(err => {
+          console.warn('CORS issue detected when fetching assistants:', err);
+          return null; // Return null to indicate a CORS error
         });
-
-        if (!response.ok) {
-          console.error('Falha ao buscar assistentes da VAPI:', response.status, response.statusText);
-          return localAssistants;
+        
+        clearTimeout(timeoutId);
+        
+        // Se o fetch falhou (potencialmente por CORS), ou não retornou OK
+        if (!response || !response.ok) {
+          console.warn(`Não foi possível buscar assistentes da API: ${response?.status || 'CORS error'}`);
+          return localAssistants; // Retorna apenas assistentes locais em caso de erro
         }
 
         const vapiAssistants = await response.json();
-        console.log('Assistentes recuperados da VAPI:', vapiAssistants);
+        console.log('Assistentes recuperados da VAPI:', vapiAssistants.length || 0);
         
         // Filter assistants by user_id from metadata
         const userAssistants = vapiAssistants.filter((assistant: any) => {
@@ -66,7 +79,7 @@ export const webhookService = {
           return false;
         });
         
-        console.log(`Filtrados ${userAssistants.length} assistentes para o usuário ${userId}:`, userAssistants);
+        console.log(`Filtrados ${userAssistants.length} assistentes para o usuário ${userId}`);
 
         // Combina e remove duplicatas
         const combined = this.combineAssistants(localAssistants, userAssistants);
@@ -78,13 +91,13 @@ export const webhookService = {
         
         return combined;
       } catch (apiError) {
-        console.error('Erro na API VAPI:', apiError);
-        return localAssistants;
+        console.error('Erro na API VAPI (provavelmente CORS):', apiError);
+        return localAssistants; // Em caso de erro, retorna apenas assistentes locais
       }
       
     } catch (error) {
       console.error('Erro ao buscar assistentes:', error);
-      throw error;
+      return []; // Retorna array vazio em caso de erro geral
     }
   },
 
@@ -171,8 +184,13 @@ export const webhookService = {
         return [];
       }
 
-      console.log(`Encontrados ${data?.length || 0} assistentes locais para o usuário ${userId}:`, data);
-      return data || [];
+      console.log(`Encontrados ${data?.length || 0} assistentes locais para o usuário ${userId}`);
+      
+      // Garantir que sempre temos um status definido para cada assistente
+      return (data || []).map(assistant => ({
+        ...assistant,
+        status: assistant.status || 'ready'
+      }));
     } catch (error) {
       console.error('Erro ao buscar assistentes locais:', error);
       return [];
@@ -285,24 +303,52 @@ export const webhookService = {
     try {
       console.log('Disparando webhook com payload:', payload);
       
-      // Try to get the assistant ID from localStorage if not provided in payload
-      if (!payload.additional_data?.assistant_id) {
+      // Buscar assistente selecionado do localStorage para garantir que temos o ID correto
+      let assistantIdToUse = payload.additional_data?.assistant_id;
+      
+      if (!assistantIdToUse) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
             const assistant = JSON.parse(storedAssistant);
-            if (assistant && (assistant.id || assistant.assistant_id)) {
+            if (assistant) {
+              // Priorizar assistant_id sobre id caso ambos estejam presentes
+              assistantIdToUse = assistant.assistant_id || assistant.id;
+              
+              // Atualizar no payload
               if (!payload.additional_data) {
                 payload.additional_data = {};
               }
-              payload.additional_data.assistant_id = assistant.id || assistant.assistant_id;
-              console.log('Using assistant ID from localStorage:', payload.additional_data.assistant_id);
+              payload.additional_data.assistant_id = assistantIdToUse;
+              
+              console.log('Using assistant ID from localStorage:', assistantIdToUse);
+              
+              // Adicionar o nome do assistente também, se disponível
+              if (assistant.name) {
+                payload.additional_data.assistant_name = assistant.name;
+                console.log('Using assistant name from localStorage:', assistant.name);
+              }
             }
           }
         } catch (e) {
           console.error('Erro ao obter ID do assistente do localStorage:', e);
         }
       }
+      
+      if (!assistantIdToUse) {
+        console.warn('Nenhum ID de assistente disponível para a chamada webhook');
+      }
+      
+      // Garantir que temos um objeto para additional_data
+      if (!payload.additional_data) {
+        payload.additional_data = {};
+      }
+      
+      // Adicionar informações de debug para ajudar no troubleshooting
+      payload.additional_data.source_url = window.location.href;
+      payload.additional_data.timestamp = new Date().toISOString();
+      
+      console.log('Enviando payload final para webhook:', payload);
       
       const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
         method: 'POST',
@@ -316,13 +362,16 @@ export const webhookService = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Erro ao disparar webhook de chamada:', response.status, response.statusText, errorText);
+        toast.error(`Erro ao realizar chamada (${response.status}): ${response.statusText}`);
         return { success: false };
       }
 
       console.log('Webhook de chamada disparado com sucesso');
+      toast.success('Chamada iniciada com sucesso');
       return { success: true };
     } catch (error) {
       console.error('Erro ao disparar webhook de chamada:', error);
+      toast.error(`Erro ao realizar chamada: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       return { success: false };
     }
   },

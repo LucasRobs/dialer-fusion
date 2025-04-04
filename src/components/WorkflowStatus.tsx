@@ -93,10 +93,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         if (storedAssistant) {
           const assistantData = JSON.parse(storedAssistant);
           if (assistantData) {
-            if (assistantData.name) {
-              assistantName = assistantData.name;
-            }
-            assistantId = assistantData.id || assistantData.assistant_id;
+            assistantName = assistantData.name || "Default Assistant";
+            // Priorizar assistant_id sobre id se estiver disponível
+            assistantId = assistantData.assistant_id || assistantData.id;
             console.log('Using stored assistant for test call:', {
               name: assistantName,
               id: assistantId
@@ -105,6 +104,22 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         }
       } catch (e) {
         console.error('Error parsing stored assistant data:', e);
+      }
+      
+      if (!assistantId) {
+        console.warn('No assistant ID found for test call, using assistants from loaded list');
+        // Tenta encontrar na lista de assistantes carregados
+        if (assistants && assistants.length > 0) {
+          const firstAssistant = assistants[0];
+          assistantName = firstAssistant.name || "Default Assistant";
+          assistantId = firstAssistant.assistant_id || firstAssistant.id;
+          console.log('Using first available assistant for test call:', {
+            name: assistantName,
+            id: assistantId
+          });
+        } else {
+          console.warn('No assistants available, using default values');
+        }
       }
       
       const testData: WebhookPayload = {
@@ -126,7 +141,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       
       if (result.success) {
         toast({
-          description: `O teste de ligação foi enviado com sucesso usando o assistente "${assistantName}".`,
+          description: `O teste de ligação foi enviado com sucesso usando o assistente "${assistantName}"${assistantId ? ` (ID: ${assistantId.substring(0, 8)}...)` : ''}.`,
           variant: "default"
         });
       } else {

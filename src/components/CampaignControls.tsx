@@ -269,14 +269,29 @@ const CampaignControls = () => {
   };
 
   // Função para iniciar a campanha e enviar o webhook
+  // Função para iniciar a campanha e enviar o webhook
   const handleStartCampaign = async (campaign) => {
     setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     
     try {
       // Buscar o assistente pelo ID
-      const selectedAssistant = assistants.find(
-        (assistant) => assistant.id.toString() === campaign.aiProfile
+      let selectedAssistant = assistants.find(
+        (assistant) => assistant.id === campaign.aiProfile || assistant.assistant_id === campaign.aiProfile
       );
+      
+      // Fallback: verificar no localStorage
+      if (!selectedAssistant) {
+        try {
+          const storedAssistant = localStorage.getItem('selected_assistant');
+          if (storedAssistant) {
+            const parsedAssistant = JSON.parse(storedAssistant);
+            console.log("Retrieved assistant from localStorage:", parsedAssistant);
+            selectedAssistant = parsedAssistant;
+          }
+        } catch (e) {
+          console.error("Error parsing stored assistant data:", e);
+        }
+      }
       
       if (!selectedAssistant) {
         throw new Error("Assistente não encontrado");
@@ -287,7 +302,7 @@ const CampaignControls = () => {
       // Store selected assistant in localStorage for future reference
       localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistant));
       
-      // Get the correct assistant ID to use
+      // Get the correct assistant ID to use - preferindo assistant_id se disponível
       const assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
       console.log("Using assistant ID for campaign:", assistantId);
       

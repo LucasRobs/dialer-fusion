@@ -38,14 +38,22 @@ const Dashboard = () => {
     }
   });
   
-  // Buscar assistentes - usando a API da Vapi diretamente
+  // Buscar assistentes - usando a API do webhook
   const { data: assistants, isLoading: loadingAssistants, refetch: refetchAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
       try {
         if (!user?.id) return [];
         console.log("Buscando assistentes para o usuário:", user.id);
-        return await webhookService.getAllAssistants(user.id);
+        
+        // Priorizar busca de assistentes locais para evitar problemas de CORS
+        const allAssistants = await webhookService.getLocalAssistants(user.id);
+        
+        // Garantir que todos os assistentes tenham um status definido
+        return allAssistants.map(assistant => ({
+          ...assistant,
+          status: assistant.status || 'ready'
+        })) as AIAssistant[];
       } catch (error) {
         console.error("Erro ao buscar assistentes:", error);
         return [];
@@ -123,20 +131,59 @@ const Dashboard = () => {
       // Find the associated assistant for this campaign
       let campaignAssistant = null;
       
-      // If the campaign has an assistant_id, try to find it in the assistants list
+      // 1. Look for the assistant in our list first
       if (campaign.assistant_id && assistants && assistants.length > 0) {
-        campaignAssistant = assistants.find(a => a.id === campaign.assistant_id || a.assistant_id === campaign.assistant_id);
-        console.log("Found campaign assistant:", campaignAssistant);
+        // Try to match with either id or assistant_id
+        campaignAssistant = assistants.find(a => 
+          a.id === campaign.assistant_id || 
+          a.assistant_id === campaign.assistant_id
+        );
+        
+        if (campaignAssistant) {
+          console.log("Found campaign assistant in list:", campaignAssistant);
+        }
       }
       
-      // If no campaign-specific assistant found, use the selected assistant
+      // 2. Check localStorage as fallback
+      if (!campaignAssistant) {
+        try {
+          const storedAssistant = localStorage.getItem('selected_assistant');
+          if (storedAssistant) {
+            const parsedAssistant = JSON.parse(storedAssistant);
+            if (parsedAssistant) {
+              campaignAssistant = {
+                ...parsedAssistant,
+                status: parsedAssistant.status || 'ready'
+              };
+              console.log("Using stored assistant for campaign:", campaignAssistant);
+            }
+          }
+        } catch (e) {
+          console.error("Error loading stored assistant:", e);
+        }
+      }
+      
+      // 3. Use selected assistant as last resort
       if (!campaignAssistant && selectedAssistant) {
         campaignAssistant = selectedAssistant;
         console.log("Using selected assistant for campaign:", campaignAssistant);
       }
+      
+      // 4. Create a default assistant as absolute last resort
+      if (!campaignAssistant) {
+        campaignAssistant = {
+          id: campaign.assistant_id || 'default-assistant',
+          name: 'Assistente Padrão',
+          assistant_id: campaign.assistant_id || 'default-assistant',
+          user_id: user?.id || '',
+          status: 'ready'
+        };
+        console.log("Using default assistant for campaign:", campaignAssistant);
+      }
 
-      const assistantId = campaignAssistant?.id || campaignAssistant?.assistant_id;
-      console.log("Using assistant ID for campaign:", assistantId);
+      // Determine the best ID to use (prefer assistant_id if available)
+      const assistantId = campaignAssistant.assistant_id || campaignAssistant.id;
+      console.log("Final assistant ID for campaign:", assistantId);
       
       // Converter para o formato que o componente ActiveCampaign espera
       setActiveCampaign({
@@ -147,13 +194,13 @@ const Dashboard = () => {
         callsMade: campaign.answered_calls || 0,
         callsRemaining: (campaign.total_calls || 0) - (campaign.answered_calls || 0),
         active: true,
-        assistantName: campaignAssistant?.name || 'Assistente Padrão',
+        assistantName: campaignAssistant.name || 'Assistente Padrão',
         assistantId: assistantId // Add this to pass the ID
       });
     } else {
       setActiveCampaign(null);
     }
-  }, [activeCampaigns, selectedAssistant, assistants]);
+  }, [activeCampaigns, selectedAssistant, assistants, user?.id]);
   
   const handleCampaignStopped = async () => {
     if (activeCampaign) {
