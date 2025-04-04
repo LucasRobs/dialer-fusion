@@ -9,11 +9,26 @@ import { webhookService, WebhookPayload } from '@/services/webhookService';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface WorkflowStatusProps {
   campaignId?: number;
   refreshInterval?: number; // em milissegundos
 }
+
+// Opções para modelo e voz
+const MODEL_OPTIONS = [
+  { value: "gpt-4o-turbo", label: "GPT-4o Turbo" },
+  { value: "gpt-4", label: "GPT-4" },
+  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" }
+];
+
+const VOICE_OPTIONS = [
+  { value: "eleven_labs_gemma", label: "ElevenLabs Gemma" },
+  { value: "eleven_labs_josh", label: "ElevenLabs Josh" },
+  { value: "eleven_labs_rachel", label: "ElevenLabs Rachel" },
+  { value: "eleven_labs_domi", label: "ElevenLabs Domi" }
+];
 
 const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   campaignId,
@@ -37,7 +52,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const [vapiSettings, setVapiSettings] = useState({
     callerId: "97141b30-c5bc-4234-babb-d38b79452e2a", // Default Vapi caller ID
     apiKey: "",
-    assistantId: "" // Will be populated from localStorage if available
+    assistantId: "", // Will be populated from localStorage if available
+    model: "gpt-4o-turbo", // Modelo padrão
+    voice: "eleven_labs_gemma" // Voz padrão
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [assistants, setAssistants] = useState<any[]>([]);
@@ -59,10 +76,34 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       
       setLogs([]);
       
-      // Load assistants from local storage and API
+      // Load assistants from Vapi API directly
+      try {
+        const vapiAssistants = await webhookService.getAssistantsFromVapiApi();
+        if (vapiAssistants && vapiAssistants.length > 0) {
+          console.log('Assistentes encontrados na API Vapi:', vapiAssistants);
+          setAssistants(vapiAssistants);
+          
+          // Se não tivermos um assistente selecionado, selecione o primeiro
+          if (!vapiSettings.assistantId && vapiAssistants.length > 0) {
+            setVapiSettings(prev => ({
+              ...prev,
+              assistantId: vapiAssistants[0].id
+            }));
+            console.log('Selecionando primeiro assistente da API:', vapiAssistants[0]);
+          }
+        } else {
+          console.log('Nenhum assistente encontrado na API Vapi');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar assistentes da API Vapi:', error);
+      }
+      
+      // Também carrega os assistentes do banco local como backup
       const assistantsResult = await webhookService.getAllAssistants(user?.id || '');
       if (Array.isArray(assistantsResult) && assistantsResult.length > 0) {
-        setAssistants(assistantsResult);
+        if (assistants.length === 0) {
+          setAssistants(assistantsResult);
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados de status:', error);
@@ -86,40 +127,57 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const testWebhook = async () => {
     try {
       let assistantName = "Default Assistant";
-      let assistantId = null;
+      let assistantId = vapiSettings.assistantId;
       
-      try {
-        const storedAssistant = localStorage.getItem('selected_assistant');
-        if (storedAssistant) {
-          const assistantData = JSON.parse(storedAssistant);
-          if (assistantData) {
-            assistantName = assistantData.name || "Default Assistant";
-            // Priorizar assistant_id sobre id se estiver disponível
-            assistantId = assistantData.assistant_id || assistantData.id;
-            console.log('Using stored assistant for test call:', {
+      if (!assistantId) {
+        try {
+          // Primeiro, tentar usar o assistente da API Vapi
+          if (assistants && assistants.length > 0) {
+            const firstAssistant = assistants[0];
+            assistantName = firstAssistant.name || "Default Assistant";
+            assistantId = firstAssistant.id;
+            console.log('Using Vapi API assistant for test call:', {
               name: assistantName,
               id: assistantId
             });
+          } else {
+            // Tentar usar do localStorage como fallback
+            const storedAssistant = localStorage.getItem('selected_assistant');
+            if (storedAssistant) {
+              const assistantData = JSON.parse(storedAssistant);
+              if (assistantData) {
+                assistantName = assistantData.name || "Default Assistant";
+                // Priorizar assistant_id sobre id se estiver disponível
+                assistantId = assistantData.assistant_id || assistantData.id;
+                console.log('Using stored assistant for test call:', {
+                  name: assistantName,
+                  id: assistantId
+                });
+              }
+            }
           }
+        } catch (e) {
+          console.error('Error getting assistant data:', e);
         }
-      } catch (e) {
-        console.error('Error parsing stored assistant data:', e);
+      } else {
+        // Usamos o assistantId das configurações e procuramos o nome
+        const matchingAssistant = assistants.find(a => a.id === assistantId);
+        if (matchingAssistant) {
+          assistantName = matchingAssistant.name || "Selected Assistant";
+        }
+        console.log('Using configured assistant for test call:', {
+          name: assistantName,
+          id: assistantId
+        });
       }
       
       if (!assistantId) {
-        console.warn('No assistant ID found for test call, using assistants from loaded list');
-        // Tenta encontrar na lista de assistantes carregados
-        if (assistants && assistants.length > 0) {
-          const firstAssistant = assistants[0];
-          assistantName = firstAssistant.name || "Default Assistant";
-          assistantId = firstAssistant.assistant_id || firstAssistant.id;
-          console.log('Using first available assistant for test call:', {
-            name: assistantName,
-            id: assistantId
-          });
-        } else {
-          console.warn('No assistants available, using default values');
-        }
+        console.error('No assistant ID available for test call');
+        toast({
+          description: "Nenhum assistente disponível. Por favor, selecione ou crie um assistente primeiro.",
+          variant: "destructive"
+        });
+        return;
       }
       
       const testData: WebhookPayload = {
@@ -127,6 +185,11 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         campaign_id: campaignId || 0,
         client_name: "Cliente Teste",
         client_phone: "+5511999999999",
+        provider: "vapi",
+        call: {
+          model: vapiSettings.model, // Usar modelo selecionado
+          voice: vapiSettings.voice   // Usar voz selecionada
+        },
         additional_data: {
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
@@ -175,8 +238,12 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       try {
         const parsed = JSON.parse(savedSettings);
         setVapiSettings(prev => ({
-          ...parsed,
-          callerId: parsed.callerId || prev.callerId
+          ...prev,
+          callerId: parsed.callerId || prev.callerId,
+          apiKey: parsed.apiKey || prev.apiKey,
+          assistantId: parsed.assistantId || prev.assistantId,
+          model: parsed.model || prev.model,
+          voice: parsed.voice || prev.voice
         }));
       } catch (e) {
         console.error("Erro ao carregar configurações Vapi:", e);
@@ -200,19 +267,20 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   }, []);
   
   useEffect(() => {
-    const loadAssistants = async () => {
+    // Carregar assistentes da API Vapi
+    const loadVapiAssistants = async () => {
       try {
-        const result = await webhookService.getAllAssistants(user?.id || '');
-        if (Array.isArray(result) && result.length > 0) {
-          setAssistants(result);
-          console.log('Loaded assistants:', result);
+        const vapiAssistants = await webhookService.getAssistantsFromVapiApi();
+        if (vapiAssistants && vapiAssistants.length > 0) {
+          console.log('Loaded assistants from Vapi API:', vapiAssistants);
+          setAssistants(vapiAssistants);
         }
       } catch (error) {
-        console.error('Error loading assistants:', error);
+        console.error('Error loading assistants from Vapi API:', error);
       }
     };
     
-    loadAssistants();
+    loadVapiAssistants();
   }, []);
   
   const renderEmptyState = () => (
@@ -274,29 +342,63 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key da Vapi (opcional)</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="sk_vapi_..."
-                value={vapiSettings.apiKey}
-                onChange={(e) => setVapiSettings({...vapiSettings, apiKey: e.target.value})}
-              />
+              <Label htmlFor="assistantId">Assistente Vapi</Label>
+              <Select 
+                value={vapiSettings.assistantId} 
+                onValueChange={(value) => setVapiSettings({...vapiSettings, assistantId: value})}
+              >
+                <SelectTrigger id="assistantId">
+                  <SelectValue placeholder="Selecione um assistente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assistants.map((assistant) => (
+                    <SelectItem key={assistant.id} value={assistant.id}>
+                      {assistant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assistants.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhum assistente encontrado. Use a API key 494da5a9-4a54-4155-bffb-d7206bd72afd.</p>
+              )}
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="assistantId">ID do Assistente Vapi</Label>
-              <Input
-                id="assistantId"
-                value={vapiSettings.assistantId || "Assistente personalizado será usado. Crie um na aba de AI Training"}
-                onChange={(e) => setVapiSettings({...vapiSettings, assistantId: e.target.value})}
-                readOnly
-              />
-              {vapiSettings.assistantId ? (
-                <p className="text-xs text-secondary">Você está usando um assistente personalizado.</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">Crie um assistente personalizado na aba AI Training.</p>
-              )}
+              <Label htmlFor="model">Modelo de IA</Label>
+              <Select 
+                value={vapiSettings.model} 
+                onValueChange={(value) => setVapiSettings({...vapiSettings, model: value})}
+              >
+                <SelectTrigger id="model">
+                  <SelectValue placeholder="Selecione um modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="voice">Voz</Label>
+              <Select 
+                value={vapiSettings.voice} 
+                onValueChange={(value) => setVapiSettings({...vapiSettings, voice: value})}
+              >
+                <SelectTrigger id="voice">
+                  <SelectValue placeholder="Selecione uma voz" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VOICE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>

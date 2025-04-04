@@ -23,6 +23,11 @@ export interface WebhookPayload {
   client_phone?: string;
   user_id?: string;
   additional_data?: Record<string, any>;
+  provider?: string;
+  call?: {
+    model?: string;
+    voice?: string;
+  };
 }
 
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -30,6 +35,8 @@ const VAPI_API_URL = "https://api.vapi.ai";
 const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook';
 const FETCH_TIMEOUT = 8000; // 8 segundos de timeout para melhor confiabilidade
 const CLIENT_VERSION = '1.3.0';
+const DEFAULT_MODEL = "gpt-4o-turbo"; // Modelo padrão para chamadas
+const DEFAULT_VOICE = "eleven_labs_gemma"; // Voz padrão para chamadas
 
 export const webhookService = {
   /**
@@ -110,6 +117,46 @@ export const webhookService = {
     } catch (error) {
       console.error('Erro ao buscar assistentes:', error);
       return []; // Retorna array vazio em caso de erro geral
+    }
+  },
+
+  /**
+   * Busca assistentes diretamente da API Vapi usando a API key 
+   * sem filtragem por usuário
+   */
+  async getAssistantsFromVapiApi(): Promise<any[]> {
+    try {
+      console.log('Buscando assistentes diretamente da API Vapi');
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      }).catch(err => {
+        console.warn('Erro de fetch ao buscar assistentes da Vapi:', err);
+        return null;
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response || !response.ok) {
+        console.error(`Erro ao buscar assistentes da Vapi: ${response?.status || 'Erro de fetch'}`);
+        return [];
+      }
+      
+      const vapiAssistants = await response.json();
+      console.log(`Recuperados ${vapiAssistants.length || 0} assistentes diretamente da Vapi:`, vapiAssistants);
+      
+      return vapiAssistants || [];
+    } catch (error) {
+      console.error('Erro ao buscar assistentes da Vapi:', error);
+      return [];
     }
   },
 
@@ -378,6 +425,37 @@ export const webhookService = {
         }
       }
       
+      // Se ainda não encontramos um ID de assistente, vamos tentar buscar assistentes da API
+      if (!vapiAssistantId) {
+        try {
+          console.log('Buscando assistentes da API Vapi para usar em chamada webhook');
+          const vapiAssistants = await this.getAssistantsFromVapiApi();
+          
+          if (vapiAssistants && vapiAssistants.length > 0) {
+            // Pega o primeiro assistente disponível
+            const firstAssistant = vapiAssistants[0];
+            vapiAssistantId = firstAssistant.id;
+            assistantNameToUse = firstAssistant.name;
+            
+            console.log('Usando primeiro assistente disponível da API:', {
+              id: vapiAssistantId,
+              name: assistantNameToUse
+            });
+            
+            if (!payload.additional_data) {
+              payload.additional_data = {};
+            }
+            
+            payload.additional_data.assistant_id = vapiAssistantId;
+            payload.additional_data.assistant_name = assistantNameToUse;
+          } else {
+            console.warn('Nenhum assistente encontrado na API Vapi');
+          }
+        } catch (error) {
+          console.error('Erro ao buscar assistentes da API Vapi:', error);
+        }
+      }
+      
       if (!vapiAssistantId) {
         console.warn('Nenhum ID de assistente Vapi disponível para a chamada webhook, tentando buscar o primeiro disponível');
         try {
@@ -421,6 +499,13 @@ export const webhookService = {
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
+      
+      // Adicionar provider e configurações da chamada
+      payload.provider = "vapi"; // Indicar que estamos usando Vapi como provedor
+      payload.call = {
+        model: DEFAULT_MODEL, // Usar GPT-4o-Turbo como modelo padrão
+        voice: DEFAULT_VOICE  // Usar voz padrão ElevenLabs
+      };
       
       // Adicionar informações de debug para ajudar no troubleshooting
       payload.additional_data.source_url = window.location.href;
