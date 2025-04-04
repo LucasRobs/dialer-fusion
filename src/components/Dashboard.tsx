@@ -13,8 +13,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { webhookService } from '@/services/webhookService';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Dashboard = () => {
+  // Get auth context to access user ID
+  const { user } = useAuth();
+  
   // State for creating a virtual assistant
   const [assistantName, setAssistantName] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
@@ -43,27 +48,27 @@ const Dashboard = () => {
 
   // Handle creating a virtual assistant
   const handleCreateAssistant = async () => {
+    if (!user?.id) {
+      toast.error("Você precisa estar logado para criar um assistente");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
-      const userId = 'exampleUserId'; // Replace with actual logic to fetch userId
-      const response = await webhookService.createAssistant({
+      await webhookService.createAssistant({
         name: assistantName,
         first_message: firstMessage,
         system_prompt: systemPrompt,
-        userId: userId,
+        userId: user.id
       });
 
-      if (response && response.status === 'success') { // Adjusted to check the actual structure
-        alert('Assistente criado com sucesso!');
-        setAssistantName('');
-        setFirstMessage('');
-        setSystemPrompt('');
-      } else {
-        alert(`Erro ao criar assistente || 'Unknown error'}`);
-      }
+      toast.success('Assistente criado com sucesso!');
+      setAssistantName('');
+      setFirstMessage('');
+      setSystemPrompt('');
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
-      alert('Erro ao criar assistente. Verifique os logs para mais detalhes.');
+      toast.error('Erro ao criar assistente. Verifique os logs para mais detalhes.');
     } finally {
       setIsSubmitting(false);
     }
@@ -75,16 +80,17 @@ const Dashboard = () => {
       const response = await webhookService.makeCall(1, '+5511999999999', 123); // Replace with real values
 
       if (response.success) {
-        alert('Ligação iniciada com sucesso!');
+        toast.success('Ligação iniciada com sucesso!');
       } else {
-        alert(`Erro ao iniciar ligação: ${response.message}`);
+        toast.error(`Erro ao iniciar ligação: ${response.message}`);
       }
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
-      alert('Erro ao iniciar ligação. Verifique os logs para mais detalhes.');
+      toast.error('Erro ao iniciar ligação. Verifique os logs para mais detalhes.');
     }
   };
 
+  // ... keep existing code (return section with rendering)
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       {/* Header */}
