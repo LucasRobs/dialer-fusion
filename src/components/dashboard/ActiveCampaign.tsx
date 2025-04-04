@@ -92,7 +92,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         supabaseAssistantId 
       });
       
-      // Send data to webhook with both IDs
+      // Send data to webhook with both IDs, prioritizing the Supabase assistant ID
       const result = await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
@@ -101,8 +101,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: vapiAssistantId, // Send the Vapi assistant ID
-          supabase_assistant_id: supabaseAssistantId, // Also send Supabase ID for reference
+          assistant_id: supabaseAssistantId, // Send the Supabase assistant ID as the primary ID
+          vapi_assistant_id: vapiAssistantId, // Also send Vapi assistant ID as a secondary ID
           assistant_name: campaign.assistantName
         }
       });
