@@ -29,7 +29,7 @@ export const webhookService = {
   /**
    * Busca todos os assistentes de um usuário
    */
-  async getAssistantsByUser(userId: string): Promise<VapiAssistant[]> {
+  async getAllAssistants(userId: string): Promise<VapiAssistant[]> {
     try {
       console.log(`Buscando assistentes para o usuário ${userId}`);
 
