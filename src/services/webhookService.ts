@@ -1,16 +1,18 @@
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
-export interface VapiAssistant {
+export interface Assistant {
   id: string;
   name: string;
   assistant_id: string;
   user_id: string;
-  status?: string;
-  created_at?: string;
+  status: 'draft' | 'training' | 'ready' | 'failed';
   system_prompt?: string;
   first_message?: string;
   model?: string;
   voice?: string;
+  created_at?: string;
+  updated_at?: string;
   metadata?: Record<string, any>;
 }
 
@@ -20,422 +22,330 @@ interface WebhookResponse {
   data?: any;
 }
 
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
-const VAPI_API_URL = "https://api.vapi.ai";
+const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook';
 
 export const webhookService = {
   /**
-   * Busca todos os assistentes (alias para getAssistantsByUser)
+   * Get all assistants for a user
+   * Combines local database with n8n workflow data
    */
-  async getAllAssistants(userId: string): Promise<VapiAssistant[]> {
+  async getAssistants(userId: string): Promise<Assistant[]> {
     try {
-      return await this.getAssistantsByUser(userId);
-    } catch (error) {
-      console.error('Erro em getAllAssistants:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Busca todos os assistentes de um usuário específico
-   */
-  async getAssistantsByUser(userId: string): Promise<VapiAssistant[]> {
-    try {
-      console.log(`Buscando assistentes para o usuário ${userId}`);
-
-      // 1. Busca assistentes no banco de dados local primeiro
-      const localAssistants = await this.getLocalAssistants(userId);
+      // 1. Get from local database first (fastest)
+      const localAssistants = await this._getLocalAssistants(userId);
       
-      // 2. Busca na API do VAPI mesmo se encontrar assistentes locais
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Falha ao buscar assistentes da VAPI, retornando apenas locais');
-        return localAssistants;
-      }
-
-      const vapiAssistants = await response.json();
-
-      // Filtra apenas os assistentes do usuário atual
-      const userAssistants = vapiAssistants.filter((assistant: any) => 
-        assistant.metadata?.user_id === userId
-      );
-
-      // Combina assistentes locais e da VAPI, removendo duplicatas
-      const combinedAssistants = [
-        ...localAssistants,
-        ...userAssistants.map(this.mapVapiAssistantToLocalFormat)
-      ].reduce((unique: VapiAssistant[], assistant: VapiAssistant) => {
-        if (!unique.some(item => item.assistant_id === assistant.assistant_id)) {
-          unique.push(assistant);
+      // 2. Try to sync with n8n for any updates
+      try {
+        const syncResponse = await this._syncWithN8N(userId);
+        if (syncResponse?.success && syncResponse.data?.length) {
+          return this._mergeAssistants(localAssistants, syncResponse.data);
         }
-        return unique;
-      }, []);
-
-      // Atualiza o cache local com os dados mais recentes
-      if (userAssistants.length > 0) {
-        await this.cacheAssistants(userAssistants, userId);
+      } catch (syncError) {
+        console.warn('Sync with n8n failed:', syncError);
       }
-
-      return combinedAssistants;
+      
+      return localAssistants;
       
     } catch (error) {
-      console.error('Erro ao buscar assistentes:', error);
-      // Retorna os assistentes locais mesmo em caso de erro
-      return this.getLocalAssistants(userId);
-    }
-  },
-
-  /**
-   * Busca assistentes no banco de dados local por user_id
-   */
-  async getLocalAssistants(userId: string): Promise<VapiAssistant[]> {
-    try {
-      const { data, error } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Erro ao buscar assistentes locais:', error);
-        return [];
-      }
-
-      return data || [];
-    } catch (error) {
-      console.error('Erro ao buscar assistentes locais:', error);
+      console.error('Error fetching assistants:', error);
+      toast.error('Failed to load assistants');
       return [];
     }
   },
 
   /**
-   * Cria um novo assistente via API local
+   * Create a new assistant using n8n workflow
    */
-  async createAssistant(data: { 
-    assistant_name: string; 
-    first_message: string; 
-    system_prompt: string;
-    user_id: string;
-  }): Promise<WebhookResponse> {
-    try {
-      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/createassistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao criar assistente via API local:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Armazena assistentes no banco de dados local para cache
-   */
-  async cacheAssistants(assistants: any[], userId: string): Promise<void> {
-    try {
-      await Promise.all(
-        assistants.map(async (assistant) => {
-          const { error } = await supabase
-            .from('assistants')
-            .upsert({
-              assistant_id: assistant.id,
-              name: assistant.name,
-              user_id: userId,
-              status: assistant.status,
-              created_at: assistant.createdAt,
-              system_prompt: assistant.instructions,
-              first_message: assistant.firstMessage,
-              metadata: assistant.metadata
-            }, { onConflict: 'assistant_id' });
-
-          if (error) {
-            console.error('Erro ao salvar assistente no cache:', error);
-          }
-        })
-      );
-    } catch (error) {
-      console.error('Erro ao armazenar assistentes em cache:', error);
-    }
-  },
-
-  /**
-   * Converte o formato do assistente da VAPI para nosso formato local
-   */
-  mapVapiAssistantToLocalFormat(assistant: any): VapiAssistant {
-    return {
-      id: assistant.id,
-      name: assistant.name,
-      assistant_id: assistant.id,
-      user_id: assistant.metadata?.user_id || '',
-      status: assistant.status,
-      created_at: assistant.createdAt,
-      system_prompt: assistant.instructions,
-      first_message: assistant.firstMessage,
-      model: assistant.model,
-      voice: assistant.voice,
-      metadata: assistant.metadata
-    };
-  },
-
-  /**
-   * Obtém detalhes de um assistente específico
-   */
-  async getAssistantDetails(assistantId: string, userId: string): Promise<VapiAssistant> {
-    try {
-      // 1. Tenta buscar do banco de dados local primeiro
-      const { data: localAssistant, error } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('assistant_id', assistantId)
-        .eq('user_id', userId)
-        .single();
-
-      if (!error && localAssistant) {
-        return localAssistant;
-      }
-
-      // 2. Se não encontrou localmente, busca na VAPI
-      const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao buscar assistente: ${response.statusText} - ${errorText}`);
-      }
-
-      const vapiAssistant = await response.json();
-
-      // Verifica se o assistente pertence ao usuário
-      if (vapiAssistant.metadata?.user_id !== userId) {
-        throw new Error('Assistente não pertence ao usuário');
-      }
-
-      // Atualiza o cache local
-      await this.cacheAssistants([vapiAssistant], userId);
-
-      return this.mapVapiAssistantToLocalFormat(vapiAssistant);
-    } catch (error) {
-      console.error('Erro ao buscar detalhes do assistente:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Cria um novo assistente para o usuário
-   */
-  async createAssistantForUser(params: {
+  async createAssistant(params: {
     name: string;
     first_message: string;
     system_prompt: string;
-    userId: string;
-  }): Promise<VapiAssistant> {
+    user_id: string;
+    model?: string;
+    voice?: string;
+  }): Promise<Assistant> {
     try {
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: params.name,
-          model: { provider: 'openai', model: 'gpt-3.5-turbo' },
-          voice: { provider: '11labs', voiceId: 'rachel' },
-          firstMessage: params.first_message,
-          instructions: params.system_prompt,
-          metadata: {
-            user_id: params.userId,
-            created_at: new Date().toISOString()
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
-      }
-
-      const vapiAssistant = await response.json();
-
-      // Salva no banco de dados local
-      const { data: assistantData, error: dbError } = await supabase
+      // 1. Create local record with 'draft' status
+      const { data: newAssistant, error } = await supabase
         .from('assistants')
         .insert({
-          name: params.name,
-          assistant_id: vapiAssistant.id,
-          system_prompt: params.system_prompt,
-          first_message: params.first_message,
-          user_id: params.userId,
-          status: 'ready',
-          metadata: {
-            vapi_data: vapiAssistant,
-            created_at: new Date().toISOString()
-          }
+          ...params,
+          status: 'draft',
+          created_at: new Date().toISOString()
         })
         .select()
         .single();
 
-      if (dbError) throw dbError;
+      if (error) throw error;
 
-      return assistantData;
+      // 2. Trigger n8n workflow to create the actual assistant
+      const webhookResponse = await fetch(`${WEBHOOK_BASE_URL}/createassistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...params,
+          local_id: newAssistant.id, // For callback updates
+          action: 'create_assistant'
+        }),
+      });
+
+      if (!webhookResponse.ok) {
+        await this._updateAssistantStatus(newAssistant.id, 'failed');
+        throw new Error('Webhook creation failed');
+      }
+
+      toast.success('Assistant creation started');
+      return newAssistant;
+
     } catch (error) {
-      console.error('Erro ao criar assistente:', error);
+      console.error('Error creating assistant:', error);
+      toast.error('Failed to create assistant');
       throw error;
     }
   },
 
   /**
-   * Atualiza um assistente do usuário
+   * Start a call using the n8n workflow
    */
-  async updateUserAssistant(
-    assistantId: string, 
-    userId: string,
-    updates: Partial<{
-      name: string;
-      system_prompt: string;
-      first_message: string;
-    }>
-  ): Promise<VapiAssistant> {
+  async startCall(params: {
+    assistant_id: string;
+    client_name: string;
+    client_phone: string;
+    user_id: string;
+    metadata?: Record<string, any>;
+  }): Promise<WebhookResponse> {
     try {
-      // Primeiro verifica se o assistente pertence ao usuário
-      const existingAssistant = await this.getAssistantDetails(assistantId, userId);
-
-      const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: updates.name || existingAssistant.name,
-          instructions: updates.system_prompt || existingAssistant.system_prompt,
-          firstMessage: updates.first_message || existingAssistant.first_message,
+          action: 'start_call',
+          ...params,
+          timestamp: new Date().toISOString()
         }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao atualizar assistente: ${response.statusText} - ${errorText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const vapiAssistant = await response.json();
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('Call initiated successfully');
+      } else {
+        toast.warning('Call initiated but with warnings');
+      }
+      
+      return result;
 
-      // Atualiza no banco de dados local
-      const { data: assistantData, error: dbError } = await supabase
-        .from('assistants')
-        .update({
-          name: updates.name,
-          system_prompt: updates.system_prompt,
-          first_message: updates.first_message,
-          updated_at: new Date().toISOString()
-        })
-        .eq('assistant_id', assistantId)
-        .eq('user_id', userId)
-        .select()
-        .single();
-
-      if (dbError) throw dbError;
-
-      return assistantData;
     } catch (error) {
-      console.error('Erro ao atualizar assistente:', error);
+      console.error('Error starting call:', error);
+      toast.error('Failed to initiate call');
       throw error;
     }
   },
 
   /**
-   * Remove um assistente do usuário
+   * Trigger a call webhook (generic version)
    */
-  async deleteUserAssistant(assistantId: string, userId: string): Promise<void> {
-    try {
-      // Primeiro verifica se o assistente pertence ao usuário
-      await this.getAssistantDetails(assistantId, userId);
-
-      const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao remover assistente: ${response.statusText} - ${errorText}`);
-      }
-
-      // Remove do banco de dados local
-      const { error: dbError } = await supabase
-        .from('assistants')
-        .delete()
-        .eq('assistant_id', assistantId)
-        .eq('user_id', userId);
-
-      if (dbError) throw dbError;
-
-      // Remove do localStorage se for o assistente selecionado
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      if (storedAssistant) {
-        const currentAssistant = JSON.parse(storedAssistant);
-        if (currentAssistant.assistant_id === assistantId) {
-          localStorage.removeItem('selected_assistant');
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao remover assistente:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Dispara um webhook para iniciar uma chamada
-   */
-  async triggerCallWebhook(payload: {
+  async triggerCallWebhook(params: {
     action: string;
     campaign_id: number;
     client_id: number;
     client_name: string;
     client_phone: string;
-    user_id: string | undefined;
+    user_id: string;
     additional_data: Record<string, any>;
   }): Promise<{ success: boolean }> {
     try {
-      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+      const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(params),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao acionar webhook: ${response.statusText} - ${errorText}`);
+        throw new Error(`Webhook error: ${response.statusText}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success('Webhook triggered successfully');
+      } else {
+        toast.warning(result.message || 'Webhook completed with warnings');
+      }
+      
+      return result;
+
     } catch (error) {
-      console.error('Erro ao acionar webhook de chamada:', error);
+      console.error('Error triggering webhook:', error);
+      toast.error('Failed to trigger webhook');
       throw error;
     }
+  },
+
+  /**
+   * Update an existing assistant
+   */
+  async updateAssistant(
+    assistantId: string,
+    updates: Partial<{
+      name: string;
+      system_prompt: string;
+      first_message: string;
+      model: string;
+      voice: string;
+      metadata: Record<string, any>;
+    }>
+  ): Promise<Assistant> {
+    try {
+      // 1. Update local record
+      const { data: updatedAssistant, error } = await supabase
+        .from('assistants')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', assistantId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 2. Notify n8n about the update
+      await fetch(`${WEBHOOK_BASE_URL}/updateassistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistant_id: updatedAssistant.assistant_id,
+          updates,
+          action: 'update_assistant'
+        }),
+      });
+
+      toast.success('Assistant updated');
+      return updatedAssistant;
+
+    } catch (error) {
+      console.error('Error updating assistant:', error);
+      toast.error('Failed to update assistant');
+      throw error;
+    }
+  },
+
+  /**
+   * Delete an assistant
+   */
+  async deleteAssistant(assistantId: string): Promise<void> {
+    try {
+      // 1. Get assistant first to get the assistant_id
+      const { data: assistant, error: fetchError } = await supabase
+        .from('assistants')
+        .select('assistant_id')
+        .eq('id', assistantId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // 2. Delete from local database
+      const { error: deleteError } = await supabase
+        .from('assistants')
+        .delete()
+        .eq('id', assistantId);
+
+      if (deleteError) throw deleteError;
+
+      // 3. Notify n8n to delete from external services
+      await fetch(`${WEBHOOK_BASE_URL}/deleteassistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistant_id: assistant.assistant_id,
+          action: 'delete_assistant'
+        }),
+      });
+
+      toast.success('Assistant deleted');
+
+    } catch (error) {
+      console.error('Error deleting assistant:', error);
+      toast.error('Failed to delete assistant');
+      throw error;
+    }
+  },
+
+  // ==================== PRIVATE METHODS ====================
+
+  async _getLocalAssistants(userId: string): Promise<Assistant[]> {
+    const { data, error } = await supabase
+      .from('assistants')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching local assistants:', error);
+      return [];
+    }
+    return data || [];
+  },
+
+  async _syncWithN8N(userId: string): Promise<WebhookResponse | null> {
+    try {
+      const response = await fetch(`${WEBHOOK_BASE_URL}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          user_id: userId,
+          action: 'sync_assistants'
+        }),
+      });
+
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.error('Sync with n8n failed:', error);
+      return null;
+    }
+  },
+
+  _mergeAssistants(local: Assistant[], remote: Assistant[]): Assistant[] {
+    const merged = [...local];
+    
+    remote.forEach(remoteAssistant => {
+      const existingIndex = merged.findIndex(a => a.assistant_id === remoteAssistant.assistant_id);
+      
+      if (existingIndex >= 0) {
+        // Update existing record
+        merged[existingIndex] = { 
+          ...merged[existingIndex], 
+          ...remoteAssistant,
+          updated_at: new Date().toISOString() 
+        };
+      } else {
+        // Add new record
+        merged.push(remoteAssistant);
+      }
+    });
+
+    return merged;
+  },
+
+  async _updateAssistantStatus(
+    assistantId: string,
+    status: 'draft' | 'training' | 'ready' | 'failed'
+  ): Promise<void> {
+    await supabase
+      .from('assistants')
+      .update({ status })
+      .eq('id', assistantId);
   }
 };
 
-export default webhookService;
+// Type exports for easier usage in components
+export type CreateAssistantParams = Parameters<typeof webhookService.createAssistant>[0];
+export type StartCallParams = Parameters<typeof webhookService.startCall>[0];
+export type TriggerCallWebhookParams = Parameters<typeof webhookService.triggerCallWebhook>[0];
+export type UpdateAssistantParams = Parameters<typeof webhookService.updateAssistant>[1];

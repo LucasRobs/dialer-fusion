@@ -42,7 +42,7 @@ const AITraining = () => {
     queryFn: async () => {
       const accountId = user?.id || "CONTA_PADRAO"; // Fallback para conta padrão
       console.log(`Carregando assistentes para a conta: ${accountId}`);
-      return await webhookService.getLocalAssistants(accountId);
+      return await webhookService._getLocalAssistants(accountId);
     },
     enabled: true,
   });
@@ -63,21 +63,21 @@ const AITraining = () => {
 
     try {
       const response = await webhookService.createAssistant({
-        assistant_name: aiName,
+        name: aiName,
         first_message: firstMessage,
         system_prompt: systemPrompt,
         user_id: user?.id || "CONTA_PADRAO", // Fallback to default account if user ID is unavailable
       });
 
-      if (response.success && response.data) {
-        console.log('Assistente criado:', response.data);
+      if (response) {
+        console.log('Assistente criado:', response);
         toast.success("Assistente criado com sucesso!");
         await refetch();
         setAiName('');
         setFirstMessage('');
         setSystemPrompt('');
       } else {
-        toast.error(response.message || "Erro ao criar assistente.");
+        toast.error("Erro ao criar assistente. Por favor, verifique os dados e tente novamente.");
       }
     } catch (error) {
       console.error("Erro ao criar assistente:", error);
