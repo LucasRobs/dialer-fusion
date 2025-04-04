@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { PhoneOff, BarChart3 } from 'lucide-react';
+import { PhoneOff, BarChart3, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -28,6 +28,7 @@ interface ActiveCampaignProps {
 const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignStopped }) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [isStoppingCampaign, setIsStoppingCampaign] = React.useState(false);
 
   const handleStopCampaign = async () => {
     if (!campaign.id) {
@@ -36,10 +37,12 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
 
     try {
-      // Verificar ID do assistente
+      setIsStoppingCampaign(true);
+      
+      // Get assistant ID
       let assistantId = campaign.assistantId;
       if (!assistantId) {
-        // Tentar recuperar do localStorage como fallback
+        // Try to get from localStorage as fallback
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
@@ -54,8 +57,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
 
       console.log('Using assistant ID for stopping campaign:', assistantId);
       
-      // Enviar dados para webhook
-      await webhookService.triggerCallWebhook({
+      // Send data to webhook
+      const result = await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
         user_id: user?.id,
@@ -68,18 +71,35 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         }
       });
       
-      if (onCampaignStopped) {
-        onCampaignStopped();
+      if (result.success) {
+        if (onCampaignStopped) {
+          onCampaignStopped();
+        }
+        
+        // Invalidate queries to force data reload
+        queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
+        queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
+        
+        toast.success("Campanha interrompida com sucesso");
+      } else {
+        // Even if the webhook call fails, we still want to allow the user to stop the campaign
+        // since we already showed an error message in the webhook service
+        if (onCampaignStopped) {
+          onCampaignStopped();
+        }
+        queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
+        toast.warning("A campanha foi marcada como interrompida, mas houve um problema na comunicação com o servidor.");
       }
-      
-      // Invalidar as queries para forçar o recarregamento dos dados
-      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
-      queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
-      
-      toast.success("Campanha interrompida com sucesso");
     } catch (error) {
       console.error('Erro ao interromper campanha:', error);
       toast.error("Erro ao interromper a campanha. Por favor, tente novamente.");
+      
+      // Even on error, allow the campaign to be stopped in the UI
+      if (onCampaignStopped) {
+        onCampaignStopped();
+      }
+    } finally {
+      setIsStoppingCampaign(false);
     }
   };
 
@@ -93,7 +113,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               Campanha Ativa: {campaign.name}
             </CardTitle>
             <p className="text-sm text-foreground/70">
-              Iniciada às {campaign.startTime} • Assistente: {campaign.assistantName}
+              Iniciada às {campaign.startTime} • Assistente: {campaign.assistantName || 'N/A'}
               {campaign.assistantId && <span className="text-xs text-muted-foreground ml-1">(ID: {campaign.assistantId.slice(0, 8)}...)</span>}
             </p>
           </div>
@@ -103,9 +123,22 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               variant="outline" 
               className="flex items-center gap-1"
               onClick={handleStopCampaign}
+              disabled={isStoppingCampaign}
             >
-              <PhoneOff size={16} />
-              <span>Interromper Campanha</span>
+              {isStoppingCampaign ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Interrompendo...</span>
+                </>
+              ) : (
+                <>
+                  <PhoneOff size={16} />
+                  <span>Interromper Campanha</span>
+                </>
+              )}
             </Button>
             <Link to="/campaigns">
               <Button size="sm" className="flex items-center gap-1">

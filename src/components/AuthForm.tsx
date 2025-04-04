@@ -1,11 +1,10 @@
-
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface AuthFormProps {
@@ -19,6 +18,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
   
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -26,6 +26,9 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Reset network error
+    setNetworkError(null);
     
     // Validation
     if (!email || !password) {
@@ -82,11 +85,26 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
         navigate('/dashboard');
       }
     } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Ocorreu um erro durante a autenticação",
-        variant: "destructive"
-      });
+      console.error('Auth error:', error);
+      
+      // Check if it's a network error
+      if (error.message && 
+          (error.message.includes('Failed to fetch') || 
+           error.message.includes('NetworkError') || 
+           error.message.includes('network') ||
+           error.message.includes('timeout') ||
+           error.message.includes('connection') ||
+           error.status === 503)) {
+        
+        setNetworkError("Não foi possível conectar ao servidor. Verifique sua conexão de internet e tente novamente.");
+      } else {
+        // Handle other auth errors
+        toast({
+          title: "Erro",
+          description: error.message || "Ocorreu um erro durante a autenticação",
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -97,6 +115,13 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
       <h2 className="text-2xl font-bold mb-6 text-center">
         {type === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}
       </h2>
+      
+      {networkError && (
+        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-lg flex items-center gap-2 text-sm">
+          <AlertTriangle size={16} className="text-destructive" />
+          <span>{networkError}</span>
+        </div>
+      )}
       
       <form onSubmit={handleSubmit} className="space-y-4">
         {type === 'register' && (
@@ -195,6 +220,18 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           </p>
         )}
       </div>
+      
+      {/* Offline mode hint */}
+      {networkError && (
+        <div className="mt-4 px-4 py-3 bg-muted rounded-lg text-sm text-center">
+          <p className="font-medium mb-1">Se estiver com problemas de conexão:</p>
+          <ul className="text-xs text-muted-foreground space-y-1">
+            <li>• Verifique sua conexão com a internet</li>
+            <li>• Tente novamente em alguns instantes</li>
+            <li>• Entre em contato com o suporte se o problema persistir</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 };
