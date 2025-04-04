@@ -28,6 +28,7 @@ export interface WebhookPayload {
   call?: {
     model?: string;
     voice?: string;
+    language?: string; // Adicionar esta linha
   };
 }
 
@@ -609,7 +610,8 @@ export const webhookService = {
       // Obter configurações de modelo e voz do localStorage
       let model = DEFAULT_MODEL; // Valor padrão
       let voice = DEFAULT_VOICE; // Valor padrão
-      
+      let language = "pt-BR"; // Definir o idioma para português brasileiro
+
       try {
         // Verificar se temos configurações salvas
         const savedSettings = localStorage.getItem('vapi_settings');
@@ -617,15 +619,18 @@ export const webhookService = {
           const settings = JSON.parse(savedSettings);
           if (settings.model) model = settings.model;
           if (settings.voice) voice = settings.voice;
-          console.log('Usando configurações da localStorage:', { model, voice });
+          // Você pode adicionar a leitura do idioma aqui se quiser permitir a configuração pelo usuário
+          // if (settings.language) language = settings.language;
+          console.log('Usando configurações da localStorage:', { model, voice, language });
         }
       } catch (e) {
         console.error('Erro ao obter configurações da localStorage:', e);
       }
-      
+
       payload.call = {
-        model: model, 
-        voice: voice
+        model: model,
+        voice: voice,
+        language: language // Incluir o idioma no objeto call
       };
       
       // Adicionar informações de debug para ajudar no troubleshooting
