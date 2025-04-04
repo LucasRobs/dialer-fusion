@@ -45,11 +45,8 @@ export const webhookService = {
 
       // 1. Busca assistentes no banco de dados local primeiro
       const localAssistants = await this.getLocalAssistants(userId);
-      if (localAssistants.length > 0) {
-        return localAssistants;
-      }
-
-      // 2. Se não encontrou localmente, busca na API do VAPI
+      
+      // 2. Busca na API do VAPI mesmo se encontrar assistentes locais
       const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'GET',
         headers: {
@@ -59,8 +56,8 @@ export const webhookService = {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
+        console.error('Falha ao buscar assistentes da VAPI, retornando apenas locais');
+        return localAssistants;
       }
 
       const vapiAssistants = await response.json();
@@ -70,16 +67,28 @@ export const webhookService = {
         assistant.metadata?.user_id === userId
       );
 
-      // Salva os assistentes no banco de dados para cache
+      // Combina assistentes locais e da VAPI, removendo duplicatas
+      const combinedAssistants = [
+        ...localAssistants,
+        ...userAssistants.map(this.mapVapiAssistantToLocalFormat)
+      ].reduce((unique: VapiAssistant[], assistant: VapiAssistant) => {
+        if (!unique.some(item => item.assistant_id === assistant.assistant_id)) {
+          unique.push(assistant);
+        }
+        return unique;
+      }, []);
+
+      // Atualiza o cache local com os dados mais recentes
       if (userAssistants.length > 0) {
         await this.cacheAssistants(userAssistants, userId);
       }
 
-      return userAssistants.map(this.mapVapiAssistantToLocalFormat);
+      return combinedAssistants;
       
     } catch (error) {
       console.error('Erro ao buscar assistentes:', error);
-      throw error;
+      // Retorna os assistentes locais mesmo em caso de erro
+      return this.getLocalAssistants(userId);
     }
   },
 
