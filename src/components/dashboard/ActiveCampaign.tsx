@@ -32,6 +32,12 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
   const { user } = useAuth();
   const [isStoppingCampaign, setIsStoppingCampaign] = React.useState(false);
 
+  const formatAssistantId = (id?: string) => {
+    if (!id) return '';
+    // Format the ID to show just the first part like in the screenshot (01646bac-c486-455b-b...)
+    return id.length > 12 ? `${id.slice(0, 12)}...` : id;
+  };
+
   const handleStopCampaign = async () => {
     if (!campaign.id) {
       toast.error("ID da campanha não encontrado. Não é possível interromper a campanha.");
@@ -146,8 +152,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               Iniciada às {campaign.startTime} • Assistente: {campaign.assistantName || 'N/A'}
               {campaign.assistantId && (
                 <span className="text-xs text-muted-foreground ml-1">
-                  (ID Supabase: {campaign.assistantId.slice(0, 8)}...)
-                  {campaign.vapiAssistantId && ` | ID Vapi: ${campaign.vapiAssistantId.slice(0, 8)}...`}
+                  (ID Supabase: {formatAssistantId(campaign.assistantId)})
+                  {campaign.vapiAssistantId && ` | ID Vapi: ${formatAssistantId(campaign.vapiAssistantId)}`}
                 </span>
               )}
             </p>

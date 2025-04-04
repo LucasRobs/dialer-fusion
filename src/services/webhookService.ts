@@ -154,7 +154,14 @@ export const webhookService = {
       const vapiAssistants = await response.json();
       console.log(`Recuperados ${vapiAssistants.length || 0} assistentes diretamente da Vapi:`, vapiAssistants);
       
-      return vapiAssistants || [];
+      // Map the assistants to ensure they have valid status values
+      return vapiAssistants.map(assistant => ({
+        ...assistant,
+        // Make sure status is one of the allowed values in our type system
+        status: assistant.status === 'ready' || assistant.status === 'pending' || assistant.status === 'failed' 
+          ? assistant.status 
+          : 'ready' // Default to 'ready' for any other status values
+      })) || [];
     } catch (error) {
       console.error('Erro ao buscar assistentes da Vapi:', error);
       return [];
@@ -660,13 +667,20 @@ export const webhookService = {
     try {
       await Promise.all(
         assistants.map(async (assistant) => {
+          // Ensure status is a valid value before storing in database
+          const validStatus = assistant.status === 'ready' || 
+                              assistant.status === 'pending' || 
+                              assistant.status === 'failed' 
+                            ? assistant.status 
+                            : 'ready';
+          
           const { error } = await supabase
             .from('assistants')
             .upsert({
               assistant_id: assistant.id,
               name: assistant.name,
               user_id: userId,
-              status: assistant.status,
+              status: validStatus,
               created_at: assistant.createdAt,
               system_prompt: assistant.instructions,
               first_message: assistant.firstMessage,
@@ -685,12 +699,19 @@ export const webhookService = {
   },
 
   mapVapiAssistantToLocalFormat(assistant: any): VapiAssistant {
+    // Ensure status is a valid value before returning
+    const validStatus = assistant.status === 'ready' || 
+                        assistant.status === 'pending' || 
+                        assistant.status === 'failed' 
+                      ? assistant.status 
+                      : 'ready';
+    
     return {
       id: assistant.id,
       name: assistant.name,
       assistant_id: assistant.id,
       user_id: assistant.metadata?.user_id || '',
-      status: assistant.status,
+      status: validStatus,
       created_at: assistant.createdAt,
       system_prompt: assistant.instructions,
       first_message: assistant.firstMessage,
