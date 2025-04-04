@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
@@ -18,9 +17,7 @@ const Navbar = () => {
   const isAuthenticated = !!user || location.pathname.includes('/dashboard') || 
                          location.pathname.includes('/clients') || 
                          location.pathname.includes('/training') || 
-                         location.pathname.includes('/campaigns') || 
-                         location.pathname.includes('/history') || 
-                         location.pathname.includes('/analytics');
+                         location.pathname.includes('/campaigns');
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -77,12 +74,6 @@ const Navbar = () => {
               <Link to="/campaigns" className="text-foreground/80 hover:text-foreground transition-colors">
                 Campanhas
               </Link>
-              <Link to="/history" className="text-foreground/80 hover:text-foreground transition-colors">
-                Histórico
-              </Link>
-              <Link to="/analytics" className="text-foreground/80 hover:text-foreground transition-colors">
-                Análises
-              </Link>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 Sair
               </Button>
@@ -128,12 +119,6 @@ const Navbar = () => {
                 </Link>
                 <Link to="/campaigns" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
                   Campanhas
-                </Link>
-                <Link to="/history" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  Histórico
-                </Link>
-                <Link to="/analytics" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                  Análises
                 </Link>
                 <Button variant="outline" className="w-full" onClick={handleLogout}>
                   Sair

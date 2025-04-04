@@ -15,8 +15,6 @@ import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import Training from "./pages/Training";
 import Campaigns from "./pages/Campaigns";
-import History from "./pages/History";
-import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import VapiAssistant from './pages/VapiAssistant';
 
@@ -71,16 +69,6 @@ const App = () => {
               <Route path="/campaigns" element={
                 <ProtectedRoute>
                   <Campaigns />
-                </ProtectedRoute>
-              } />
-              <Route path="/history" element={
-                <ProtectedRoute>
-                  <History />
-                </ProtectedRoute>
-              } />
-              <Route path="/analytics" element={
-                <ProtectedRoute>
-                  <Analytics />
                 </ProtectedRoute>
               } />
               <Route path="/vapi-assistant" element={
