@@ -179,9 +179,13 @@ const Dashboard = () => {
         console.log("Using default assistant for campaign:", campaignAssistant);
       }
 
-      // Determine the best ID to use (prefer assistant_id if available)
-      const assistantId = campaignAssistant.assistant_id || campaignAssistant.id;
-      console.log("Final assistant ID for campaign:", assistantId);
+      // Determine the best ID to use (prefer assistant_id if available for Vapi)
+      const vapiAssistantId = campaignAssistant.assistant_id || campaignAssistant.id;
+      const supabaseAssistantId = campaignAssistant.id;
+      console.log("Final assistant IDs for campaign:", {
+        vapi: vapiAssistantId,
+        supabase: supabaseAssistantId
+      });
       
       // Converter para o formato que o componente ActiveCampaign espera
       setActiveCampaign({
@@ -193,7 +197,8 @@ const Dashboard = () => {
         callsRemaining: (campaign.total_calls || 0) - (campaign.answered_calls || 0),
         active: true,
         assistantName: campaignAssistant.name || 'Assistente Padrão',
-        assistantId: assistantId // Add this to pass the ID
+        assistantId: supabaseAssistantId, // Supabase ID
+        vapiAssistantId: vapiAssistantId // Vapi assistant ID - crucial for API calls
       });
     } else {
       setActiveCampaign(null);

@@ -18,7 +18,7 @@ interface CampaignStatus {
   active: boolean;
   assistantName?: string;
   assistantId?: string;
-  vapiAssistantId?: string;  // Added explicit field for Vapi assistant ID
+  vapiAssistantId?: string;  // Explicit field for Vapi assistant ID
 }
 
 interface ActiveCampaignProps {
@@ -41,8 +41,14 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
       setIsStoppingCampaign(true);
       
       // Get assistant ID for Vapi (preferring the explicit vapiAssistantId if available)
-      let vapiAssistantId = campaign.vapiAssistantId || campaign.assistantId;
+      let vapiAssistantId = campaign.vapiAssistantId;
       let supabaseAssistantId = campaign.assistantId;
+      
+      // Log both IDs for clarity
+      console.log('IDs de assistente para interrupção de campanha:', {
+        vapiAssistantId,
+        supabaseAssistantId
+      });
       
       if (!vapiAssistantId) {
         // Try to get from localStorage as fallback
@@ -78,7 +84,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: vapiAssistantId, // This should be the Vapi assistant ID
+          assistant_id: vapiAssistantId, // Send the Vapi assistant ID
           supabase_assistant_id: supabaseAssistantId, // Also send Supabase ID for reference
           assistant_name: campaign.assistantName
         }

@@ -76,14 +76,15 @@ const assistantService = {
           },
           body: JSON.stringify({
             action: 'assistant_created',
-            assistant_id: data.assistant_id,
+            assistant_id: data.assistant_id, // Using the VAPI assistant_id (not the Supabase id)
             assistant_name: data.name,
             timestamp: new Date().toISOString(),
             user_id: data.user_id,
             additional_data: {
               is_ready: true,
               system_prompt: data.system_prompt,
-              first_message: data.first_message
+              first_message: data.first_message,
+              supabase_id: data.id // Adding the Supabase ID for reference
             }
           }),
         });
@@ -108,7 +109,7 @@ const assistantService = {
       const { data, error } = await supabase
         .from('assistants')
         .update(updates)
-        .eq('id', assistantId)
+        .eq('id', assistantId) // Using Supabase ID for updates
         .select()
         .single();
       
@@ -136,7 +137,7 @@ const assistantService = {
       const { data, error } = await supabase
         .from('assistants')
         .select('*')
-        .eq('id', assistantId)
+        .eq('id', assistantId) // Using Supabase ID for selection
         .single();
       
       if (error) {
@@ -172,7 +173,7 @@ const assistantService = {
       const { data, error } = await supabase
         .from('assistants')
         .select('*')
-        .eq('id', assistantId)
+        .eq('id', assistantId) // Using Supabase ID for lookup
         .single();
       
       if (error) {
@@ -198,11 +199,35 @@ const assistantService = {
       
       const assistant = JSON.parse(assistantJson);
       console.log('Assistente carregado do localStorage:', assistant);
+      
+      // Log both IDs for debugging
+      if (assistant) {
+        console.log('Assistente IDs (do localStorage):', {
+          supabaseId: assistant.id,
+          vapiId: assistant.assistant_id
+        });
+      }
+      
       return assistant;
     } catch (error) {
       console.error('Erro ao recuperar assistente do localStorage:', error);
       return null;
     }
+  },
+  
+  // Add helper method to ensure we're using the right ID
+  getCorrectAssistantId(assistant: Assistant | null | undefined): string | null {
+    if (!assistant) return null;
+    
+    // Always prefer the Vapi assistant_id if available
+    if (assistant.assistant_id) {
+      console.log('Usando Vapi assistant_id:', assistant.assistant_id);
+      return assistant.assistant_id;
+    }
+    
+    // Fallback to Supabase id if no assistant_id is available
+    console.log('AVISO: Usando Supabase id como fallback:', assistant.id);
+    return assistant.id;
   }
 };
 
