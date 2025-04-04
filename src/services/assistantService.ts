@@ -148,6 +148,12 @@ const assistantService = {
       console.log('Assistente selecionado:', data);
       toast(`Assistente "${data.name}" selecionado com sucesso`);
       
+      // Log IDs specifically for clarity
+      console.log('Assistente IDs:', {
+        supabaseId: data.id,
+        vapiId: data.assistant_id
+      });
+      
       // Save to localStorage for compatibility with existing code
       localStorage.setItem('selected_assistant', JSON.stringify(data));
       

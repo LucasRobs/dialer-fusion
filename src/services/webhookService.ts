@@ -336,28 +336,41 @@ export const webhookService = {
       console.log('Disparando webhook com payload:', payload);
       
       // Buscar assistente do localStorage para garantir que temos o ID correto
-      let assistantIdToUse = payload.additional_data?.assistant_id;
+      let vapiAssistantId = payload.additional_data?.assistant_id;
+      let supabaseAssistantId = payload.additional_data?.supabase_assistant_id;
       let assistantNameToUse = payload.additional_data?.assistant_name;
       
-      if (!assistantIdToUse) {
+      if (!vapiAssistantId) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
             const assistant = JSON.parse(storedAssistant);
             if (assistant) {
-              // Priorizar assistant_id sobre id caso ambos estejam presentes
-              assistantIdToUse = assistant.assistant_id || assistant.id;
+              // Para chamadas Vapi, precisamos do assistant_id como prioridade
+              vapiAssistantId = assistant.assistant_id;
+              // Se não tivermos o assistant_id, usamos o id como fallback
+              if (!vapiAssistantId) {
+                vapiAssistantId = assistant.id;
+                console.warn('Using Supabase ID as fallback for Vapi calls - this may not work!');
+              }
+              
+              // Guardar também o ID do Supabase
+              supabaseAssistantId = assistant.id;
               assistantNameToUse = assistant.name;
               
               // Atualizar no payload
               if (!payload.additional_data) {
                 payload.additional_data = {};
               }
-              payload.additional_data.assistant_id = assistantIdToUse;
+              payload.additional_data.assistant_id = vapiAssistantId;
+              payload.additional_data.supabase_assistant_id = supabaseAssistantId;
               payload.additional_data.assistant_name = assistantNameToUse;
               
-              console.log('Using assistant ID from localStorage:', assistantIdToUse);
-              console.log('Using assistant name from localStorage:', assistantNameToUse);
+              console.log('Using assistant IDs from localStorage:', {
+                vapiId: vapiAssistantId,
+                supabaseId: supabaseAssistantId,
+                name: assistantNameToUse
+              });
             }
           }
         } catch (e) {
@@ -365,8 +378,8 @@ export const webhookService = {
         }
       }
       
-      if (!assistantIdToUse) {
-        console.warn('Nenhum ID de assistente disponível para a chamada webhook, tentando buscar o primeiro disponível');
+      if (!vapiAssistantId) {
+        console.warn('Nenhum ID de assistente Vapi disponível para a chamada webhook, tentando buscar o primeiro disponível');
         try {
           // Busca o primeiro assistente disponível como fallback
           const userId = payload.user_id;
@@ -374,17 +387,21 @@ export const webhookService = {
             const assistants = await this.getLocalAssistants(userId);
             if (assistants && assistants.length > 0) {
               const firstAssistant = assistants[0];
-              assistantIdToUse = firstAssistant.assistant_id || firstAssistant.id;
+              // Para Vapi, priorizar assistant_id
+              vapiAssistantId = firstAssistant.assistant_id;
+              supabaseAssistantId = firstAssistant.id;
               assistantNameToUse = firstAssistant.name;
               
               if (!payload.additional_data) {
                 payload.additional_data = {};
               }
-              payload.additional_data.assistant_id = assistantIdToUse;
+              payload.additional_data.assistant_id = vapiAssistantId;
+              payload.additional_data.supabase_assistant_id = supabaseAssistantId;
               payload.additional_data.assistant_name = assistantNameToUse;
               
               console.log('Using first available assistant as fallback:', {
-                id: assistantIdToUse,
+                vapiId: vapiAssistantId,
+                supabaseId: supabaseAssistantId,
                 name: assistantNameToUse
               });
             }
@@ -394,9 +411,9 @@ export const webhookService = {
         }
       }
       
-      if (!assistantIdToUse) {
-        console.error('CRÍTICO: Nenhum ID de assistente disponível para a chamada webhook');
-        toast.error('Erro: Nenhum assistente selecionado. Por favor, crie ou selecione um assistente.');
+      if (!vapiAssistantId) {
+        console.error('CRÍTICO: Nenhum ID de assistente Vapi disponível para a chamada webhook');
+        toast.error('Erro: Nenhum assistente selecionado ou ID inválido. Por favor, crie ou selecione um assistente.');
         return { success: false };
       }
       
@@ -409,6 +426,7 @@ export const webhookService = {
       payload.additional_data.source_url = window.location.href;
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
+      payload.additional_data.id_type = 'vapi'; // Indicar que estamos usando IDs da Vapi
       
       console.log('Enviando payload final para webhook:', payload);
       

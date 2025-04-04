@@ -23,7 +23,6 @@ const Dashboard = () => {
   // Get the user from AuthContext
   const { user } = useAuth();
   
-  // Buscar campanhas ativas
   const { data: activeCampaigns, isLoading: loadingCampaigns, error: campaignsError, refetch: refetchCampaigns } = useQuery({
     queryKey: ['activeCampaigns'],
     queryFn: async () => {
@@ -94,7 +93,6 @@ const Dashboard = () => {
     }
   }, [assistants]);
   
-  // Buscar estatísticas dos clientes
   const { data: clientStats, isLoading: loadingClientStats } = useQuery({
     queryKey: ['clientStats'],
     queryFn: async () => {
@@ -107,8 +105,8 @@ const Dashboard = () => {
     }
   });
   
-  // Buscar estatísticas de campanhas
-  const { data: campaignStats, isLoading: loadingCampaignStats } = useQuery({
+   // Buscar estatísticas de campanhas
+   const { data: campaignStats, isLoading: loadingCampaignStats } = useQuery({
     queryKey: ['campaignStats'],
     queryFn: async () => {
       try {
@@ -218,7 +216,7 @@ const Dashboard = () => {
     }
   };
   
-  // Compilar estatísticas para o StatsGrid
+  // Compilar estatísticas para o StatsGrid com valores padrão seguros
   const stats = {
     totalClients: clientStats?.totalClients || 0,
     activeClients: clientStats?.activeClients || 0,

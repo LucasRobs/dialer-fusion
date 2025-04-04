@@ -18,6 +18,7 @@ interface CampaignStatus {
   active: boolean;
   assistantName?: string;
   assistantId?: string;
+  vapiAssistantId?: string;  // Added explicit field for Vapi assistant ID
 }
 
 interface ActiveCampaignProps {
@@ -39,25 +40,36 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     try {
       setIsStoppingCampaign(true);
       
-      // Get assistant ID
-      let assistantId = campaign.assistantId;
-      if (!assistantId) {
+      // Get assistant ID for Vapi (preferring the explicit vapiAssistantId if available)
+      let vapiAssistantId = campaign.vapiAssistantId || campaign.assistantId;
+      let supabaseAssistantId = campaign.assistantId;
+      
+      if (!vapiAssistantId) {
         // Try to get from localStorage as fallback
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
             const parsedAssistant = JSON.parse(storedAssistant);
-            assistantId = parsedAssistant.assistant_id || parsedAssistant.id;
-            console.log('Using assistant ID from localStorage for stop campaign:', assistantId);
+            // For Vapi, we need the assistant_id field specifically
+            vapiAssistantId = parsedAssistant.assistant_id || parsedAssistant.id;
+            supabaseAssistantId = parsedAssistant.id; // Keep Supabase ID separate
+            console.log('Using assistant from localStorage:', {
+              vapiAssistantId,
+              supabaseAssistantId,
+              parsedAssistant
+            });
           }
         } catch (e) {
           console.error('Error parsing stored assistant data:', e);
         }
       }
 
-      console.log('Using assistant ID for stopping campaign:', assistantId);
+      console.log('Stopping campaign with assistant IDs:', { 
+        vapiAssistantId, 
+        supabaseAssistantId 
+      });
       
-      // Send data to webhook
+      // Send data to webhook with both IDs
       const result = await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
@@ -66,7 +78,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: assistantId, // Use the assistantId variable
+          assistant_id: vapiAssistantId, // This should be the Vapi assistant ID
+          supabase_assistant_id: supabaseAssistantId, // Also send Supabase ID for reference
           assistant_name: campaign.assistantName
         }
       });
@@ -114,7 +127,12 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
             </CardTitle>
             <p className="text-sm text-foreground/70">
               Iniciada às {campaign.startTime} • Assistente: {campaign.assistantName || 'N/A'}
-              {campaign.assistantId && <span className="text-xs text-muted-foreground ml-1">(ID: {campaign.assistantId.slice(0, 8)}...)</span>}
+              {campaign.assistantId && (
+                <span className="text-xs text-muted-foreground ml-1">
+                  (ID Supabase: {campaign.assistantId.slice(0, 8)}...)
+                  {campaign.vapiAssistantId && ` | ID Vapi: ${campaign.vapiAssistantId.slice(0, 8)}...`}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex gap-2">
