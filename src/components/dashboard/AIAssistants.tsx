@@ -1,34 +1,36 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Users, ArrowRight } from 'lucide-react';
+import { Brain, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
-interface StatsData {
-  totalClients: number;
-  activeClients: number;
+interface AIAssistant {
+  id: string;
+  name: string;
+  status: string;
 }
 
-interface StatsGridProps {
-  stats: StatsData;
-  isLoading?: boolean;
+interface AIAssistantsProps {
+  assistants: AIAssistant[];
+  selectedAssistant: AIAssistant | null;
+  isLoading: boolean;
 }
 
-const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
-  // Use safe values in case stats are undefined or contain null/undefined values
-  const safeStats = {
-    totalClients: stats?.totalClients || 0,
-    activeClients: stats?.activeClients || 0,
-  };
-
+const AIAssistants: React.FC<AIAssistantsProps> = ({ 
+  assistants, 
+  selectedAssistant, 
+  isLoading 
+}) => {
+  const readyAssistants = assistants?.filter(asst => asst.status !== 'pending') || [];
+  
   return (
     <div className="mb-8">
       <Card className="card-hover">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg font-medium flex items-center">
-            <Users className="h-5 w-5 mr-2 text-secondary" />
-            Base de Clientes
+            <Brain className="h-5 w-5 mr-2 text-secondary" />
+            Assistentes IA
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -45,17 +47,19 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
             <>
               <div className="flex justify-between items-end">
                 <div>
-                  <div className="text-3xl font-bold">{safeStats.totalClients}</div>
-                  <p className="text-sm text-foreground/70">Total de Clientes</p>
+                  <div className="text-3xl font-bold">{readyAssistants.length}</div>
+                  <p className="text-sm text-foreground/70">Total de Assistentes</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xl font-semibold text-secondary">{safeStats.activeClients}</div>
-                  <p className="text-sm text-foreground/70">Ativos</p>
+                  <div className="text-xl font-semibold text-secondary">
+                    {selectedAssistant?.name || 'Nenhum selecionado'}
+                  </div>
+                  <p className="text-sm text-foreground/70">Assistente Ativo</p>
                 </div>
               </div>
-              <Link to="/clients">
+              <Link to="/vapi-assistant">
                 <Button variant="ghost" className="w-full mt-4 text-sm">
-                  Ver Todos os Clientes
+                  Gerenciar Assistentes
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>
@@ -67,4 +71,4 @@ const StatsGrid: React.FC<StatsGridProps> = ({ stats, isLoading = false }) => {
   );
 };
 
-export default StatsGrid;
+export default AIAssistants;
