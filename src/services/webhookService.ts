@@ -38,23 +38,27 @@ export const webhookService = {
       
       // 2. Busca na API do VAPI
       try {
-        const response = await fetch(`https://api.vapi.ai/assistant`, {
+        const response = await fetch(`${VAPI_API_URL}/assistant`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd`,
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
             'Content-Type': 'application/json',
           },
         });
 
         if (!response.ok) {
-          console.error('Falha ao buscar assistentes da VAPI');
+          console.error('Falha ao buscar assistentes da VAPI:', response.status, response.statusText);
           return localAssistants;
         }
 
         const vapiAssistants = await response.json();
+        console.log('Assistentes recuperados da VAPI:', vapiAssistants);
+        
         const userAssistants = vapiAssistants.filter((assistant: any) => 
           assistant.metadata?.user_id === userId
         );
+        
+        console.log(`Filtrados ${userAssistants.length} assistentes para o usuário ${userId}:`, userAssistants);
 
         // Combina e remove duplicatas
         const combined = this.combineAssistants(localAssistants, userAssistants);
@@ -92,6 +96,7 @@ export const webhookService = {
         return [];
       }
 
+      console.log(`Encontrados ${data?.length || 0} assistentes locais para o usuário ${userId}:`, data);
       return data || [];
     } catch (error) {
       console.error('Erro ao buscar assistentes locais:', error);
@@ -109,10 +114,12 @@ export const webhookService = {
     userId: string;
   }): Promise<VapiAssistant> {
     try {
-      const response = await fetch(`https://primary-production-31de.up.railway.app/webhook/createassistant`, {
+      console.log('Iniciando criação de assistente com parâmetros:', params);
+      
+      const response = await fetch(`${WEBHOOK_BASE_URL}/createassistant`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd`,
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -130,10 +137,12 @@ export const webhookService = {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Erro na resposta do webhook de criação:', response.status, response.statusText, errorText);
         throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
       }
 
       const vapiAssistant = await response.json();
+      console.log('Resposta do webhook de criação:', vapiAssistant);
 
       // Salva no banco de dados local
       const { data: assistantData, error: dbError } = await supabase
@@ -153,11 +162,23 @@ export const webhookService = {
         .select()
         .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Erro ao salvar assistente no banco de dados:', dbError);
+        throw dbError;
+      }
 
+      console.log('Assistente salvo no banco de dados:', assistantData);
+      
+      // Atualiza o localStorage com o novo assistente
+      localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+      
+      // Notificar sucesso
+      toast.success(`Assistente "${params.name}" criado com sucesso!`);
+      
       return assistantData;
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
+      toast.error(`Erro ao criar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       throw error;
     }
   },
@@ -175,6 +196,23 @@ export const webhookService = {
     additional_data: Record<string, any>;
   }): Promise<{ success: boolean }> {
     try {
+      // Get selected assistant from localStorage if available
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          const assistantData = JSON.parse(storedAssistant);
+          // Append selected assistant data to additional_data if not already present
+          if (!payload.additional_data) {
+            payload.additional_data = {};
+          }
+          payload.additional_data.assistant_id = assistantData.assistant_id;
+          payload.additional_data.assistant_name = assistantData.name;
+          console.log('Added selected assistant data to webhook payload:', assistantData);
+        }
+      } catch (e) {
+        console.error('Error parsing stored assistant data:', e);
+      }
+      
       const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -182,10 +220,13 @@ export const webhookService = {
       });
 
       if (!response.ok) {
-        throw new Error(`Erro no webhook: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('Erro na resposta do webhook de chamada:', response.status, response.statusText, errorText);
+        throw new Error(`Erro no webhook: ${response.statusText} - ${errorText}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      return result;
     } catch (error) {
       console.error('Erro ao acionar webhook:', error);
       throw error;
@@ -248,6 +289,7 @@ export const webhookService = {
       }
     });
 
+    console.log(`Combinados ${combined.length} assistentes (${local.length} locais + ${remoteMapped.length} remotos)`);
     return combined;
   },
 };
