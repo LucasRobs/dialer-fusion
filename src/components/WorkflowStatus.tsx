@@ -60,9 +60,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       setLogs([]);
       
       // Load assistants from Vapi
-      const assistantsResult = await webhookService.getAssistantsFromVapi();
-      if (assistantsResult.success && assistantsResult.data) {
-        setAssistants(assistantsResult.data);
+      const assistantsResult = await webhookService.getAllAssistants(user?.id || '');
+      if (Array.isArray(assistantsResult) && assistantsResult.length > 0) {
+        setAssistants(assistantsResult);
       }
     } catch (error) {
       console.error('Erro ao carregar dados de status:', error);
@@ -177,10 +177,10 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   useEffect(() => {
     const loadAssistants = async () => {
       try {
-        const result = await webhookService.getAssistantsFromVapi();
-        if (result.success && result.data) {
-          setAssistants(result.data);
-          console.log('Loaded assistants:', result.data);
+        const result = await webhookService.getAllAssistants(user?.id || '');
+        if (Array.isArray(result) && result.length > 0) {
+          setAssistants(result);
+          console.log('Loaded assistants:', result);
         }
       } catch (error) {
         console.error('Error loading assistants:', error);

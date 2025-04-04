@@ -63,12 +63,16 @@ const AITraining = () => {
     setIsSubmitting(true);
     
     try {
+      console.log("Iniciando criação de assistente com dados:", { name, firstMessage, systemPrompt, userId: user.id });
+      
       const newAssistant = await webhookService.createAssistant({
         name,
         first_message: firstMessage,
         system_prompt: systemPrompt,
         userId: user.id
       });
+      
+      console.log("Assistente criado com sucesso:", newAssistant);
       
       // Refetch assistants and update selected assistant
       await refetch();
@@ -93,6 +97,7 @@ const AITraining = () => {
     }
   };
 
+  // ... keep existing code (handleSelectAssistant and render section)
   const handleSelectAssistant = (assistant: VapiAssistant) => {
     setSelectedAssistant(assistant);
     localStorage.setItem('selected_assistant', JSON.stringify(assistant));
