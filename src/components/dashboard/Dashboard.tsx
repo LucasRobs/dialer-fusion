@@ -66,6 +66,7 @@ const Dashboard = () => {
           status: parsedAssistant.status || 'ready'
         };
         setSelectedAssistant(validAssistant);
+        console.log("Loaded selected assistant from localStorage:", validAssistant);
       } else if (assistants && assistants.length > 0) {
         // Filter out pending assistants
         const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
@@ -77,6 +78,7 @@ const Dashboard = () => {
           };
           setSelectedAssistant(validAssistant);
           localStorage.setItem('selected_assistant', JSON.stringify(validAssistant));
+          console.log("Set first ready assistant as selected:", validAssistant);
         }
       }
     } catch (error) {
@@ -118,6 +120,24 @@ const Dashboard = () => {
   useEffect(() => {
     if (activeCampaigns && activeCampaigns.length > 0) {
       const campaign = activeCampaigns[0];
+      // Find the associated assistant for this campaign
+      let campaignAssistant = null;
+      
+      // If the campaign has an assistant_id, try to find it in the assistants list
+      if (campaign.assistant_id && assistants && assistants.length > 0) {
+        campaignAssistant = assistants.find(a => a.id === campaign.assistant_id || a.assistant_id === campaign.assistant_id);
+        console.log("Found campaign assistant:", campaignAssistant);
+      }
+      
+      // If no campaign-specific assistant found, use the selected assistant
+      if (!campaignAssistant && selectedAssistant) {
+        campaignAssistant = selectedAssistant;
+        console.log("Using selected assistant for campaign:", campaignAssistant);
+      }
+
+      const assistantId = campaignAssistant?.id || campaignAssistant?.assistant_id;
+      console.log("Using assistant ID for campaign:", assistantId);
+      
       // Converter para o formato que o componente ActiveCampaign espera
       setActiveCampaign({
         id: campaign.id,
@@ -127,12 +147,13 @@ const Dashboard = () => {
         callsMade: campaign.answered_calls || 0,
         callsRemaining: (campaign.total_calls || 0) - (campaign.answered_calls || 0),
         active: true,
-        assistantName: selectedAssistant?.name || 'Default Assistant'
+        assistantName: campaignAssistant?.name || 'Assistente Padrão',
+        assistantId: assistantId // Add this to pass the ID
       });
     } else {
       setActiveCampaign(null);
     }
-  }, [activeCampaigns, selectedAssistant]);
+  }, [activeCampaigns, selectedAssistant, assistants]);
   
   const handleCampaignStopped = async () => {
     if (activeCampaign) {

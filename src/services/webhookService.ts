@@ -281,12 +281,30 @@ export const webhookService = {
   },
 
 
-  /**
-   * Dispara webhook de chamada
-   */
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
-      const response = await fetch(`https://primary-production-31de.up.railway.app/webhook/collowop`, {
+      console.log('Disparando webhook com payload:', payload);
+      
+      // Try to get the assistant ID from localStorage if not provided in payload
+      if (!payload.additional_data?.assistant_id) {
+        try {
+          const storedAssistant = localStorage.getItem('selected_assistant');
+          if (storedAssistant) {
+            const assistant = JSON.parse(storedAssistant);
+            if (assistant && (assistant.id || assistant.assistant_id)) {
+              if (!payload.additional_data) {
+                payload.additional_data = {};
+              }
+              payload.additional_data.assistant_id = assistant.id || assistant.assistant_id;
+              console.log('Using assistant ID from localStorage:', payload.additional_data.assistant_id);
+            }
+          }
+        } catch (e) {
+          console.error('Erro ao obter ID do assistente do localStorage:', e);
+        }
+      }
+      
+      const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -296,7 +314,8 @@ export const webhookService = {
       });
 
       if (!response.ok) {
-        console.error('Erro ao disparar webhook de chamada:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('Erro ao disparar webhook de chamada:', response.status, response.statusText, errorText);
         return { success: false };
       }
 

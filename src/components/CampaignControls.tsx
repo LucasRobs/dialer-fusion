@@ -282,6 +282,15 @@ const CampaignControls = () => {
         throw new Error("Assistente não encontrado");
       }
       
+      console.log("Selected assistant for campaign:", selectedAssistant);
+      
+      // Store selected assistant in localStorage for future reference
+      localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistant));
+      
+      // Get the correct assistant ID to use
+      const assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
+      console.log("Using assistant ID for campaign:", assistantId);
+      
       // Buscar os clientes do grupo
       await fetchClientsForGroup(campaign.clientGroup);
       
@@ -298,26 +307,27 @@ const CampaignControls = () => {
       // Para cada cliente no grupo, enviar um webhook
       for (const client of selectedGroupClients) {
         const webhookData = {
+          action: 'make_call',
+          campaign_id: campaign.id,
           client_name: client.name,
           client_phone: client.phone,
-          assistant_id: selectedAssistant.id
+          client_id: client.id,
+          additional_data: {
+            assistant_id: assistantId,
+            source: 'campaign_control',
+            assistant_name: selectedAssistant.name
+          }
         };
         
         console.log(`Enviando webhook para cliente ${client.name}:`, webhookData);
         
         // Enviar o webhook
-        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookData),
-        });
+        await webhookService.triggerCallWebhook(webhookData);
       }
       
       toast({
         title: "Campanha Iniciada",
-        description: `A campanha "${campaign.name}" foi iniciada com sucesso para ${selectedGroupClients.length} clientes.`,
+        description: `A campanha "${campaign.name}" foi iniciada com sucesso para ${selectedGroupClients.length} clientes usando o assistente "${selectedAssistant.name}".`,
       });
       
       // Atualizar a lista de campanhas

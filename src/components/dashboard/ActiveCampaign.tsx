@@ -17,6 +17,7 @@ interface CampaignStatus {
   callsRemaining: number;
   active: boolean;
   assistantName?: string;
+  assistantId?: string; // Add this property
 }
 
 interface ActiveCampaignProps {
@@ -43,7 +44,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         additional_data: {
           campaign_name: campaign.name,
           progress: campaign.progress,
-          completed_calls: campaign.callsMade
+          completed_calls: campaign.callsMade,
+          assistant_id: campaign.assistantId // Pass the assistant ID
         }
       });
       
@@ -71,7 +73,10 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               <div className="h-3 w-3 rounded-full bg-secondary animate-pulse mr-2"></div>
               Campanha Ativa: {campaign.name}
             </CardTitle>
-            <p className="text-sm text-foreground/70">Iniciada às {campaign.startTime} • Assistente: {campaign.assistantName}</p>
+            <p className="text-sm text-foreground/70">
+              Iniciada às {campaign.startTime} • Assistente: {campaign.assistantName}
+              {campaign.assistantId && <span className="text-xs text-muted-foreground ml-1">(ID: {campaign.assistantId.slice(0, 8)}...)</span>}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button 

@@ -86,14 +86,21 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
   const testWebhook = async () => {
     try {
       let assistantName = "Default Assistant";
+      let assistantId = null;
       
       try {
         const storedAssistant = localStorage.getItem('selected_assistant');
         if (storedAssistant) {
           const assistantData = JSON.parse(storedAssistant);
-          if (assistantData && assistantData.name) {
-            assistantName = assistantData.name;
-            console.log('Using stored assistant name for test call:', assistantName);
+          if (assistantData) {
+            if (assistantData.name) {
+              assistantName = assistantData.name;
+            }
+            assistantId = assistantData.id || assistantData.assistant_id;
+            console.log('Using stored assistant for test call:', {
+              name: assistantName,
+              id: assistantId
+            });
           }
         }
       } catch (e) {
@@ -108,9 +115,12 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         additional_data: {
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
-          assistant_name: assistantName
+          assistant_name: assistantName,
+          assistant_id: assistantId
         }
       };
+      
+      console.log("Sending test webhook payload:", testData);
       
       const result = await webhookService.triggerCallWebhook(testData);
       
