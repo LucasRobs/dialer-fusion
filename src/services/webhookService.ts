@@ -198,17 +198,6 @@ export const webhookService = {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: params.name,
-          model: { provider: 'openai', model: 'gpt-3.5-turbo' },
-          voice: { provider: '11labs', voiceId: 'rachel' },
-          firstMessage: params.first_message,
-          instructions: params.system_prompt,
-          metadata: {
-            user_id: params.userId,
-            created_at: new Date().toISOString()
-          }
-        }),
       });
 
       if (!response.ok) {
