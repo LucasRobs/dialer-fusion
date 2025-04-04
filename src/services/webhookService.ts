@@ -152,39 +152,50 @@ export const webhookService = {
       const vapiAssistant = await response.json();
       console.log('Resposta do webhook de criação:', vapiAssistant);
       
+      // Verificar se o ID foi retornado
       if (!vapiAssistant.id) {
+        console.error('Webhook não retornou um ID válido:', vapiAssistant);
         throw new Error('O assistente foi criado, mas não retornou um ID válido');
       }
 
       // 2. Salvar no banco de dados local
       try {
-        const { data: assistantData, error: dbError } = await supabase
+        const assistantData = {
+          name: params.name,
+          assistant_id: vapiAssistant.id, // Usando o ID retornado pela API
+          system_prompt: params.system_prompt,
+          first_message: params.first_message,
+          user_id: params.userId,
+          status: 'ready'
+        };
+        
+        console.log('Tentando salvar no Supabase:', assistantData);
+        
+        const { data: savedAssistant, error: dbError } = await supabase
           .from('assistants')
-          .insert({
-            name: params.name,
-            assistant_id: vapiAssistant.id, // Importante: este é o ID retornado da API
-            system_prompt: params.system_prompt,
-            first_message: params.first_message,
-            user_id: params.userId,
-            status: 'ready'
-          })
+          .insert(assistantData)
           .select()
           .single();
 
         if (dbError) {
           console.error('Erro ao salvar assistente no banco de dados:', dbError);
-          throw dbError;
+          throw new Error(`Erro ao salvar no banco: ${dbError.message}`);
         }
 
-        console.log('Assistente salvo no banco de dados:', assistantData);
+        if (!savedAssistant) {
+          console.error('Assistente não foi salvo corretamente');
+          throw new Error('Erro ao salvar assistente: Nenhum dado retornado do banco');
+        }
+
+        console.log('Assistente salvo no banco de dados com sucesso:', savedAssistant);
         
         // Atualiza o localStorage com o novo assistente
-        localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+        localStorage.setItem('selected_assistant', JSON.stringify(savedAssistant));
         
         // Notificar sucesso
         toast.success(`Assistente "${params.name}" criado com sucesso!`);
         
-        return assistantData;
+        return savedAssistant;
       } catch (dbError) {
         console.error('Erro detalhado ao salvar no banco de dados:', dbError);
         throw new Error(`Erro ao salvar no banco: ${dbError instanceof Error ? dbError.message : 'Erro desconhecido'}`);

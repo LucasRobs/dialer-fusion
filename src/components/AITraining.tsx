@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Bot, Plus, Loader2 } from 'lucide-react';
+import { Bot, Plus, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const AITraining = () => {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ const AITraining = () => {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch assistants
   const { data: assistants, isLoading, refetch } = useQuery({
@@ -49,6 +51,7 @@ const AITraining = () => {
 
   const handleCreateAssistant = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     if (!name || !firstMessage || !systemPrompt) {
       toast.error('Por favor, preencha todos os campos');
@@ -75,7 +78,7 @@ const AITraining = () => {
       console.log("Assistente criado com sucesso:", newAssistant);
       
       // Ensure the assistant has a valid assistant_id
-      if (!newAssistant.assistant_id) {
+      if (!newAssistant || !newAssistant.assistant_id) {
         throw new Error('Assistente criado sem um ID válido');
       }
       
@@ -96,7 +99,9 @@ const AITraining = () => {
       toast.success('Assistente criado com sucesso!');
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao criar assistente');
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar assistente';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -164,6 +169,12 @@ const AITraining = () => {
                 Configure as respostas e comportamento do seu assistente virtual
               </CardDescription>
             </CardHeader>
+            {error && (
+              <Alert variant="destructive" className="mx-6 mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <form onSubmit={handleCreateAssistant}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
