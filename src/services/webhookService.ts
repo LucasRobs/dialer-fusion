@@ -422,9 +422,6 @@ export const webhookService = {
     }
   },
 
-  /**
-   * Dispara um webhook para iniciar uma chamada
-   */
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
@@ -434,12 +431,29 @@ export const webhookService = {
       let supabaseAssistantId = payload.additional_data?.assistant_id;
       let assistantNameToUse = payload.additional_data?.assistant_name;
       
-      // Estratégia 1: Tentar obter o ID Vapi diretamente se temos algum ID
-      if (supabaseAssistantId || vapiAssistantId) {
+      // Estratégia 1: Tentar obter o ID Vapi diretamente pelo nome do assistente
+      if (assistantNameToUse && !vapiAssistantId) {
+        try {
+          console.log('Tentando obter ID Vapi pelo nome do assistente:', assistantNameToUse);
+          const idByName = await assistantService.getVapiAssistantIdByName(assistantNameToUse);
+          
+          if (idByName) {
+            console.log('ID Vapi encontrado pelo nome:', idByName);
+            vapiAssistantId = idByName;
+          } else {
+            console.log('Nome do assistente não encontrado na Vapi API:', assistantNameToUse);
+          }
+        } catch (e) {
+          console.error('Erro ao buscar ID pelo nome do assistente:', e);
+        }
+      }
+      
+      // Estratégia 2: Tentar obter o ID Vapi diretamente se temos algum ID
+      if (!vapiAssistantId && (supabaseAssistantId || payload.additional_data?.assistant_id)) {
         try {
           // Usar o método ensureVapiAssistantId para garantir que temos um ID Vapi válido
           const confirmedVapiId = await assistantService.ensureVapiAssistantId(
-            vapiAssistantId || supabaseAssistantId
+            supabaseAssistantId || payload.additional_data?.assistant_id
           );
           
           if (confirmedVapiId) {
@@ -460,7 +474,7 @@ export const webhookService = {
         }
       }
       
-      // Estratégia 2: Se não temos o ID Vapi ainda, tentar obter do Supabase
+      // Estratégia 3: Se não temos o ID Vapi ainda, tentar obter do Supabase
       if (!vapiAssistantId && supabaseAssistantId) {
         try {
           const assistantFromDb = await assistantService.getAssistantById(supabaseAssistantId);
@@ -478,7 +492,7 @@ export const webhookService = {
         }
       }
       
-      // Estratégia 3: Tentar buscar do localStorage
+      // Estratégia 4: Tentar buscar do localStorage
       if (!vapiAssistantId) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
@@ -496,6 +510,20 @@ export const webhookService = {
                 name: assistantNameToUse
               });
               
+              // Se temos o nome mas não temos o ID, tentar buscar pelo nome
+              if (assistantNameToUse && !vapiAssistantId) {
+                try {
+                  const idByName = await assistantService.getVapiAssistantIdByName(assistantNameToUse);
+                  
+                  if (idByName) {
+                    console.log('ID encontrado pelo nome do assistente do localStorage:', idByName);
+                    vapiAssistantId = idByName;
+                  }
+                } catch (e) {
+                  console.error('Erro ao buscar ID pelo nome do localStorage:', e);
+                }
+              }
+              
               // Confirmar se o ID é válido usando a API Vapi
               if (vapiAssistantId) {
                 const confirmedVapiId = await assistantService.ensureVapiAssistantId(vapiAssistantId);
@@ -511,26 +539,42 @@ export const webhookService = {
         }
       }
       
-      // Estratégia 4: Buscar da API Vapi diretamente
+      // Estratégia 5: Buscar da API Vapi diretamente
       if (!vapiAssistantId) {
         try {
-          console.log('Tentando buscar primeiro assistente da API Vapi como fallback');
+          console.log('Tentando buscar assistentes da API Vapi como último recurso');
           const vapiAssistants = await this.getAssistantsFromVapiApi();
           if (vapiAssistants && vapiAssistants.length > 0) {
-            // Usar primeiro assistente disponível
-            vapiAssistantId = vapiAssistants[0].id;
-            assistantNameToUse = vapiAssistants[0].name;
-            console.log('Usando primeiro assistente da API Vapi:', {
-              id: vapiAssistantId,
-              name: assistantNameToUse
-            });
+            // Procurar primeiro pelo nome, se disponível
+            if (assistantNameToUse) {
+              const matchingAssistant = vapiAssistants.find(
+                a => a.name.toLowerCase().includes(assistantNameToUse.toLowerCase()) || 
+                     assistantNameToUse.toLowerCase().includes(a.name.toLowerCase())
+              );
+              
+              if (matchingAssistant) {
+                vapiAssistantId = matchingAssistant.id;
+                console.log(`Encontrado assistente "${matchingAssistant.name}" na API Vapi por correspondência de nome:`, vapiAssistantId);
+              }
+            }
+            
+            // Se ainda não encontrou, usar o primeiro disponível
+            if (!vapiAssistantId) {
+              vapiAssistantId = vapiAssistants[0].id;
+              assistantNameToUse = vapiAssistants[0].name;
+              console.log('Usando primeiro assistente da API Vapi:', {
+                id: vapiAssistantId,
+                name: assistantNameToUse
+              });
+            }
           }
         } catch (e) {
           console.error('Erro ao buscar assistentes da API Vapi:', e);
         }
       }
       
-      // Estratégia 5: Usar ID de fallback como último recurso
+      // Estratégia 6: Usar ID de fallback como último recurso
+      const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
       if (!vapiAssistantId) {
         console.warn('Usando ID de fallback como último recurso:', FALLBACK_VAPI_ASSISTANT_ID);
         vapiAssistantId = FALLBACK_VAPI_ASSISTANT_ID;
@@ -688,8 +732,9 @@ export const webhookService = {
         return { success: false, message: 'Falha ao iniciar chamada', data: null };
       }
     } catch (error) {
-      console.error('Erro ao realizar chamada:', error);
-      return { success: false, message: 'Falha ao iniciar chamada', data: null };
+      console.error('Erro geral ao disparar webhook de chamada:', error);
+      toast.error(`Erro ao realizar chamada: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      return { success: false };
     }
   },
 

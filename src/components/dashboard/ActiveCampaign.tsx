@@ -47,75 +47,53 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     try {
       setIsStoppingCampaign(true);
       
-      // Get the Supabase assistant ID (from the assistantId field)
-      let supabaseAssistantId = campaign.assistantId;
-      // Get the Vapi assistant ID (from the vapiAssistantId field)
-      let vapiAssistantId = campaign.vapiAssistantId;
+      // Get assistant name
+      const assistantName = campaign.assistantName;
+      let vapiAssistantId = null;
       
-      // Log the IDs for clarity
-      console.log('IDs de assistente para interrupção de campanha:', {
-        supabaseAssistantId,
-        vapiAssistantId
-      });
-      
-      // Usar o método ensureVapiAssistantId para garantir que temos um ID Vapi válido
-      if (supabaseAssistantId || vapiAssistantId) {
+      // Get Vapi assistant ID by name if available
+      if (assistantName) {
         try {
-          const confirmedVapiId = await assistantService.ensureVapiAssistantId(
-            vapiAssistantId || supabaseAssistantId
-          );
+          console.log('Buscando ID do assistente pelo nome:', assistantName);
+          vapiAssistantId = await assistantService.getVapiAssistantIdByName(assistantName);
           
-          if (confirmedVapiId) {
-            console.log('ID Vapi confirmado pela API:', confirmedVapiId);
-            vapiAssistantId = confirmedVapiId;
+          if (vapiAssistantId) {
+            console.log('ID Vapi encontrado pelo nome do assistente:', vapiAssistantId);
+          } else {
+            console.warn('Nenhum assistente encontrado com o nome:', assistantName);
           }
         } catch (e) {
-          console.error('Erro ao confirmar ID Vapi:', e);
+          console.error('Erro ao buscar assistente pelo nome:', e);
         }
       }
       
-      // If we don't have a Supabase assistant ID, try to get from localStorage as fallback
-      if (!supabaseAssistantId || !vapiAssistantId) {
-        try {
-          const storedAssistant = localStorage.getItem('selected_assistant');
-          if (storedAssistant) {
-            const parsedAssistant = JSON.parse(storedAssistant);
-            
-            // Supabase ID (banco de dados)
-            if (!supabaseAssistantId) {
-              supabaseAssistantId = parsedAssistant.id;
-            }
-            
-            // Vapi ID (API externa)
-            if (!vapiAssistantId) {
-              vapiAssistantId = parsedAssistant.assistant_id || parsedAssistant.id;
-              
-              // Confirmar se é um ID válido da Vapi
-              try {
-                const confirmedVapiId = await assistantService.ensureVapiAssistantId(vapiAssistantId);
-                if (confirmedVapiId) {
-                  console.log('ID do localStorage confirmado na API Vapi:', confirmedVapiId);
-                  vapiAssistantId = confirmedVapiId;
-                }
-              } catch (ve) {
-                console.error('Erro ao validar ID Vapi do localStorage:', ve);
-              }
-            }
-            
-            console.log('Using assistant from localStorage:', {
-              supabaseId: supabaseAssistantId,
-              vapiId: vapiAssistantId
-            });
+      // If still no Vapi ID, use the existing IDs
+      if (!vapiAssistantId) {
+        // Get the Supabase assistant ID (from the assistantId field)
+        let supabaseAssistantId = campaign.assistantId;
+        // Get the Vapi assistant ID (from the vapiAssistantId field)
+        vapiAssistantId = campaign.vapiAssistantId;
+        
+        console.log('IDs de assistente para interrupção de campanha:', {
+          supabaseAssistantId,
+          vapiAssistantId
+        });
+        
+        // If we have a Supabase ID but no Vapi ID, try to get Vapi ID
+        if (supabaseAssistantId && !vapiAssistantId) {
+          try {
+            vapiAssistantId = await assistantService.ensureVapiAssistantId(supabaseAssistantId);
+            console.log('ID Vapi obtido a partir do ID do Supabase:', vapiAssistantId);
+          } catch (e) {
+            console.error('Erro ao confirmar ID Vapi:', e);
           }
-        } catch (e) {
-          console.error('Error parsing stored assistant data:', e);
         }
       }
-
-      // Se ainda não temos um ID Vapi válido, tentar obter da API diretamente
+      
+      // Last resort - Get all assistants and use the first one
       if (!vapiAssistantId) {
         try {
-          console.log('Tentando obter o primeiro assistente da API Vapi como último recurso');
+          console.log('Tentando obter lista de assistentes da API Vapi');
           const vapiAssistants = await webhookService.getAssistantsFromVapiApi();
           if (vapiAssistants && vapiAssistants.length > 0) {
             vapiAssistantId = vapiAssistants[0].id;
@@ -126,10 +104,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         }
       }
 
-      console.log('Stopping campaign with assistant IDs:', { 
-        supabaseAssistantId, 
-        vapiAssistantId 
-      });
+      console.log('ID final do assistente para a campanha:', vapiAssistantId);
       
       // Send data to webhook with both IDs
       const result = await webhookService.triggerCallWebhook({
@@ -140,7 +115,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: supabaseAssistantId, // ID do Supabase (banco)
+          assistant_id: campaign.assistantId, // ID do Supabase (banco)
           vapi_assistant_id: vapiAssistantId, // ID da Vapi (API externa)
           assistant_name: campaign.assistantName
         }

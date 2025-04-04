@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import assistantService from '@/services/assistantService';
 
 interface WorkflowStatusProps {
   campaignId?: number;
@@ -141,18 +142,43 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
               id: assistantId
             });
           } else {
-            // Tentar usar do localStorage como fallback
-            const storedAssistant = localStorage.getItem('selected_assistant');
-            if (storedAssistant) {
-              const assistantData = JSON.parse(storedAssistant);
-              if (assistantData) {
-                assistantName = assistantData.name || "Default Assistant";
-                // Priorizar assistant_id sobre id se estiver disponível
-                assistantId = assistantData.assistant_id || assistantData.id;
-                console.log('Using stored assistant for test call:', {
-                  name: assistantName,
-                  id: assistantId
-                });
+            // If we don't have a list of assistants, fetch them directly from Vapi
+            const vapiAssistants = await assistantService.getVapiAssistants();
+            if (vapiAssistants && vapiAssistants.length > 0) {
+              assistantName = vapiAssistants[0].name || "Default Assistant";
+              assistantId = vapiAssistants[0].id;
+              console.log('Fetched and using first Vapi assistant for test call:', {
+                name: assistantName,
+                id: assistantId
+              });
+            } else {
+              // Try localStorage as last resort
+              const storedAssistant = localStorage.getItem('selected_assistant');
+              if (storedAssistant) {
+                const assistantData = JSON.parse(storedAssistant);
+                if (assistantData) {
+                  assistantName = assistantData.name || "Default Assistant";
+                  // Priorizar assistant_id sobre id se estiver disponível
+                  assistantId = assistantData.assistant_id || assistantData.id;
+                  
+                  // Verify this ID with Vapi API
+                  const confirmedId = await assistantService.ensureVapiAssistantId(assistantId);
+                  if (confirmedId) {
+                    assistantId = confirmedId;
+                  } else if (assistantData.name) {
+                    // Try to find by name if ID verification failed
+                    const idByName = await assistantService.getVapiAssistantIdByName(assistantData.name);
+                    if (idByName) {
+                      assistantId = idByName;
+                      console.log('Found assistant ID by name:', idByName);
+                    }
+                  }
+                  
+                  console.log('Using stored assistant for test call:', {
+                    name: assistantName,
+                    id: assistantId
+                  });
+                }
               }
             }
           }
@@ -161,10 +187,33 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         }
       } else {
         // Usamos o assistantId das configurações e procuramos o nome
-        const matchingAssistant = assistants.find(a => a.id === assistantId);
-        if (matchingAssistant) {
-          assistantName = matchingAssistant.name || "Selected Assistant";
+        try {
+          // First try to validate this ID directly with the Vapi API
+          const assistantDetails = await assistantService.getVapiAssistantById(assistantId);
+          if (assistantDetails) {
+            assistantName = assistantDetails.name || "Selected Assistant";
+            console.log('Validated assistant ID with Vapi API:', {
+              name: assistantName,
+              id: assistantId
+            });
+          } else {
+            // If direct validation fails, look in our local list
+            const matchingAssistant = assistants.find(a => a.id === assistantId);
+            if (matchingAssistant) {
+              assistantName = matchingAssistant.name || "Selected Assistant";
+            } else {
+              // Try to fetch all assistants and find a match
+              const allAssistants = await assistantService.getVapiAssistants();
+              const matchingAssistant = allAssistants.find(a => a.id === assistantId);
+              if (matchingAssistant) {
+                assistantName = matchingAssistant.name || "Selected Assistant";
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error validating assistant ID:', e);
         }
+        
         console.log('Using configured assistant for test call:', {
           name: assistantName,
           id: assistantId
@@ -172,12 +221,28 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       }
       
       if (!assistantId) {
-        console.error('No assistant ID available for test call');
-        toast({
-          description: "Nenhum assistente disponível. Por favor, selecione ou crie um assistente primeiro.",
-          variant: "destructive"
-        });
-        return;
+        console.error('No assistant ID available for test call, trying to find one by name');
+        
+        // Last attempt - try to find an assistant with a similar name
+        if (assistantName && assistantName !== "Default Assistant") {
+          try {
+            const idByName = await assistantService.getVapiAssistantIdByName(assistantName);
+            if (idByName) {
+              assistantId = idByName;
+              console.log('Found assistant ID by name as last resort:', idByName);
+            }
+          } catch (e) {
+            console.error('Error finding assistant by name:', e);
+          }
+        }
+        
+        if (!assistantId) {
+          toast({
+            description: "Nenhum assistente disponível. Por favor, selecione ou crie um assistente primeiro.",
+            variant: "destructive"
+          });
+          return;
+        }
       }
       
       const testData: WebhookPayload = {
@@ -194,7 +259,8 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
           assistant_name: assistantName,
-          assistant_id: assistantId
+          assistant_id: null, // We don't use Supabase ID anymore
+          vapi_assistant_id: assistantId // We use Vapi ID directly
         }
       };
       

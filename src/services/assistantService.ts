@@ -113,6 +113,49 @@ const assistantService = {
       return [];
     }
   },
+
+
+    // NOVO MÉTODO: Obter ID do assistente da Vapi pelo nome
+    async getVapiAssistantIdByName(assistantName: string): Promise<string | null> {
+      try {
+        console.log(`Buscando ID do assistente da Vapi pelo nome: "${assistantName}"`);
+        
+        // Primeiro, buscar todos os assistentes da Vapi
+        const vapiAssistants = await this.getVapiAssistants();
+        
+        if (!vapiAssistants || vapiAssistants.length === 0) {
+          console.log('Nenhum assistente encontrado na API Vapi');
+          return null;
+        }
+        
+        // Procurar assistente pelo nome (case insensitive)
+        const matchingAssistant = vapiAssistants.find(
+          assistant => assistant.name.toLowerCase() === assistantName.toLowerCase()
+        );
+        
+        if (matchingAssistant) {
+          console.log(`Assistente "${assistantName}" encontrado na API Vapi com ID:`, matchingAssistant.id);
+          return matchingAssistant.id;
+        } else {
+          // Procurar por correspondência parcial se não encontrou exata
+          const partialMatch = vapiAssistants.find(
+            assistant => assistant.name.toLowerCase().includes(assistantName.toLowerCase()) ||
+                        assistantName.toLowerCase().includes(assistant.name.toLowerCase())
+          );
+          
+          if (partialMatch) {
+            console.log(`Correspondência parcial para "${assistantName}" encontrada: "${partialMatch.name}" com ID:`, partialMatch.id);
+            return partialMatch.id;
+          }
+          
+          console.log(`Nenhum assistente encontrado com o nome "${assistantName}"`);
+          return null;
+        }
+      } catch (error) {
+        console.error(`Erro ao buscar ID do assistente pelo nome "${assistantName}":`, error);
+        return null;
+      }
+    },
   
   // Obter um assistente específico diretamente da API Vapi
   async getVapiAssistantById(assistantId: string): Promise<Assistant | null> {
@@ -278,11 +321,11 @@ const assistantService = {
         
         // Se não encontrou no banco local, tenta buscar da API Vapi
         try {
-          const vapiAssistants = await this.getVapiAssistants();
-          const vapiAssistant = vapiAssistants.find(a => a.id === assistantId || a.assistant_id === assistantId);
+          // Primeiro, tentar buscar diretamente pelo ID
+          const vapiAssistant = await this.getVapiAssistantById(assistantId);
           
           if (vapiAssistant) {
-            console.log('Assistente encontrado na API Vapi:', vapiAssistant);
+            console.log('Assistente encontrado diretamente na API Vapi:', vapiAssistant);
             toast(`Assistente "${vapiAssistant.name}" selecionado com sucesso`);
             
             // Log IDs specifically for clarity
@@ -295,6 +338,20 @@ const assistantService = {
             localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant));
             
             return vapiAssistant;
+          }
+          
+          // Se não encontrou pelo ID direto, buscar todos
+          const vapiAssistants = await this.getVapiAssistants();
+          const vapiAssistant2 = vapiAssistants.find(a => a.id === assistantId || a.assistant_id === assistantId);
+          
+          if (vapiAssistant2) {
+            console.log('Assistente encontrado na lista da API Vapi:', vapiAssistant2);
+            toast(`Assistente "${vapiAssistant2.name}" selecionado com sucesso`);
+            
+            // Save to localStorage
+            localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant2));
+            
+            return vapiAssistant2;
           } else {
             console.error('Assistente não encontrado na API Vapi');
             toast(`Falha ao selecionar assistente: Não encontrado na API Vapi`);
@@ -450,6 +507,15 @@ const assistantService = {
       if (matchingAssistant) {
         console.log('Encontrado assistente na lista completa da Vapi:', matchingAssistant.id);
         return matchingAssistant.id;
+      }
+      
+      // Tentar buscar pelo nome se o ID não for encontrado
+      if (assistant && assistant.name) {
+        const idByName = await this.getVapiAssistantIdByName(assistant.name);
+        if (idByName) {
+          console.log('Encontrado ID via nome do assistente:', idByName);
+          return idByName;
+        }
       }
       
       console.warn('Não foi possível encontrar um ID Vapi válido para:', assistantId);
