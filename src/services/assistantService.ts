@@ -74,12 +74,11 @@ const assistantService = {
     }
   },
   
-  // Método para buscar assistentes diretamente da API Vapi
   async getVapiAssistants(): Promise<Assistant[]> {
     try {
       console.log('Buscando assistentes da API Vapi com a key:', VAPI_API_KEY);
       
-      const response = await fetch('https://api.vapi.ai/assistant', {
+      const response = await fetch(`https://api.vapi.ai/assistant`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -112,6 +111,55 @@ const assistantService = {
     } catch (error) {
       console.error('Erro ao buscar assistentes da API Vapi:', error);
       return [];
+    }
+  },
+  
+  // Obter um assistente específico diretamente da API Vapi
+  async getVapiAssistantById(assistantId: string): Promise<Assistant | null> {
+    try {
+      console.log(`Buscando assistente diretamente da API Vapi por ID: ${assistantId}`);
+
+      // Primeiro tentamos buscar diretamente pelo ID
+      const response = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const assistant = await response.json();
+        console.log('Assistente encontrado na API Vapi:', assistant);
+        
+        return {
+          id: assistant.id,
+          name: assistant.name,
+          assistant_id: assistant.id, // Usar o ID da Vapi também como assistant_id
+          system_prompt: assistant.instructions,
+          first_message: assistant.firstMessage,
+          created_at: assistant.createdAt,
+          user_id: assistant.metadata?.user_id,
+          status: assistant.status || 'ready',
+          model: assistant.model || DEFAULT_MODEL,
+          voice: assistant.voice || DEFAULT_VOICE
+        };
+      }
+      
+      // Se falhar a busca direta, buscar todos e encontrar pelo ID
+      const allAssistants = await this.getVapiAssistants();
+      const foundAssistant = allAssistants.find(a => a.id === assistantId || a.assistant_id === assistantId);
+      
+      if (foundAssistant) {
+        console.log('Assistente encontrado na lista da API Vapi:', foundAssistant);
+        return foundAssistant;
+      }
+      
+      console.error('Assistente não encontrado na API Vapi');
+      return null;
+    } catch (error) {
+      console.error('Erro ao buscar assistente da API Vapi:', error);
+      return null;
     }
   },
   
@@ -287,20 +335,30 @@ const assistantService = {
       const { data, error } = await supabase
         .from('assistants')
         .select('*')
-        .eq('id', assistantId) // Using Supabase ID for lookup
+        .or(`id.eq.${assistantId},assistant_id.eq.${assistantId}`)  // Buscar por qualquer um dos IDs
         .single();
       
-      if (error) {
+      if (error || !data) {
         console.log('Assistente não encontrado no banco local, buscando na API Vapi');
         
-        // Se não encontrou no banco local, tenta buscar da API Vapi
+        // Se não encontrou no banco local, tenta buscar da API Vapi diretamente pelo ID
         try {
-          const vapiAssistants = await this.getVapiAssistants();
-          const vapiAssistant = vapiAssistants.find(a => a.id === assistantId || a.assistant_id === assistantId);
+          const vapiAssistant = await this.getVapiAssistantById(assistantId);
           
           if (vapiAssistant) {
-            console.log('Assistente encontrado na API Vapi:', vapiAssistant);
+            console.log('Assistente encontrado diretamente na API Vapi por ID:', vapiAssistant);
             return vapiAssistant;
+          }
+          
+          // Se não encontrou pelo ID direto, tenta buscar todos e filtrar
+          const vapiAssistants = await this.getVapiAssistants();
+          const matchingAssistant = vapiAssistants.find(a => 
+            a.id === assistantId || a.assistant_id === assistantId
+          );
+          
+          if (matchingAssistant) {
+            console.log('Assistente encontrado na lista completa da API Vapi:', matchingAssistant);
+            return matchingAssistant;
           } else {
             console.error('Assistente não encontrado na API Vapi');
             return null;
@@ -345,19 +403,61 @@ const assistantService = {
     }
   },
   
-  // Add helper method to ensure we're using the right ID
-  getCorrectAssistantId(assistant: Assistant | null | undefined): string | null {
-    if (!assistant) return null;
+  async ensureVapiAssistantId(assistantIdOrObj: string | Assistant | null | undefined): Promise<string | null> {
+    if (!assistantIdOrObj) return null;
     
-    // Always prefer the Vapi assistant_id if available
-    if (assistant.assistant_id) {
-      console.log('Usando Vapi assistant_id:', assistant.assistant_id);
-      return assistant.assistant_id;
+    let assistantId: string | null = null;
+    let assistant: Assistant | null = null;
+    
+    // Se for um objeto, extrair o ID
+    if (typeof assistantIdOrObj === 'object') {
+      assistant = assistantIdOrObj;
+      // Preferir o assistant_id se disponível (deve ser o ID da Vapi)
+      assistantId = assistant.assistant_id || assistant.id;
+    } else {
+      // Se for uma string, usar diretamente
+      assistantId = assistantIdOrObj;
     }
     
-    // Fallback to id if no assistant_id is available (should be the Vapi ID)
-    console.log('AVISO: Usando id como fallback:', assistant.id);
-    return assistant.id;
+    if (!assistantId) return null;
+    
+    // Verificar se o ID já é da Vapi
+    try {
+      // Tentar buscar diretamente da API Vapi para confirmar
+      const vapiAssistant = await this.getVapiAssistantById(assistantId);
+      if (vapiAssistant) {
+        console.log('ID já é da Vapi, confirmado:', assistantId);
+        return assistantId;
+      }
+      
+      // Se não encontrou diretamente, pode ser um ID do Supabase
+      // Então tentamos buscar no banco para obter o assistant_id
+      if (!assistant) {
+        assistant = await this.getAssistantById(assistantId);
+      }
+      
+      if (assistant && assistant.assistant_id) {
+        console.log('Obtido ID da Vapi a partir do banco:', assistant.assistant_id);
+        return assistant.assistant_id;
+      }
+      
+      // Se ainda não encontrou, buscar todos os assistentes como último recurso
+      const allVapiAssistants = await this.getVapiAssistants();
+      const matchingAssistant = allVapiAssistants.find(a => 
+        a.id === assistantId || a.assistant_id === assistantId
+      );
+      
+      if (matchingAssistant) {
+        console.log('Encontrado assistente na lista completa da Vapi:', matchingAssistant.id);
+        return matchingAssistant.id;
+      }
+      
+      console.warn('Não foi possível encontrar um ID Vapi válido para:', assistantId);
+      return null;
+    } catch (error) {
+      console.error('Erro ao garantir ID da Vapi:', error);
+      return assistantId; // Retornar o ID original como fallback
+    }
   }
 };
 
