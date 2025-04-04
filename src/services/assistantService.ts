@@ -98,7 +98,7 @@ const assistantService = {
       
       // Mapear para o formato da nossa aplicação
       return vapiAssistants.map((assistant: any) => ({
-        id: assistant.id, // ID da Vapi
+        id: assistant.id, // ID da Vapi como ID primário para garantir que estamos usando o ID correto da Vapi
         name: assistant.name,
         assistant_id: assistant.id, // Mesmo ID como assistant_id para compatibilidade
         system_prompt: assistant.instructions,
@@ -119,9 +119,20 @@ const assistantService = {
     try {
       console.log('Salvando assistente:', assistant);
       
+      // Garantir que assistant_id seja definido
+      if (!assistant.assistant_id) {
+        console.error('assistant_id é obrigatório para salvar um assistente');
+        toast('Falha ao salvar assistente: ID do assistente Vapi é obrigatório');
+        return null;
+      }
+      
       const { data, error } = await supabase
         .from('assistants')
-        .insert(assistant)
+        .insert({
+          ...assistant,
+          // Garantir que estamos usando o ID da Vapi como assistant_id
+          assistant_id: assistant.assistant_id
+        })
         .select()
         .single();
       
@@ -344,8 +355,8 @@ const assistantService = {
       return assistant.assistant_id;
     }
     
-    // Fallback to Supabase id if no assistant_id is available
-    console.log('AVISO: Usando Supabase id como fallback:', assistant.id);
+    // Fallback to id if no assistant_id is available (should be the Vapi ID)
+    console.log('AVISO: Usando id como fallback:', assistant.id);
     return assistant.id;
   }
 };

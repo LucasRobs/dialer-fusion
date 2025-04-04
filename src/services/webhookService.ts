@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
+import assistantService from './assistantService'; // Adjust the path as needed
 
 export interface VapiAssistant {
   id: string;
@@ -380,7 +381,7 @@ export const webhookService = {
    */
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
-      console.log('Disparando webhook com payload:', payload);
+      console.log('Disparando webhook com payload inicial:', payload);
       
       // Buscar assistente do localStorage para garantir que temos o ID correto
       let vapiAssistantId = payload.additional_data?.assistant_id;
@@ -394,13 +395,7 @@ export const webhookService = {
             const assistant = JSON.parse(storedAssistant);
             if (assistant) {
               // Para chamadas Vapi, precisamos do assistant_id como prioridade
-              vapiAssistantId = assistant.assistant_id;
-              // Se não tivermos o assistant_id, usamos o id como fallback
-              if (!vapiAssistantId) {
-                vapiAssistantId = assistant.id;
-                console.warn('Using Supabase ID as fallback for Vapi calls - this may not work!');
-              }
-              
+              vapiAssistantId = assistant.assistant_id || assistant.id;
               // Guardar também o ID do Supabase
               supabaseAssistantId = assistant.id;
               assistantNameToUse = assistant.name;
@@ -429,12 +424,13 @@ export const webhookService = {
       if (!vapiAssistantId) {
         try {
           console.log('Buscando assistentes da API Vapi para usar em chamada webhook');
-          const vapiAssistants = await this.getAssistantsFromVapiApi();
+          // Use o assistantService para garantir consistência na obtenção dos IDs
+          const vapiAssistants = await assistantService.getVapiAssistants();
           
           if (vapiAssistants && vapiAssistants.length > 0) {
             // Pega o primeiro assistente disponível
             const firstAssistant = vapiAssistants[0];
-            vapiAssistantId = firstAssistant.id;
+            vapiAssistantId = firstAssistant.assistant_id || firstAssistant.id;
             assistantNameToUse = firstAssistant.name;
             
             console.log('Usando primeiro assistente disponível da API:', {
@@ -456,17 +452,42 @@ export const webhookService = {
         }
       }
       
+      // Se temos o ID do Supabase mas não o ID do Vapi, vamos buscar no banco de dados
+      if (!vapiAssistantId && supabaseAssistantId) {
+        try {
+          const assistantFromDb = await assistantService.getAssistantById(supabaseAssistantId);
+          if (assistantFromDb && assistantFromDb.assistant_id) {
+            vapiAssistantId = assistantFromDb.assistant_id;
+            assistantNameToUse = assistantFromDb.name;
+            
+            console.log('Obtido ID do Vapi a partir do banco de dados:', {
+              vapiId: vapiAssistantId,
+              name: assistantNameToUse
+            });
+            
+            if (!payload.additional_data) {
+              payload.additional_data = {};
+            }
+            
+            payload.additional_data.assistant_id = vapiAssistantId;
+            payload.additional_data.assistant_name = assistantNameToUse;
+          }
+        } catch (e) {
+          console.error('Erro ao buscar assistente do banco de dados:', e);
+        }
+      }
+      
       if (!vapiAssistantId) {
         console.warn('Nenhum ID de assistente Vapi disponível para a chamada webhook, tentando buscar o primeiro disponível');
         try {
           // Busca o primeiro assistente disponível como fallback
           const userId = payload.user_id;
           if (userId) {
-            const assistants = await this.getLocalAssistants(userId);
+            const assistants = await assistantService.getAllAssistants(userId);
             if (assistants && assistants.length > 0) {
               const firstAssistant = assistants[0];
               // Para Vapi, priorizar assistant_id
-              vapiAssistantId = firstAssistant.assistant_id;
+              vapiAssistantId = firstAssistant.assistant_id || firstAssistant.id;
               supabaseAssistantId = firstAssistant.id;
               assistantNameToUse = firstAssistant.name;
               
@@ -502,25 +523,43 @@ export const webhookService = {
       
       // Adicionar provider e configurações da chamada
       payload.provider = "vapi"; // Indicar que estamos usando Vapi como provedor
+      
+      // Obter configurações de modelo e voz do localStorage
+      let model = "gpt-4o-turbo"; // Valor padrão
+      let voice = "eleven_labs_gemma"; // Valor padrão
+      
+      try {
+        // Verificar se temos configurações salvas
+        const savedSettings = localStorage.getItem('vapi_settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          if (settings.model) model = settings.model;
+          if (settings.voice) voice = settings.voice;
+          console.log('Usando configurações da localStorage:', { model, voice });
+        }
+      } catch (e) {
+        console.error('Erro ao obter configurações da localStorage:', e);
+      }
+      
       payload.call = {
-        model: DEFAULT_MODEL, // Usar GPT-4o-Turbo como modelo padrão
-        voice: DEFAULT_VOICE  // Usar voz padrão ElevenLabs
+        model: model, 
+        voice: voice
       };
       
       // Adicionar informações de debug para ajudar no troubleshooting
       payload.additional_data.source_url = window.location.href;
       payload.additional_data.timestamp = new Date().toISOString();
-      payload.additional_data.client_version = CLIENT_VERSION;
+      payload.additional_data.client_version = '1.3.1';
       payload.additional_data.id_type = 'vapi'; // Indicar que estamos usando IDs da Vapi
       
       console.log('Enviando payload final para webhook:', payload);
       
       // Usar AbortController para tratamento de timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
       try {
-        const response = await fetch(`${WEBHOOK_BASE_URL}/collowop`, {
+        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${VAPI_API_KEY}`,

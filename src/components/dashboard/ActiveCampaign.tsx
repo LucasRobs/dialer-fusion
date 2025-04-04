@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { webhookService } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
+import assistantService from '@/services/assistantService';
 
 interface CampaignStatus {
   id: number;
@@ -67,6 +68,16 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           }
         } catch (e) {
           console.error('Error parsing stored assistant data:', e);
+        }
+      }
+
+      // Garantir que temos o ID correto do assistente no Vapi
+      if (!vapiAssistantId && supabaseAssistantId) {
+        // Buscar o assistente no Supabase e obter o assistant_id correspondente
+        const assistantFromDb = await assistantService.getAssistantById(supabaseAssistantId);
+        if (assistantFromDb && assistantFromDb.assistant_id) {
+          vapiAssistantId = assistantFromDb.assistant_id;
+          console.log('Obtido ID do Vapi a partir do banco de dados:', vapiAssistantId);
         }
       }
 
