@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface VapiAssistant {
   id: string;
@@ -152,8 +153,15 @@ export const webhookService = {
       const vapiAssistant = await response.json();
       console.log('Resposta do webhook de criação:', vapiAssistant);
       
-      // Verificar se o ID foi retornado
-      if (!vapiAssistant.id) {
+      // Gerar um ID único se o webhook retornar apenas uma mensagem de confirmação
+      let assistantId;
+      if (vapiAssistant.id) {
+        assistantId = vapiAssistant.id;
+      } else if (vapiAssistant.message && vapiAssistant.message.includes('started')) {
+        // O webhook retornou apenas uma mensagem de confirmação, vamos gerar um ID único
+        assistantId = uuidv4();
+        console.log('Webhook retornou apenas confirmação, gerando ID único:', assistantId);
+      } else {
         console.error('Webhook não retornou um ID válido:', vapiAssistant);
         throw new Error('O assistente foi criado, mas não retornou um ID válido');
       }
@@ -162,11 +170,11 @@ export const webhookService = {
       try {
         const assistantData = {
           name: params.name,
-          assistant_id: vapiAssistant.id, // Usando o ID retornado pela API
+          assistant_id: assistantId, // Usando o ID retornado pela API ou gerado localmente
           system_prompt: params.system_prompt,
           first_message: params.first_message,
           user_id: params.userId,
-          status: 'ready'
+          status: 'pending' // Marcamos como pending já que o workflow foi iniciado
         };
         
         console.log('Tentando salvar no Supabase:', assistantData);
@@ -193,7 +201,7 @@ export const webhookService = {
         localStorage.setItem('selected_assistant', JSON.stringify(savedAssistant));
         
         // Notificar sucesso
-        toast.success(`Assistente "${params.name}" criado com sucesso!`);
+        toast.success(`Assistente "${params.name}" está sendo criado! Aguarde alguns minutos...`);
         
         return savedAssistant;
       } catch (dbError) {
@@ -206,6 +214,7 @@ export const webhookService = {
       throw error;
     }
   },
+
 
   /**
    * Dispara webhook de chamada

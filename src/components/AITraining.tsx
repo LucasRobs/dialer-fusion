@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Bot, Plus, Loader2, AlertCircle } from 'lucide-react';
+import { Bot, Plus, Loader2, AlertCircle, RefreshCcw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
@@ -37,7 +37,7 @@ const AITraining = () => {
       if (storedAssistant) {
         setSelectedAssistant(JSON.parse(storedAssistant));
       } else if (assistants && assistants.length > 0) {
-        // Filter out pending assistants
+        // Filter out pending assistants for initial selection
         const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
         if (readyAssistants.length > 0) {
           setSelectedAssistant(readyAssistants[0]);
@@ -77,11 +77,6 @@ const AITraining = () => {
       
       console.log("Assistente criado com sucesso:", newAssistant);
       
-      // Ensure the assistant has a valid assistant_id
-      if (!newAssistant || !newAssistant.assistant_id) {
-        throw new Error('Assistente criado sem um ID válido');
-      }
-      
       // Refetch assistants and update selected assistant
       await refetch();
       
@@ -96,7 +91,12 @@ const AITraining = () => {
       setFirstMessage('');
       setSystemPrompt('');
       
-      toast.success('Assistente criado com sucesso!');
+      // Mostra uma notificação específica para o status do assistente
+      if (newAssistant.status === 'pending') {
+        toast.success(`Assistente "${newAssistant.name}" está sendo criado. Atualize em alguns minutos para verificar o status.`);
+      } else {
+        toast.success(`Assistente "${newAssistant.name}" criado com sucesso!`);
+      }
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao criar assistente';
@@ -113,6 +113,16 @@ const AITraining = () => {
     toast.success(`Assistente "${assistant.name}" selecionado como padrão`);
   };
 
+  const handleRefreshAssistants = async () => {
+    try {
+      await refetch();
+      toast.success('Lista de assistentes atualizada');
+    } catch (error) {
+      console.error('Erro ao atualizar lista de assistentes:', error);
+      toast.error('Erro ao atualizar lista de assistentes');
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 max-w-6xl">
       <div className="mb-8">
@@ -124,13 +134,20 @@ const AITraining = () => {
         {/* Lista de Assistentes */}
         <div className="md:col-span-1">
           <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Assistentes</CardTitle>
-              <CardDescription>
-                {selectedAssistant 
-                  ? `Assistente atual: ${selectedAssistant.name}`
-                  : 'Selecione ou crie um assistente'}
-              </CardDescription>
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Assistentes</CardTitle>
+                  <CardDescription>
+                    {selectedAssistant 
+                      ? `Assistente atual: ${selectedAssistant.name}`
+                      : 'Selecione ou crie um assistente'}
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="icon" onClick={handleRefreshAssistants} title="Atualizar lista">
+                  <RefreshCcw className="h-4 w-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoading ? (
@@ -143,11 +160,14 @@ const AITraining = () => {
                     <Button
                       key={assistant.id}
                       variant={selectedAssistant?.id === assistant.id ? "default" : "outline"}
-                      className="w-full justify-start text-left"
+                      className="w-full justify-start text-left group"
                       onClick={() => handleSelectAssistant(assistant)}
                     >
                       <Bot className="mr-2 h-4 w-4" />
-                      <span className="truncate">{assistant.name}</span>
+                      <span className="truncate flex-1">{assistant.name}</span>
+                      {assistant.status === 'pending' && (
+                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Criando...</span>
+                      )}
                     </Button>
                   ))}
                 </div>
