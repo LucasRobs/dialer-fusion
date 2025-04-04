@@ -59,7 +59,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       
       setLogs([]);
       
-      // Load assistants from Vapi
+      // Load assistants from local storage and API
       const assistantsResult = await webhookService.getAllAssistants(user?.id || '');
       if (Array.isArray(assistantsResult) && assistantsResult.length > 0) {
         setAssistants(assistantsResult);

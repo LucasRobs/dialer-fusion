@@ -12,7 +12,6 @@ export interface VapiAssistant {
   first_message?: string;
   model?: string;
   voice?: string;
-  metadata?: Record<string, any>;
 }
 
 export interface WebhookPayload {
@@ -58,9 +57,13 @@ export const webhookService = {
         const vapiAssistants = await response.json();
         console.log('Assistentes recuperados da VAPI:', vapiAssistants);
         
-        const userAssistants = vapiAssistants.filter((assistant: any) => 
-          assistant.metadata?.user_id === userId
-        );
+        // Filter assistants by user_id from metadata
+        const userAssistants = vapiAssistants.filter((assistant: any) => {
+          if (assistant && assistant.metadata && assistant.metadata.user_id) {
+            return assistant.metadata.user_id === userId;
+          }
+          return false;
+        });
         
         console.log(`Filtrados ${userAssistants.length} assistentes para o usuário ${userId}:`, userAssistants);
 
@@ -148,35 +151,40 @@ export const webhookService = {
       const vapiAssistant = await response.json();
       console.log('Resposta do webhook de criação:', vapiAssistant);
 
-      // Salva no banco de dados local - Removendo o campo metadata que não existe na tabela
-      const { data: assistantData, error: dbError } = await supabase
-        .from('assistants')
-        .insert({
-          name: params.name,
-          assistant_id: vapiAssistant.id,
-          system_prompt: params.system_prompt,
-          first_message: params.first_message,
-          user_id: params.userId,
-          status: 'ready'
-          // Removido o campo metadata que estava causando o erro
-        })
-        .select()
-        .single();
+      // Salva no banco de dados local - Removendo campos que não existem na tabela
+      try {
+        const { data: assistantData, error: dbError } = await supabase
+          .from('assistants')
+          .insert({
+            name: params.name,
+            assistant_id: vapiAssistant.id,
+            system_prompt: params.system_prompt,
+            first_message: params.first_message,
+            user_id: params.userId,
+            status: 'ready'
+            // Importante: NÃO incluir o campo metadata aqui!
+          })
+          .select()
+          .single();
 
-      if (dbError) {
-        console.error('Erro ao salvar assistente no banco de dados:', dbError);
-        throw dbError;
+        if (dbError) {
+          console.error('Erro ao salvar assistente no banco de dados:', dbError);
+          throw dbError;
+        }
+
+        console.log('Assistente salvo no banco de dados:', assistantData);
+        
+        // Atualiza o localStorage com o novo assistente
+        localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
+        
+        // Notificar sucesso
+        toast.success(`Assistente "${params.name}" criado com sucesso!`);
+        
+        return assistantData;
+      } catch (dbError) {
+        console.error('Erro detalhado ao salvar no banco de dados:', dbError);
+        throw new Error(`Erro ao salvar no banco: ${dbError instanceof Error ? dbError.message : 'Erro desconhecido'}`);
       }
-
-      console.log('Assistente salvo no banco de dados:', assistantData);
-      
-      // Atualiza o localStorage com o novo assistente
-      localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
-      
-      // Notificar sucesso
-      toast.success(`Assistente "${params.name}" criado com sucesso!`);
-      
-      return assistantData;
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
       toast.error(`Erro ao criar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
@@ -297,7 +305,7 @@ export const webhookService = {
               created_at: assistant.createdAt,
               system_prompt: assistant.instructions,
               first_message: assistant.firstMessage
-              // Removed metadata field that was causing errors
+              // Do NOT include metadata field here
             }, { onConflict: 'assistant_id' });
 
           if (error) {
@@ -321,8 +329,8 @@ export const webhookService = {
       system_prompt: assistant.instructions,
       first_message: assistant.firstMessage,
       model: assistant.model,
-      voice: assistant.voice,
-      metadata: assistant.metadata
+      voice: assistant.voice
+      // Do NOT include metadata field in our local format
     };
   },
 

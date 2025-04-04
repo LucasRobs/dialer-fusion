@@ -97,7 +97,6 @@ const AITraining = () => {
     }
   };
 
-  // ... keep existing code (handleSelectAssistant and render section)
   const handleSelectAssistant = (assistant: VapiAssistant) => {
     setSelectedAssistant(assistant);
     localStorage.setItem('selected_assistant', JSON.stringify(assistant));
