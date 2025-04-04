@@ -32,7 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import WorkflowStatus from '@/components/WorkflowStatus';
 import { webhookService } from '@/services/webhookService';
 import { campaignService } from '@/services/campaignService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -64,6 +63,7 @@ const CampaignControls = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStartingCampaign, setIsStartingCampaign] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState<{[key: string]: boolean}>({});
   const [newCampaign, setNewCampaign] = useState({
     name: '',
     clientGroup: '',
@@ -270,7 +270,7 @@ const CampaignControls = () => {
 
   // Função para iniciar a campanha e enviar o webhook
   const handleStartCampaign = async (campaign) => {
-    setIsStartingCampaign(true);
+    setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     
     try {
       // Buscar o assistente pelo ID
@@ -331,12 +331,13 @@ const CampaignControls = () => {
         variant: "destructive",
       });
     } finally {
-      setIsStartingCampaign(false);
+      setIsActionLoading(prev => ({ ...prev, [campaign.id]: false }));
     }
   };
 
   // Função para pausar a campanha
   const handlePauseCampaign = async (campaign) => {
+    setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     try {
       await campaignService.updateCampaign(campaign.id, {
         status: 'paused',
@@ -355,11 +356,14 @@ const CampaignControls = () => {
         description: "Houve um problema ao pausar sua campanha. Por favor, tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setIsActionLoading(prev => ({ ...prev, [campaign.id]: false }));
     }
   };
 
   // Função para encerrar a campanha
   const handleStopCampaign = async (campaign) => {
+    setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     try {
       await campaignService.updateCampaign(campaign.id, {
         status: 'completed',
@@ -379,6 +383,32 @@ const CampaignControls = () => {
         description: "Houve um problema ao encerrar sua campanha. Por favor, tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setIsActionLoading(prev => ({ ...prev, [campaign.id]: false }));
+    }
+  };
+
+  // Função para deletar a campanha
+  const handleDeleteCampaign = async (campaign) => {
+    setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
+    try {
+      await campaignService.deleteCampaign(campaign.id);
+      
+      toast({
+        title: "Campanha Excluída",
+        description: `A campanha "${campaign.name}" foi excluída com sucesso.`,
+      });
+      
+      await refetchCampaigns();
+    } catch (error) {
+      console.error("Erro ao excluir campanha:", error);
+      toast({
+        title: "Erro ao Excluir Campanha",
+        description: "Houve um problema ao excluir sua campanha. Por favor, tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsActionLoading(prev => ({ ...prev, [campaign.id]: false }));
     }
   };
 
@@ -399,8 +429,6 @@ const CampaignControls = () => {
               Atualizar Assistentes
             </Button>
           </div>
-
-          <WorkflowStatus />
 
           {isLoading ? (
             <Card>
@@ -442,27 +470,43 @@ const CampaignControls = () => {
                       </div>
                       
                       {/* Controles da campanha */}
-                      <div className="flex gap-2 pt-2">
+                      <div className="flex flex-wrap gap-2 pt-2">
                         {campaign.status === 'draft' && (
-                          <Button 
-                            variant="default" 
-                            size="sm" 
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => handleStartCampaign(campaign)}
-                            disabled={isStartingCampaign}
-                          >
-                            {isStartingCampaign ? (
-                              <>
+                          <>
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => handleStartCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
+                            >
+                              {isActionLoading[campaign.id] ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Iniciando...
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4 mr-2" />
+                                  Iniciar
+                                </>
+                              )}
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="border-red-300 hover:bg-red-50 text-red-600"
+                              onClick={() => handleDeleteCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
+                            >
+                              {isActionLoading[campaign.id] ? (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Iniciando...
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-4 w-4 mr-2" />
-                                Iniciar
-                              </>
-                            )}
-                          </Button>
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-2" />
+                              )}
+                              Excluir
+                            </Button>
+                          </>
                         )}
                         
                         {campaign.status === 'active' && (
@@ -471,8 +515,13 @@ const CampaignControls = () => {
                               variant="outline" 
                               size="sm"
                               onClick={() => handlePauseCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
                             >
-                              <PauseCircle className="h-4 w-4 mr-2" />
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <PauseCircle className="h-4 w-4 mr-2" />
+                              )}
                               Pausar
                             </Button>
                             <Button 
@@ -480,9 +529,28 @@ const CampaignControls = () => {
                               size="sm"
                               className="border-red-300 hover:bg-red-50"
                               onClick={() => handleStopCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
                             >
-                              <StopCircle className="h-4 w-4 mr-2 text-red-500" />
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <StopCircle className="h-4 w-4 mr-2 text-red-500" />
+                              )}
                               Encerrar
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="border-red-300 hover:bg-red-50 text-red-600"
+                              onClick={() => handleDeleteCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
+                            >
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-2" />
+                              )}
+                              Excluir
                             </Button>
                           </>
                         )}
@@ -494,8 +562,13 @@ const CampaignControls = () => {
                               size="sm" 
                               className="bg-green-600 hover:bg-green-700"
                               onClick={() => handleStartCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
                             >
-                              <Play className="h-4 w-4 mr-2" />
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Play className="h-4 w-4 mr-2" />
+                              )}
                               Continuar
                             </Button>
                             <Button 
@@ -503,9 +576,47 @@ const CampaignControls = () => {
                               size="sm"
                               className="border-red-300 hover:bg-red-50"
                               onClick={() => handleStopCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
                             >
-                              <StopCircle className="h-4 w-4 mr-2 text-red-500" />
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <StopCircle className="h-4 w-4 mr-2 text-red-500" />
+                              )}
                               Encerrar
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="border-red-300 hover:bg-red-50 text-red-600"
+                              onClick={() => handleDeleteCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
+                            >
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-2" />
+                              )}
+                              Excluir
+                            </Button>
+                          </>
+                        )}
+                        
+                        {(campaign.status === 'completed' || campaign.status === 'error') && (
+                          <>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="border-red-300 hover:bg-red-50 text-red-600"
+                              onClick={() => handleDeleteCampaign(campaign)}
+                              disabled={isActionLoading[campaign.id]}
+                            >
+                              {isActionLoading[campaign.id] ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-2" />
+                              )}
+                              Excluir
                             </Button>
                           </>
                         )}
