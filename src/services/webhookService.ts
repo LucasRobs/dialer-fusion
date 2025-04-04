@@ -430,7 +430,7 @@ export const webhookService = {
 
       // Buscar assistente do localStorage para garantir que temos o ID correto
       let vapiAssistantId = payload.additional_data?.vapi_assistant_id;
-      let supabaseAssistantId = payload.additional_data?.assistant_id;
+            let supabaseAssistantId = payload.additional_data?.assistant_id;
       let assistantNameToUse = payload.additional_data?.assistant_name;
 
       // Estratégia 1: Tentar obter o ID Vapi diretamente pelo nome do assistente
@@ -499,10 +499,11 @@ export const webhookService = {
       if (!vapiAssistantId) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
+          console.log('Conteúdo do localStorage "selected_assistant":', storedAssistant);
           if (storedAssistant) {
             const assistant = JSON.parse(storedAssistant);
+            console.log('Assistente do localStorage:', assistant);
             if (assistant) {
-              // Para Vapi, precisamos usar o assistant_id específico ou o ID
               vapiAssistantId = assistant.assistant_id || assistant.id;
               supabaseAssistantId = assistant.id;
               assistantNameToUse = assistant.name;
@@ -523,7 +524,7 @@ export const webhookService = {
                     vapiAssistantId = idByName;
                   }
                 } catch (e) {
-                  console.error('Erro ao buscar ID pelo nome do localStorage:', e);
+                  console.error('Erro ao obter ID do assistente do localStorage:', e);
                 }
               }
 
@@ -585,17 +586,20 @@ export const webhookService = {
       }
 
       if (!vapiAssistantId) {
-        console.error('CRÍTICO: Nenhum ID de assistente Vapi disponível para a chamada webhook');
-        toast.error('Erro: Nenhum assistente selecionado ou ID inválido. Por favor, crie ou selecione um assistente.');
+        console.error('CRÍTICO: Nenhum ID de assistente Vapi disponível para a chamada webhook após todas as tentativas.');
+        toast.error('Erro: Não foi possível determinar o ID do assistente. Por favor, verifique as configurações.');
         return { success: false };
       }
-
+      
       console.log('ID final do assistente Vapi para webhook:', vapiAssistantId);
-
+      
       // Garantir que temos um objeto para additional_data
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
+      
+      // Atualizar os IDs no payload
+      payload.additional_data.vapi_assistant_id = vapiAssistantId;
 
       // Atualizar os IDs no payload
       payload.additional_data.vapi_assistant_id = vapiAssistantId;
