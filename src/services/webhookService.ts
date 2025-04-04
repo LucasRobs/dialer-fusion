@@ -57,7 +57,7 @@ export const webhookService = {
       console.log('Criando assistente com parâmetros:', params);
 
       // 1. Primeiro cria o assistente na Vapi
-      const vapiResponse = await fetch(`${VAPI_API_URL}/assistant`, {
+      const vapiResponse = await fetch(`https://primary-production-31de.up.railway.app/webhook/createassistant`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -221,7 +221,7 @@ export const webhookService = {
     try {
       console.log(`Iniciando chamada para ${clientPhone} com assistente ${assistantId}`);
 
-      const response = await fetch(`${VAPI_API_URL}/call`, {
+      const response = await fetch(`https://primary-production-31de.up.railway.app/webhook/collowop`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
