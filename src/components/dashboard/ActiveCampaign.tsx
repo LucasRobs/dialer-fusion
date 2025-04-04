@@ -47,29 +47,31 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     try {
       setIsStoppingCampaign(true);
       
-      // Get assistant ID for Vapi (preferring the explicit vapiAssistantId if available)
-      let vapiAssistantId = campaign.vapiAssistantId;
+      // Get the Supabase assistant ID (from the assistantId field)
       let supabaseAssistantId = campaign.assistantId;
+      // Get the Vapi assistant ID (from the vapiAssistantId field)
+      let vapiAssistantId = campaign.vapiAssistantId;
       
-      // Log both IDs for clarity
+      // Log the IDs for clarity
       console.log('IDs de assistente para interrupção de campanha:', {
-        vapiAssistantId,
-        supabaseAssistantId
+        supabaseAssistantId,
+        vapiAssistantId
       });
       
-      if (!vapiAssistantId) {
-        // Try to get from localStorage as fallback
+      // If we don't have a Supabase assistant ID, try to get from localStorage as fallback
+      if (!supabaseAssistantId) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
             const parsedAssistant = JSON.parse(storedAssistant);
+            // The ID field should be the Supabase ID
+            supabaseAssistantId = parsedAssistant.id;
             // For Vapi, we need the assistant_id field specifically
-            vapiAssistantId = parsedAssistant.assistant_id || parsedAssistant.id;
-            supabaseAssistantId = parsedAssistant.id; // Keep Supabase ID separate
+            vapiAssistantId = parsedAssistant.assistant_id;
+            
             console.log('Using assistant from localStorage:', {
-              vapiAssistantId,
               supabaseAssistantId,
-              parsedAssistant
+              vapiAssistantId
             });
           }
         } catch (e) {
@@ -77,19 +79,23 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         }
       }
 
-      // Garantir que temos o ID correto do assistente no Vapi
-      if (!vapiAssistantId && supabaseAssistantId) {
-        // Buscar o assistente no Supabase e obter o assistant_id correspondente
-        const assistantFromDb = await assistantService.getAssistantById(supabaseAssistantId);
-        if (assistantFromDb && assistantFromDb.assistant_id) {
-          vapiAssistantId = assistantFromDb.assistant_id;
-          console.log('Obtido ID do Vapi a partir do banco de dados:', vapiAssistantId);
+      // If we have a Supabase assistant ID but no Vapi ID, try to fetch the assistant to get the correct Vapi ID
+      if (supabaseAssistantId && !vapiAssistantId) {
+        try {
+          // Buscar o assistente no Supabase e obter o assistant_id correspondente
+          const assistantFromDb = await assistantService.getAssistantById(supabaseAssistantId);
+          if (assistantFromDb && assistantFromDb.assistant_id) {
+            vapiAssistantId = assistantFromDb.assistant_id;
+            console.log('Obtido ID do Vapi a partir do banco de dados:', vapiAssistantId);
+          }
+        } catch (error) {
+          console.error('Erro ao buscar assistente no banco:', error);
         }
       }
 
       console.log('Stopping campaign with assistant IDs:', { 
-        vapiAssistantId, 
-        supabaseAssistantId 
+        supabaseAssistantId, 
+        vapiAssistantId 
       });
       
       // Send data to webhook with both IDs, prioritizing the Supabase assistant ID
@@ -101,8 +107,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: supabaseAssistantId, // Send the Supabase assistant ID as the primary ID
-          vapi_assistant_id: vapiAssistantId, // Also send Vapi assistant ID as a secondary ID
+          assistant_id: supabaseAssistantId, // Send the Supabase ID as the primary assistant_id
+          vapi_assistant_id: vapiAssistantId, // Also send Vapi ID as a secondary field
           assistant_name: campaign.assistantName
         }
       });
