@@ -14,35 +14,10 @@ export interface VapiAssistant {
   metadata?: Record<string, any>;
 }
 
-export interface WebhookPayload {
-  action: string;
-  campaign_id: number;
-  client_id?: number;
-  client_name?: string;
-  client_phone?: string;
-  user_id?: string;
-  additional_data?: Record<string, any>;
-}
-
-export interface WebhookData {
-  action: string;
-  campaign_id?: number;
-  client_name?: string;
-  client_phone?: string;
-  timestamp?: string;
-  additional_data?: Record<string, any>;
-}
-
 interface WebhookResponse {
   success: boolean;
   message?: string;
   data?: any;
-}
-
-interface AssistantCreationParams {
-  assistant_name: string;
-  first_message: string;
-  system_prompt: string;
 }
 
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -50,111 +25,20 @@ const VAPI_API_URL = "https://api.vapi.ai";
 
 export const webhookService = {
   /**
-   * Cria um novo assistente virtual e registra no banco de dados
+   * Busca todos os assistentes de um usuário específico no VAPI
    */
-  async createAssistant(params: AssistantCreationParams): Promise<WebhookResponse> {
+  async getAssistantsByUser(userId: string): Promise<VapiAssistant[]> {
     try {
-      console.log('Criando assistente com parâmetros:', params);
+      console.log(`Buscando assistentes no VAPI para o usuário ${userId}`);
 
-      // 1. Primeiro cria o assistente na Vapi
-      const vapiResponse = await fetch(`https://primary-production-31de.up.railway.app/webhook/createassistant`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: params.assistant_name,
-          model: { provider: 'openai', model: 'gpt-3.5-turbo' },
-          voice: { provider: '11labs', voiceId: 'rachel' },
-          firstMessage: params.first_message,
-          instructions: params.system_prompt,
-        }),
-      });
-
-      if (!vapiResponse.ok) {
-        const errorText = await vapiResponse.text();
-        throw new Error(`Erro ao criar assistente na Vapi: ${vapiResponse.statusText} - ${errorText}`);
+      // 1. Busca assistentes no banco de dados local primeiro
+      const localAssistants = await this.getLocalAssistants(userId);
+      if (localAssistants.length > 0) {
+        return localAssistants;
       }
 
-      const vapiData = await vapiResponse.json();
-      console.log('Assistente criado na Vapi:', vapiData);
-
-      // 2. Obtém o ID do usuário atual
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      if (authError) throw authError;
-      
-      const userId = authData?.session?.user?.id;
-      if (!userId) throw new Error('ID do usuário não encontrado');
-
-      // 3. Salva no banco de dados local
-      const { data: assistantData, error: dbError } = await supabase
-        .from('assistants')
-        .insert({
-          name: params.assistant_name,
-          assistant_id: vapiData.id,
-          system_prompt: params.system_prompt,
-          first_message: params.first_message,
-          user_id: userId,
-          status: 'ready',
-          metadata: {
-            vapi_data: vapiData,
-            created_at: new Date().toISOString()
-          }
-        })
-        .select()
-        .single();
-
-      if (dbError) throw dbError;
-
-      // 4. Armazena localmente
-      localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
-
-      return {
-        success: true,
-        message: 'Assistente criado com sucesso',
-        data: assistantData
-      };
-    } catch (error) {
-      console.error('Erro ao criar assistente:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
-      };
-    }
-  },
-
-  /**
-   * Obtém todos os assistentes de um usuário específico
-   */
-  async getAssistantsForUser(userId: string): Promise<VapiAssistant[]> {
-    try {
-      console.log(`Buscando assistentes para o usuário ${userId}`);
-
-      // 1. Verifica assistentes armazenados localmente
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      if (storedAssistant) {
-        const assistant = JSON.parse(storedAssistant);
-        if (assistant.user_id === userId) {
-          return [assistant];
-        }
-      }
-
-      // 2. Busca no banco de dados local
-      const { data: dbAssistants, error: dbError } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (dbError) throw dbError;
-
-      if (dbAssistants && dbAssistants.length > 0) {
-        return dbAssistants;
-      }
-
-      // 3. Se não encontrou localmente, busca na API da Vapi
-      const vapiResponse = await fetch(`${VAPI_API_URL}/assistant`, {
+      // 2. Se não encontrou localmente, busca na API do VAPI
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -162,12 +46,12 @@ export const webhookService = {
         },
       });
 
-      if (!vapiResponse.ok) {
-        const errorText = await vapiResponse.text();
-        throw new Error(`Erro ao buscar assistentes: ${vapiResponse.statusText} - ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao buscar assistentes: ${response.statusText} - ${errorText}`);
       }
 
-      const vapiAssistants = await vapiResponse.json();
+      const vapiAssistants = await response.json();
 
       // Filtra apenas os assistentes do usuário atual
       const userAssistants = vapiAssistants.filter((assistant: any) => 
@@ -176,38 +60,11 @@ export const webhookService = {
 
       // Salva os assistentes no banco de dados para cache
       if (userAssistants.length > 0) {
-        await Promise.all(
-          userAssistants.map(async (assistant: any) => {
-            const { error } = await supabase
-              .from('assistants')
-              .upsert({
-                assistant_id: assistant.id,
-                name: assistant.name,
-                user_id: userId,
-                status: assistant.status,
-                created_at: assistant.createdAt,
-                system_prompt: assistant.instructions,
-                first_message: assistant.firstMessage,
-                metadata: assistant.metadata
-              }, { onConflict: 'assistant_id' });
-
-            if (error) console.error('Erro ao salvar assistente:', error);
-          })
-        );
+        await this.cacheAssistants(userAssistants, userId);
       }
 
-      return userAssistants.map((assistant: any) => ({
-        id: assistant.id,
-        name: assistant.name,
-        assistant_id: assistant.id,
-        user_id: userId,
-        status: assistant.status,
-        created_at: assistant.createdAt,
-        system_prompt: assistant.instructions,
-        first_message: assistant.firstMessage,
-        metadata: assistant.metadata
-      }));
-
+      return userAssistants.map(this.mapVapiAssistantToLocalFormat);
+      
     } catch (error) {
       console.error('Erro ao buscar assistentes:', error);
       throw error;
@@ -215,63 +72,122 @@ export const webhookService = {
   },
 
   /**
-   * Inicia uma chamada usando um assistente Vapi
+   * Busca assistentes no banco de dados local por user_id
    */
-  async makeCall(clientPhone: string, assistantId: string): Promise<WebhookResponse> {
+  async getLocalAssistants(userId: string): Promise<VapiAssistant[]> {
     try {
-      console.log(`Iniciando chamada para ${clientPhone} com assistente ${assistantId}`);
+      const { data, error } = await supabase
+        .from('assistants')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
-      const response = await fetch(`https://primary-production-31de.up.railway.app/webhook/collowop`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          assistantId,
-          phone: {
-            number: clientPhone
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao iniciar chamada: ${response.statusText} - ${errorText}`);
+      if (error) {
+        console.error('Erro ao buscar assistentes locais:', error);
+        return [];
       }
 
-      const data = await response.json();
-      return {
-        success: true,
-        message: 'Chamada iniciada com sucesso',
-        data
-      };
+      return data || [];
     } catch (error) {
-      console.error('Erro ao fazer chamada:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
-      };
+      console.error('Erro ao buscar assistentes locais:', error);
+      return [];
     }
   },
 
   /**
-   * Obtém os detalhes de um assistente específico
+   * Cria um novo assistente via API local
    */
-  async getAssistantDetails(assistantId: string): Promise<VapiAssistant> {
+  async createAssistant(data: { 
+    assistant_name: string; 
+    first_message: string; 
+    system_prompt: string 
+  }): Promise<{ success: boolean; data?: any; message?: string }> {
     try {
-      // Primeiro tenta buscar do banco de dados local
-      const { data: localAssistant, error: localError } = await supabase
+      const response = await fetch('/api/assistants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao criar assistente via API local:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Armazena assistentes no banco de dados local para cache
+   */
+  async cacheAssistants(assistants: any[], userId: string): Promise<void> {
+    try {
+      await Promise.all(
+        assistants.map(async (assistant) => {
+          const { error } = await supabase
+            .from('assistants')
+            .upsert({
+              assistant_id: assistant.id,
+              name: assistant.name,
+              user_id: userId,
+              status: assistant.status,
+              created_at: assistant.createdAt,
+              system_prompt: assistant.instructions,
+              first_message: assistant.firstMessage,
+              metadata: assistant.metadata
+            }, { onConflict: 'assistant_id' });
+
+          if (error) {
+            console.error('Erro ao salvar assistente no cache:', error);
+          }
+        })
+      );
+    } catch (error) {
+      console.error('Erro ao armazenar assistentes em cache:', error);
+    }
+  },
+
+  /**
+   * Converte o formato do assistente da VAPI para nosso formato local
+   */
+  mapVapiAssistantToLocalFormat(assistant: any): VapiAssistant {
+    return {
+      id: assistant.id,
+      name: assistant.name,
+      assistant_id: assistant.id,
+      user_id: assistant.metadata?.user_id || '',
+      status: assistant.status,
+      created_at: assistant.createdAt,
+      system_prompt: assistant.instructions,
+      first_message: assistant.firstMessage,
+      model: assistant.model,
+      voice: assistant.voice,
+      metadata: assistant.metadata
+    };
+  },
+
+  /**
+   * Obtém detalhes de um assistente específico
+   */
+  async getAssistantDetails(assistantId: string, userId: string): Promise<VapiAssistant> {
+    try {
+      // 1. Tenta buscar do banco de dados local primeiro
+      const { data: localAssistant, error } = await supabase
         .from('assistants')
         .select('*')
         .eq('assistant_id', assistantId)
+        .eq('user_id', userId)
         .single();
 
-      if (!localError && localAssistant) {
+      if (!error && localAssistant) {
         return localAssistant;
       }
 
-      // Se não encontrou localmente, busca na Vapi
+      // 2. Se não encontrou localmente, busca na VAPI
       const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
         method: 'GET',
         headers: {
@@ -287,18 +203,15 @@ export const webhookService = {
 
       const vapiAssistant = await response.json();
 
-      // Converte para o formato VapiAssistant
-      return {
-        id: vapiAssistant.id,
-        name: vapiAssistant.name,
-        assistant_id: vapiAssistant.id,
-        user_id: vapiAssistant.metadata?.user_id || '',
-        status: vapiAssistant.status,
-        created_at: vapiAssistant.createdAt,
-        system_prompt: vapiAssistant.instructions,
-        first_message: vapiAssistant.firstMessage,
-        metadata: vapiAssistant.metadata
-      };
+      // Verifica se o assistente pertence ao usuário
+      if (vapiAssistant.metadata?.user_id !== userId) {
+        throw new Error('Assistente não pertence ao usuário');
+      }
+
+      // Atualiza o cache local
+      await this.cacheAssistants([vapiAssistant], userId);
+
+      return this.mapVapiAssistantToLocalFormat(vapiAssistant);
     } catch (error) {
       console.error('Erro ao buscar detalhes do assistente:', error);
       throw error;
@@ -306,78 +219,136 @@ export const webhookService = {
   },
 
   /**
-   * Atualiza um assistente existente
+   * Cria um novo assistente para o usuário
    */
-  async updateAssistant(assistantId: string, updates: Partial<VapiAssistant>): Promise<WebhookResponse> {
+  async createAssistantForUser(params: {
+    name: string;
+    first_message: string;
+    system_prompt: string;
+    userId: string;
+  }): Promise<VapiAssistant> {
     try {
-      // 1. Atualiza na Vapi
-      const vapiResponse = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: params.name,
+          model: { provider: 'openai', model: 'gpt-3.5-turbo' },
+          voice: { provider: '11labs', voiceId: 'rachel' },
+          firstMessage: params.first_message,
+          instructions: params.system_prompt,
+          metadata: {
+            user_id: params.userId,
+            created_at: new Date().toISOString()
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
+      }
+
+      const vapiAssistant = await response.json();
+
+      // Salva no banco de dados local
+      const { data: assistantData, error: dbError } = await supabase
+        .from('assistants')
+        .insert({
+          name: params.name,
+          assistant_id: vapiAssistant.id,
+          system_prompt: params.system_prompt,
+          first_message: params.first_message,
+          user_id: params.userId,
+          status: 'ready',
+          metadata: {
+            vapi_data: vapiAssistant,
+            created_at: new Date().toISOString()
+          }
+        })
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      return assistantData;
+    } catch (error) {
+      console.error('Erro ao criar assistente:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Atualiza um assistente do usuário
+   */
+  async updateUserAssistant(
+    assistantId: string, 
+    userId: string,
+    updates: Partial<{
+      name: string;
+      system_prompt: string;
+      first_message: string;
+    }>
+  ): Promise<VapiAssistant> {
+    try {
+      // Primeiro verifica se o assistente pertence ao usuário
+      const existingAssistant = await this.getAssistantDetails(assistantId, userId);
+
+      const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: updates.name,
-          instructions: updates.system_prompt,
-          firstMessage: updates.first_message,
-          metadata: updates.metadata
+          name: updates.name || existingAssistant.name,
+          instructions: updates.system_prompt || existingAssistant.system_prompt,
+          firstMessage: updates.first_message || existingAssistant.first_message,
         }),
       });
 
-      if (!vapiResponse.ok) {
-        const errorText = await vapiResponse.text();
-        throw new Error(`Erro ao atualizar assistente: ${vapiResponse.statusText} - ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao atualizar assistente: ${response.statusText} - ${errorText}`);
       }
 
-      const vapiData = await vapiResponse.json();
+      const vapiAssistant = await response.json();
 
-      // 2. Atualiza no banco de dados local
+      // Atualiza no banco de dados local
       const { data: assistantData, error: dbError } = await supabase
         .from('assistants')
         .update({
           name: updates.name,
           system_prompt: updates.system_prompt,
           first_message: updates.first_message,
-          metadata: updates.metadata,
           updated_at: new Date().toISOString()
         })
         .eq('assistant_id', assistantId)
+        .eq('user_id', userId)
         .select()
         .single();
 
       if (dbError) throw dbError;
 
-      // 3. Atualiza localmente se for o assistente selecionado
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      if (storedAssistant) {
-        const currentAssistant = JSON.parse(storedAssistant);
-        if (currentAssistant.assistant_id === assistantId) {
-          localStorage.setItem('selected_assistant', JSON.stringify(assistantData));
-        }
-      }
-
-      return {
-        success: true,
-        message: 'Assistente atualizado com sucesso',
-        data: assistantData
-      };
+      return assistantData;
     } catch (error) {
       console.error('Erro ao atualizar assistente:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
-      };
+      throw error;
     }
   },
 
   /**
-   * Remove um assistente
+   * Remove um assistente do usuário
    */
-  async deleteAssistant(assistantId: string): Promise<WebhookResponse> {
+  async deleteUserAssistant(assistantId: string, userId: string): Promise<void> {
     try {
-      // 1. Remove da Vapi
-      const vapiResponse = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
+      // Primeiro verifica se o assistente pertence ao usuário
+      await this.getAssistantDetails(assistantId, userId);
+
+      const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -385,20 +356,21 @@ export const webhookService = {
         },
       });
 
-      if (!vapiResponse.ok) {
-        const errorText = await vapiResponse.text();
-        throw new Error(`Erro ao remover assistente: ${vapiResponse.statusText} - ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao remover assistente: ${response.statusText} - ${errorText}`);
       }
 
-      // 2. Remove do banco de dados local
+      // Remove do banco de dados local
       const { error: dbError } = await supabase
         .from('assistants')
         .delete()
-        .eq('assistant_id', assistantId);
+        .eq('assistant_id', assistantId)
+        .eq('user_id', userId);
 
       if (dbError) throw dbError;
 
-      // 3. Remove do localStorage se for o assistente selecionado
+      // Remove do localStorage se for o assistente selecionado
       const storedAssistant = localStorage.getItem('selected_assistant');
       if (storedAssistant) {
         const currentAssistant = JSON.parse(storedAssistant);
@@ -406,17 +378,40 @@ export const webhookService = {
           localStorage.removeItem('selected_assistant');
         }
       }
-
-      return {
-        success: true,
-        message: 'Assistente removido com sucesso'
-      };
     } catch (error) {
       console.error('Erro ao remover assistente:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
-      };
+      throw error;
+    }
+  },
+
+  /**
+   * Dispara um webhook para iniciar uma chamada
+   */
+  async triggerCallWebhook(payload: {
+    action: string;
+    campaign_id: number;
+    client_id: number;
+    client_name: string;
+    client_phone: string;
+    user_id: string | undefined;
+    additional_data: Record<string, any>;
+  }): Promise<{ success: boolean }> {
+    try {
+      const response = await fetch('/api/trigger-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao acionar webhook: ${response.statusText} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Erro ao acionar webhook de chamada:', error);
+      throw error;
     }
   }
 };

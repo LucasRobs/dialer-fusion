@@ -116,7 +116,7 @@ const CampaignControls = () => {
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      return await webhookService.getAllAssistants(user.id);
+      return await webhookService.getAssistantsByUser(user.id);
     },
     enabled: !!user?.id,
   });
