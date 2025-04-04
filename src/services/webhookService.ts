@@ -116,7 +116,7 @@ export const webhookService = {
     user_id: string;
   }): Promise<WebhookResponse> {
     try {
-      const response = await fetch('/api/assistants', {
+      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/createassistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -410,7 +410,7 @@ export const webhookService = {
     additional_data: Record<string, any>;
   }): Promise<{ success: boolean }> {
     try {
-      const response = await fetch('/api/trigger-call', {
+      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
