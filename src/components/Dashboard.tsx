@@ -53,6 +53,11 @@ const Dashboard = () => {
       return;
     }
     
+    if (!assistantName || !firstMessage || !systemPrompt) {
+      toast.error("Todos os campos são obrigatórios");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
       await webhookService.createAssistant({

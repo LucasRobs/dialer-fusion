@@ -74,6 +74,11 @@ const AITraining = () => {
       
       console.log("Assistente criado com sucesso:", newAssistant);
       
+      // Ensure the assistant has a valid assistant_id
+      if (!newAssistant.assistant_id) {
+        throw new Error('Assistente criado sem um ID válido');
+      }
+      
       // Refetch assistants and update selected assistant
       await refetch();
       
