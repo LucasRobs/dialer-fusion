@@ -42,7 +42,7 @@ const AITraining = () => {
     queryFn: async () => {
       const accountId = user?.id || "CONTA_PADRAO"; // Fallback para conta padrão
       console.log(`Carregando assistentes para a conta: ${accountId}`);
-      return await webhookService.getAllAssistants(accountId);
+      return await webhookService.getAssistantsForUser(accountId);
     },
     enabled: true,
   });
