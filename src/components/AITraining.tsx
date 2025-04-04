@@ -37,12 +37,9 @@ const AITraining = () => {
       if (storedAssistant) {
         setSelectedAssistant(JSON.parse(storedAssistant));
       } else if (assistants && assistants.length > 0) {
-        // Filter out pending assistants for initial selection
-        const readyAssistants = assistants.filter(asst => asst.status !== 'pending');
-        if (readyAssistants.length > 0) {
-          setSelectedAssistant(readyAssistants[0]);
-          localStorage.setItem('selected_assistant', JSON.stringify(readyAssistants[0]));
-        }
+        // Select first assistant without filtering by status
+        setSelectedAssistant(assistants[0]);
+        localStorage.setItem('selected_assistant', JSON.stringify(assistants[0]));
       }
     } catch (error) {
       console.error("Erro ao carregar assistente selecionado:", error);
@@ -91,12 +88,8 @@ const AITraining = () => {
       setFirstMessage('');
       setSystemPrompt('');
       
-      // Mostra uma notificação específica para o status do assistente
-      if (newAssistant.status === 'pending') {
-        toast.success(`Assistente "${newAssistant.name}" está sendo criado. Atualize em alguns minutos para verificar o status.`);
-      } else {
-        toast.success(`Assistente "${newAssistant.name}" criado com sucesso!`);
-      }
+      // Simplified toast message without checking status
+      toast.success(`Assistente "${newAssistant.name}" criado com sucesso!`);
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao criar assistente';
