@@ -41,7 +41,7 @@ export const webhookService = {
         const response = await fetch(`https://api.vapi.ai/assistant`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
+            'Authorization': `Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd`,
             'Content-Type': 'application/json',
           },
         });
@@ -112,7 +112,7 @@ export const webhookService = {
       const response = await fetch(`https://primary-production-31de.up.railway.app/webhook/createassistant`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Authorization': `Bearer 494da5a9-4a54-4155-bffb-d7206bd72afd`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
