@@ -88,7 +88,7 @@ const AITraining = () => {
       setFirstMessage('');
       setSystemPrompt('');
       
-      // Simplified toast message without checking status
+      // Success message
       toast.success(`Assistente "${newAssistant.name}" criado com sucesso!`);
     } catch (error) {
       console.error('Erro ao criar assistente:', error);
@@ -158,9 +158,6 @@ const AITraining = () => {
                     >
                       <Bot className="mr-2 h-4 w-4" />
                       <span className="truncate flex-1">{assistant.name}</span>
-                      {assistant.status === 'pending' && (
-                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Criando...</span>
-                      )}
                     </Button>
                   ))}
                 </div>
