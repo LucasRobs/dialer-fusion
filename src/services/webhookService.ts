@@ -38,7 +38,7 @@ export const webhookService = {
       
       // 2. Busca na API do VAPI
       try {
-        const response = await fetch(`${VAPI_API_URL}/assistant`, {
+        const response = await fetch(`https://api.vapi.ai/assistant`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${VAPI_API_KEY}`,
@@ -100,43 +100,16 @@ export const webhookService = {
   },
 
   /**
-   * Cria um novo assistente (versão simplificada)
-   */
-  async createAssistant(data: { 
-    assistant_name: string; 
-    first_message: string; 
-    system_prompt: string 
-  }): Promise<WebhookResponse> {
-    try {
-      const response = await fetch(`${WEBHOOK_BASE_URL}/createassistant`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro ao criar assistente: ${response.statusText} - ${errorText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Erro ao criar assistente:', error);
-      throw error;
-    }
-  },
-
-  /**
    * Cria um novo assistente para o usuário (completo)
    */
-  async createAssistantForUser(params: {
+  async createAssistant(params: {
     name: string;
     first_message: string;
     system_prompt: string;
     userId: string;
   }): Promise<VapiAssistant> {
     try {
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+      const response = await fetch(`https://primary-production-31de.up.railway.app/webhook/createassistant`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${VAPI_API_KEY}`,
