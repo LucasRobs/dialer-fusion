@@ -14,7 +14,7 @@ export interface Assistant {
   voice?: string;
 }
 
-// Modelo e voz padrão
+// Default model and voice
 const DEFAULT_MODEL = "gpt-4o-turbo";
 const DEFAULT_VOICE = "eleven_labs_gemma";
 
@@ -97,7 +97,7 @@ const assistantService = {
       
       // Mapear para o formato da nossa aplicação
       return vapiAssistants.map((assistant: any) => ({
-        id: assistant.id, // ID da Vapi como ID primário para garantir que estamos usando o ID correto da Vapi
+        id: assistant.id, // ID da Vapi como ID primário
         name: assistant.name,
         assistant_id: assistant.id, // Mesmo ID como assistant_id para compatibilidade
         system_prompt: assistant.instructions,
@@ -114,55 +114,53 @@ const assistantService = {
     }
   },
 
-
-    // NOVO MÉTODO: Obter ID do assistente da Vapi pelo nome
-    async getVapiAssistantIdByName(assistantName: string): Promise<string | null> {
-      try {
-        console.log(`Buscando ID do assistente da Vapi pelo nome: "${assistantName}"`);
-        
-        // Primeiro, buscar todos os assistentes da Vapi
-        const vapiAssistants = await this.getVapiAssistants();
-        
-        if (!vapiAssistants || vapiAssistants.length === 0) {
-          console.log('Nenhum assistente encontrado na API Vapi');
-          return null;
-        }
-        
-        // Procurar assistente pelo nome (case insensitive)
-        const matchingAssistant = vapiAssistants.find(
-          assistant => assistant.name.toLowerCase() === assistantName.toLowerCase()
-        );
-        
-        if (matchingAssistant) {
-          console.log(`Assistente "${assistantName}" encontrado na API Vapi com ID:`, matchingAssistant.id);
-          return matchingAssistant.id;
-        } else {
-          // Procurar por correspondência parcial se não encontrou exata
-          const partialMatch = vapiAssistants.find(
-            assistant => assistant.name.toLowerCase().includes(assistantName.toLowerCase()) ||
-                        assistantName.toLowerCase().includes(assistant.name.toLowerCase())
-          );
-          
-          if (partialMatch) {
-            console.log(`Correspondência parcial para "${assistantName}" encontrada: "${partialMatch.name}" com ID:`, partialMatch.id);
-            return partialMatch.id;
-          }
-          
-          console.log(`Nenhum assistente encontrado com o nome "${assistantName}"`);
-          return null;
-        }
-      } catch (error) {
-        console.error(`Erro ao buscar ID do assistente pelo nome "${assistantName}":`, error);
+  // NOVO MÉTODO: Obter ID do assistente da Vapi pelo nome
+  async getVapiAssistantIdByName(assistantName: string): Promise<string | null> {
+    try {
+      console.log(`Buscando ID do assistente da Vapi pelo nome: "${assistantName}"`);
+      
+      // Primeiro, buscar todos os assistentes da Vapi
+      const vapiAssistants = await this.getVapiAssistants();
+      
+      if (!vapiAssistants || vapiAssistants.length === 0) {
+        console.log('Nenhum assistente encontrado na API Vapi');
         return null;
       }
-    },
+      
+      // Procurar assistente pelo nome (case insensitive)
+      const matchingAssistant = vapiAssistants.find(
+        assistant => assistant.name.toLowerCase() === assistantName.toLowerCase()
+      );
+      
+      if (matchingAssistant) {
+        console.log(`Assistente "${assistantName}" encontrado na API Vapi com ID:`, matchingAssistant.id);
+        return matchingAssistant.id;
+      } else {
+        // Procurar por correspondência parcial se não encontrou exata
+        const partialMatch = vapiAssistants.find(
+          assistant => assistant.name.toLowerCase().includes(assistantName.toLowerCase()) ||
+                      assistantName.toLowerCase().includes(assistant.name.toLowerCase())
+        );
+        
+        if (partialMatch) {
+          console.log(`Correspondência parcial para "${assistantName}" encontrada: "${partialMatch.name}" com ID:`, partialMatch.id);
+          return partialMatch.id;
+        }
+        
+        console.log(`Nenhum assistente encontrado com o nome "${assistantName}"`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Erro ao buscar ID do assistente pelo nome "${assistantName}":`, error);
+      return null;
+    }
+  },
   
   // Obter um assistente específico diretamente da API Vapi
   async getVapiAssistantById(assistantId: string): Promise<Assistant | null> {
     try {
       console.log(`Buscando assistente diretamente da API Vapi por ID: ${assistantId}`);
 
-      // Primeiro tentamos buscar diretamente pelo ID
       const response = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
         method: 'GET',
         headers: {
@@ -217,13 +215,23 @@ const assistantService = {
         return null;
       }
       
+      // Verificar se o ID é realmente da Vapi API
+      const vapiId = await this.ensureVapiAssistantId(assistant.assistant_id);
+      if (!vapiId) {
+        console.error('Não foi possível confirmar o ID do assistente na Vapi API');
+        toast('Falha ao salvar assistente: ID do assistente Vapi não confirmado');
+        return null;
+      }
+      
+      // Atualizar o assistant_id com o ID confirmado da Vapi
+      const assistantToSave = {
+        ...assistant,
+        assistant_id: vapiId
+      };
+      
       const { data, error } = await supabase
         .from('assistants')
-        .insert({
-          ...assistant,
-          // Garantir que estamos usando o ID da Vapi como assistant_id
-          assistant_id: assistant.assistant_id
-        })
+        .insert(assistantToSave)
         .select()
         .single();
       
@@ -242,26 +250,35 @@ const assistantService = {
       
       // After saving to our database, notify the user's Collowop webhook
       try {
+        // Obter dados mais atualizados diretamente da Vapi API
+        const vapiAssistant = await this.getVapiAssistantById(vapiId);
+        
+        const webhookData = {
+          action: 'assistant_created',
+          assistant_id: vapiId, // Using the confirmed VAPI assistant_id
+          assistant_name: data.name,
+          timestamp: new Date().toISOString(),
+          user_id: data.user_id,
+          additional_data: {
+            is_ready: true,
+            system_prompt: data.system_prompt,
+            first_message: data.first_message,
+            supabase_id: data.id,
+            model: data.model || DEFAULT_MODEL,
+            voice: data.voice || DEFAULT_VOICE,
+            vapi_status: vapiAssistant?.status || 'ready',
+            vapi_created_at: vapiAssistant?.created_at || data.created_at
+          }
+        };
+        
+        console.log('Enviando dados para webhook do Collowop:', webhookData);
+        
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            action: 'assistant_created',
-            assistant_id: data.assistant_id, // Using the VAPI assistant_id (not the Supabase id)
-            assistant_name: data.name,
-            timestamp: new Date().toISOString(),
-            user_id: data.user_id,
-            additional_data: {
-              is_ready: true,
-              system_prompt: data.system_prompt,
-              first_message: data.first_message,
-              supabase_id: data.id, // Adding the Supabase ID for reference
-              model: data.model || DEFAULT_MODEL,
-              voice: data.voice || DEFAULT_VOICE
-            }
-          }),
+          body: JSON.stringify(webhookData),
         });
         console.log('Successfully notified Collowop webhook about new assistant');
       } catch (webhookError) {
@@ -281,6 +298,15 @@ const assistantService = {
     try {
       console.log(`Atualizando assistente ${assistantId}:`, updates);
       
+      // Se o update contém assistant_id, verificar se é um ID válido da Vapi
+      if (updates.assistant_id) {
+        const vapiId = await this.ensureVapiAssistantId(updates.assistant_id);
+        if (vapiId && vapiId !== updates.assistant_id) {
+          console.log(`Atualizando assistant_id de ${updates.assistant_id} para ${vapiId}`);
+          updates.assistant_id = vapiId;
+        }
+      }
+      
       const { data, error } = await supabase
         .from('assistants')
         .update(updates)
@@ -296,6 +322,40 @@ const assistantService = {
       
       console.log('Assistente atualizado com sucesso:', data);
       toast('Assistente atualizado com sucesso');
+      
+      // Notificar webhook sobre a atualização
+      try {
+        // Obter dados mais atualizados diretamente da Vapi API
+        const vapiId = data.assistant_id;
+        const vapiAssistant = await this.getVapiAssistantById(vapiId);
+        
+        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'assistant_updated',
+            assistant_id: vapiId, // Using the VAPI assistant_id
+            assistant_name: data.name,
+            timestamp: new Date().toISOString(),
+            user_id: data.user_id,
+            additional_data: {
+              is_ready: true,
+              system_prompt: data.system_prompt,
+              first_message: data.first_message,
+              supabase_id: data.id,
+              model: data.model || DEFAULT_MODEL,
+              voice: data.voice || DEFAULT_VOICE,
+              vapi_status: vapiAssistant?.status || 'ready',
+              updated_fields: Object.keys(updates)
+            }
+          }),
+        });
+        console.log('Successfully notified Collowop webhook about updated assistant');
+      } catch (webhookError) {
+        console.error('Error notifying Collowop webhook about update:', webhookError);
+      }
       
       return data;
     } catch (error) {
@@ -321,8 +381,16 @@ const assistantService = {
         
         // Se não encontrou no banco local, tenta buscar da API Vapi
         try {
-          // Primeiro, tentar buscar diretamente pelo ID
-          const vapiAssistant = await this.getVapiAssistantById(assistantId);
+          // Verificar se o ID fornecido é um ID Vapi válido
+          const vapiId = await this.ensureVapiAssistantId(assistantId);
+          if (!vapiId) {
+            console.error('Não foi possível encontrar um ID Vapi válido para:', assistantId);
+            toast(`Falha ao selecionar assistente: ID inválido`);
+            return null;
+          }
+          
+          // Buscar assistente usando o ID válido da Vapi
+          const vapiAssistant = await this.getVapiAssistantById(vapiId);
           
           if (vapiAssistant) {
             console.log('Assistente encontrado diretamente na API Vapi:', vapiAssistant);
@@ -337,26 +405,38 @@ const assistantService = {
             // Save to localStorage
             localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant));
             
+            // Notificar webhook sobre a seleção
+            try {
+              await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  action: 'assistant_selected',
+                  assistant_id: vapiId,
+                  assistant_name: vapiAssistant.name,
+                  timestamp: new Date().toISOString(),
+                  user_id: vapiAssistant.user_id,
+                  additional_data: {
+                    is_ready: true,
+                    model: vapiAssistant.model || DEFAULT_MODEL,
+                    voice: vapiAssistant.voice || DEFAULT_VOICE,
+                    source: 'vapi_api'
+                  }
+                }),
+              });
+              console.log('Successfully notified Collowop webhook about selected assistant');
+            } catch (webhookError) {
+              console.error('Error notifying Collowop webhook about selection:', webhookError);
+            }
+            
             return vapiAssistant;
           }
           
-          // Se não encontrou pelo ID direto, buscar todos
-          const vapiAssistants = await this.getVapiAssistants();
-          const vapiAssistant2 = vapiAssistants.find(a => a.id === assistantId || a.assistant_id === assistantId);
-          
-          if (vapiAssistant2) {
-            console.log('Assistente encontrado na lista da API Vapi:', vapiAssistant2);
-            toast(`Assistente "${vapiAssistant2.name}" selecionado com sucesso`);
-            
-            // Save to localStorage
-            localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant2));
-            
-            return vapiAssistant2;
-          } else {
-            console.error('Assistente não encontrado na API Vapi');
-            toast(`Falha ao selecionar assistente: Não encontrado na API Vapi`);
-            return null;
-          }
+          console.error('Assistente não encontrado na API Vapi');
+          toast(`Falha ao selecionar assistente: Não encontrado na API Vapi`);
+          return null;
         } catch (vapiError) {
           console.error('Erro ao buscar assistente da API Vapi:', vapiError);
           toast(`Falha ao selecionar assistente: ${error.message}`);
@@ -373,8 +453,44 @@ const assistantService = {
         vapiId: data.assistant_id
       });
       
+      // Verificar se o ID da Vapi está correto
+      const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
+      if (vapiId && vapiId !== data.assistant_id) {
+        console.log(`ID da Vapi atualizado de ${data.assistant_id} para ${vapiId}`);
+        // Atualizar o ID no banco de dados silenciosamente
+        this.updateAssistant(data.id, { assistant_id: vapiId });
+        data.assistant_id = vapiId;
+      }
+      
       // Save to localStorage for compatibility with existing code
       localStorage.setItem('selected_assistant', JSON.stringify(data));
+      
+      // Notificar webhook sobre a seleção
+      try {
+        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'assistant_selected',
+            assistant_id: data.assistant_id, // Using the VAPI assistant_id
+            assistant_name: data.name,
+            timestamp: new Date().toISOString(),
+            user_id: data.user_id,
+            additional_data: {
+              is_ready: true,
+              supabase_id: data.id,
+              model: data.model || DEFAULT_MODEL,
+              voice: data.voice || DEFAULT_VOICE,
+              source: 'supabase'
+            }
+          }),
+        });
+        console.log('Successfully notified Collowop webhook about selected assistant');
+      } catch (webhookError) {
+        console.error('Error notifying Collowop webhook about selection:', webhookError);
+      }
       
       return data;
     } catch (error) {
@@ -398,35 +514,37 @@ const assistantService = {
       if (error || !data) {
         console.log('Assistente não encontrado no banco local, buscando na API Vapi');
         
-        // Se não encontrou no banco local, tenta buscar da API Vapi diretamente pelo ID
-        try {
-          const vapiAssistant = await this.getVapiAssistantById(assistantId);
-          
-          if (vapiAssistant) {
-            console.log('Assistente encontrado diretamente na API Vapi por ID:', vapiAssistant);
-            return vapiAssistant;
+        // Verificar se o ID fornecido é um ID Vapi válido
+        const vapiId = await this.ensureVapiAssistantId(assistantId);
+        if (!vapiId) {
+          // Tentar buscar por nome se o ID não for reconhecido
+          if (typeof assistantId === 'string' && !assistantId.match(/^[0-9a-f-]+$/i)) {
+            const idByName = await this.getVapiAssistantIdByName(assistantId);
+            if (idByName) {
+              console.log(`Encontrado ID via nome do assistente: ${idByName}`);
+              return this.getVapiAssistantById(idByName);
+            }
           }
           
-          // Se não encontrou pelo ID direto, tenta buscar todos e filtrar
-          const vapiAssistants = await this.getVapiAssistants();
-          const matchingAssistant = vapiAssistants.find(a => 
-            a.id === assistantId || a.assistant_id === assistantId
-          );
-          
-          if (matchingAssistant) {
-            console.log('Assistente encontrado na lista completa da API Vapi:', matchingAssistant);
-            return matchingAssistant;
-          } else {
-            console.error('Assistente não encontrado na API Vapi');
-            return null;
-          }
-        } catch (vapiError) {
-          console.error('Erro ao buscar assistente da API Vapi:', vapiError);
+          console.error('Não foi possível encontrar um ID Vapi válido para:', assistantId);
           return null;
         }
+        
+        // Buscar assistente usando o ID válido da Vapi
+        return await this.getVapiAssistantById(vapiId);
       }
       
       console.log('Assistente encontrado no banco local:', data);
+      
+      // Verificar se o ID da Vapi está correto
+      const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
+      if (vapiId && vapiId !== data.assistant_id) {
+        console.log(`ID da Vapi atualizado de ${data.assistant_id} para ${vapiId}`);
+        // Atualizar o ID no banco de dados silenciosamente
+        this.updateAssistant(data.id, { assistant_id: vapiId });
+        data.assistant_id = vapiId;
+      }
+      
       return data;
     } catch (error) {
       console.error('Erro em getAssistantById:', error);
@@ -481,8 +599,15 @@ const assistantService = {
     // Verificar se o ID já é da Vapi
     try {
       // Tentar buscar diretamente da API Vapi para confirmar
-      const vapiAssistant = await this.getVapiAssistantById(assistantId);
-      if (vapiAssistant) {
+      const response = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
         console.log('ID já é da Vapi, confirmado:', assistantId);
         return assistantId;
       }
@@ -490,12 +615,28 @@ const assistantService = {
       // Se não encontrou diretamente, pode ser um ID do Supabase
       // Então tentamos buscar no banco para obter o assistant_id
       if (!assistant) {
-        assistant = await this.getAssistantById(assistantId);
-      }
-      
-      if (assistant && assistant.assistant_id) {
-        console.log('Obtido ID da Vapi a partir do banco:', assistant.assistant_id);
-        return assistant.assistant_id;
+        const { data } = await supabase
+          .from('assistants')
+          .select('assistant_id')
+          .eq('id', assistantId)
+          .single();
+          
+        if (data && data.assistant_id) {
+          console.log('Obtido ID da Vapi a partir do banco:', data.assistant_id);
+          
+          // Verificar se este ID é válido na Vapi
+          const vapiCheckResponse = await fetch(`https://api.vapi.ai/assistant/${data.assistant_id}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${VAPI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (vapiCheckResponse.ok) {
+            return data.assistant_id;
+          }
+        }
       }
       
       // Se ainda não encontrou, buscar todos os assistentes como último recurso
@@ -522,7 +663,7 @@ const assistantService = {
       return null;
     } catch (error) {
       console.error('Erro ao garantir ID da Vapi:', error);
-      return assistantId; // Retornar o ID original como fallback
+      return null; // Em caso de erro, retornar null para forçar tratamento adequado
     }
   }
 };
