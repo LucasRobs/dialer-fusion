@@ -105,24 +105,6 @@ const Dashboard = () => {
     }
   });
   
-   // Buscar estatísticas de campanhas
-   const { data: campaignStats, isLoading: loadingCampaignStats } = useQuery({
-    queryKey: ['campaignStats'],
-    queryFn: async () => {
-      try {
-        return await campaignService.getCampaignStats();
-      } catch (error) {
-        console.error("Erro ao buscar estatísticas de campanhas:", error);
-        return { 
-          recentCalls: 0, 
-          avgCallDuration: '0:00', 
-          callsToday: 0, 
-          completionRate: '0%' 
-        };
-      }
-    }
-  });
-  
   useEffect(() => {
     if (activeCampaigns && activeCampaigns.length > 0) {
       const campaign = activeCampaigns[0];
@@ -225,13 +207,9 @@ const Dashboard = () => {
   const stats = {
     totalClients: clientStats?.totalClients || 0,
     activeClients: clientStats?.activeClients || 0,
-    recentCalls: campaignStats?.recentCalls || 0,
-    avgCallDuration: campaignStats?.avgCallDuration || '0:00',
-    callsToday: campaignStats?.callsToday || 0,
-    completionRate: campaignStats?.completionRate || '0%',
   };
   
-  const isLoading = loadingCampaigns || loadingClientStats || loadingCampaignStats;
+  const isLoading = loadingCampaigns || loadingClientStats;
   
   if (campaignsError) {
     console.error("Erro ao carregar dados do dashboard:", campaignsError);
@@ -249,7 +227,7 @@ const Dashboard = () => {
         />
       )}
 
-      {/* Stats Grid */}
+      {/* Stats Grid - now with only the client base card */}
       <StatsGrid stats={stats} isLoading={isLoading} />
 
       {/* Quick Actions */}
