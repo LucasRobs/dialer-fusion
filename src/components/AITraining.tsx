@@ -66,6 +66,7 @@ const AITraining = () => {
         assistant_name: aiName,
         first_message: firstMessage,
         system_prompt: systemPrompt,
+        user_id: user?.id || "CONTA_PADRAO", // Fallback to default account if user ID is unavailable
       });
 
       if (response.success && response.data) {

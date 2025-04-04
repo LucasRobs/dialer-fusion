@@ -25,11 +25,23 @@ const VAPI_API_URL = "https://api.vapi.ai";
 
 export const webhookService = {
   /**
-   * Busca todos os assistentes de um usuário específico no VAPI
+   * Busca todos os assistentes (alias para getAssistantsByUser)
+   */
+  async getAllAssistants(userId: string): Promise<VapiAssistant[]> {
+    try {
+      return await this.getAssistantsByUser(userId);
+    } catch (error) {
+      console.error('Erro em getAllAssistants:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Busca todos os assistentes de um usuário específico
    */
   async getAssistantsByUser(userId: string): Promise<VapiAssistant[]> {
     try {
-      console.log(`Buscando assistentes no VAPI para o usuário ${userId}`);
+      console.log(`Buscando assistentes para o usuário ${userId}`);
 
       // 1. Busca assistentes no banco de dados local primeiro
       const localAssistants = await this.getLocalAssistants(userId);
@@ -100,8 +112,9 @@ export const webhookService = {
   async createAssistant(data: { 
     assistant_name: string; 
     first_message: string; 
-    system_prompt: string 
-  }): Promise<{ success: boolean; data?: any; message?: string }> {
+    system_prompt: string;
+    user_id: string;
+  }): Promise<WebhookResponse> {
     try {
       const response = await fetch('/api/assistants', {
         method: 'POST',
