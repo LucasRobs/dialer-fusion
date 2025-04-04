@@ -3,12 +3,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Bot, Plus, Loader2, AlertCircle, RefreshCcw } from 'lucide-react';
+import { Bot, Plus, Loader2, AlertCircle, RefreshCcw, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const AITraining = () => {
   const { user } = useAuth();
@@ -19,6 +30,8 @@ const AITraining = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAssistant, setSelectedAssistant] = useState<VapiAssistant | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [assistantToDelete, setAssistantToDelete] = useState<VapiAssistant | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch assistants
   const { data: assistants, isLoading, refetch } = useQuery({
@@ -116,6 +129,42 @@ const AITraining = () => {
     }
   };
 
+  const handleDeleteAssistant = async () => {
+    if (!assistantToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const success = await webhookService.deleteAssistant(assistantToDelete.id);
+      
+      if (success) {
+        // Update the list of assistants
+        await refetch();
+        
+        // If the deleted assistant was selected, select another one
+        if (selectedAssistant?.id === assistantToDelete.id) {
+          const remainingAssistants = assistants?.filter(a => a.id !== assistantToDelete.id) || [];
+          if (remainingAssistants.length > 0) {
+            setSelectedAssistant(remainingAssistants[0]);
+            localStorage.setItem('selected_assistant', JSON.stringify(remainingAssistants[0]));
+          } else {
+            setSelectedAssistant(null);
+            localStorage.removeItem('selected_assistant');
+          }
+        }
+        
+        toast.success(`Assistente "${assistantToDelete.name}" excluído com sucesso`);
+      } else {
+        toast.error(`Falha ao excluir assistente "${assistantToDelete.name}"`);
+      }
+    } catch (error) {
+      console.error('Erro ao excluir assistente:', error);
+      toast.error('Erro ao excluir assistente');
+    } finally {
+      setIsDeleting(false);
+      setAssistantToDelete(null);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 max-w-6xl">
       <div className="mb-8">
@@ -150,15 +199,57 @@ const AITraining = () => {
               ) : assistants && assistants.length > 0 ? (
                 <div className="space-y-2">
                   {assistants.map((assistant) => (
-                    <Button
-                      key={assistant.id}
-                      variant={selectedAssistant?.id === assistant.id ? "default" : "outline"}
-                      className="w-full justify-start text-left group"
-                      onClick={() => handleSelectAssistant(assistant)}
+                    <div 
+                      key={assistant.id} 
+                      className="flex items-center gap-2"
                     >
-                      <Bot className="mr-2 h-4 w-4" />
-                      <span className="truncate flex-1">{assistant.name}</span>
-                    </Button>
+                      <Button
+                        variant={selectedAssistant?.id === assistant.id ? "default" : "outline"}
+                        className="w-full justify-start text-left group"
+                        onClick={() => handleSelectAssistant(assistant)}
+                      >
+                        <Bot className="mr-2 h-4 w-4" />
+                        <span className="truncate flex-1">{assistant.name}</span>
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="icon"
+                            className="h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setAssistantToDelete(assistant)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Assistente</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir o assistente "{assistantToDelete?.name}"? 
+                              Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              onClick={handleDeleteAssistant}
+                              disabled={isDeleting}
+                            >
+                              {isDeleting ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Excluindo...
+                                </>
+                              ) : (
+                                'Excluir'
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   ))}
                 </div>
               ) : (

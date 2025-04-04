@@ -88,6 +88,73 @@ export const webhookService = {
     }
   },
 
+
+  async deleteAssistant(assistantId: string): Promise<boolean> {
+    try {
+      console.log(`Deletando assistente ${assistantId}`);
+      
+      // 1. Get assistant details to find Vapi assistant_id
+      const { data: assistant, error: fetchError } = await supabase
+        .from('assistants')
+        .select('*')
+        .eq('id', assistantId)
+        .single();
+      
+      if (fetchError || !assistant) {
+        console.error('Erro ao buscar detalhes do assistente:', fetchError);
+        return false;
+      }
+      
+      // 2. Delete from Vapi API
+      try {
+        const response = await fetch(`${VAPI_API_URL}/assistant/${assistant.assistant_id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          console.error('Erro ao deletar assistente na API Vapi:', response.status, response.statusText);
+          // Continue with local deletion even if Vapi deletion fails
+        } else {
+          console.log('Assistente deletado com sucesso na API Vapi');
+        }
+      } catch (apiError) {
+        console.error('Erro na API Vapi ao deletar assistente:', apiError);
+        // Continue with local deletion even if Vapi deletion fails
+      }
+      
+      // 3. Delete from local database
+      const { error: deleteError } = await supabase
+        .from('assistants')
+        .delete()
+        .eq('id', assistantId);
+      
+      if (deleteError) {
+        console.error('Erro ao deletar assistente no banco de dados:', deleteError);
+        return false;
+      }
+      
+      // 4. Check if the deleted assistant was selected in localStorage
+      try {
+        const selectedAssistant = JSON.parse(localStorage.getItem('selected_assistant') || '{}');
+        if (selectedAssistant.id === assistantId) {
+          localStorage.removeItem('selected_assistant');
+        }
+      } catch (error) {
+        console.error('Erro ao verificar assistente selecionado:', error);
+      }
+      
+      console.log('Assistente deletado com sucesso');
+      return true;
+    } catch (error) {
+      console.error('Erro ao deletar assistente:', error);
+      return false;
+    }
+  },
+
   /**
    * Busca assistentes locais
    */
