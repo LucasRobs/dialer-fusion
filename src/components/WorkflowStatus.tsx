@@ -25,10 +25,16 @@ const MODEL_OPTIONS = [
 ];
 
 const VOICE_OPTIONS = [
+  { value: "33B4UnXyTNbgLmdEDh5P", label: "Voz PT-BR (ElevenLabs)" },
   { value: "eleven_labs_gemma", label: "ElevenLabs Gemma" },
   { value: "eleven_labs_josh", label: "ElevenLabs Josh" },
   { value: "eleven_labs_rachel", label: "ElevenLabs Rachel" },
   { value: "eleven_labs_domi", label: "ElevenLabs Domi" }
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "pt-BR", label: "Português (Brasil)" },
+  { value: "en-US", label: "Inglês (EUA)" }
 ];
 
 const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
@@ -55,7 +61,8 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     apiKey: "",
     assistantId: "", // Will be populated from localStorage if available
     model: "gpt-4o-turbo", // Modelo padrão
-    voice: "eleven_labs_gemma" // Voz padrão
+    voice: "33B4UnXyTNbgLmdEDh5P", // Voz padrão PT-BR
+    language: "pt-BR" // Idioma padrão
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [assistants, setAssistants] = useState<any[]>([]);
@@ -309,7 +316,8 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           apiKey: parsed.apiKey || prev.apiKey,
           assistantId: parsed.assistantId || prev.assistantId,
           model: parsed.model || prev.model,
-          voice: parsed.voice || prev.voice
+          voice: parsed.voice || "33B4UnXyTNbgLmdEDh5P", // Usar voz PT-BR como padrão
+          language: parsed.language || "pt-BR" // Usar PT-BR como padrão
         }));
       } catch (e) {
         console.error("Erro ao carregar configurações Vapi:", e);
@@ -365,135 +373,123 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
     : 0;
   
-  return (
-    <Card className="shadow-md">
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-xl">Status da Automação</CardTitle>
-            <CardDescription>
-              Última atualização: {new Date(workflowStatus.lastUpdated).toLocaleString()}
-            </CardDescription>
-          </div>
-          <Badge
-            variant={
-              workflowStatus.status === 'running' ? 'secondary' :
-              workflowStatus.status === 'completed' ? 'default' :
-              workflowStatus.status === 'failed' ? 'destructive' : 'outline'
-            }
-            className="capitalize"
-          >
-            {workflowStatus.status === 'running' ? 'Em execução' :
-             workflowStatus.status === 'completed' ? 'Concluído' :
-             workflowStatus.status === 'failed' ? 'Falha' : 'Inativo'}
-          </Badge>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {settingsOpen && (
-          <div className="bg-muted/30 p-3 rounded-md space-y-3">
-            <h3 className="font-medium mb-2">Configurações da Vapi</h3>
-            
-            <div className="space-y-2">
-              <Label htmlFor="callerId">Número de Telefone (ID do Chamador)</Label>
-              <Input
-                id="callerId"
-                placeholder="+55119999999999"
-                value={vapiSettings.callerId}
-                onChange={(e) => setVapiSettings({...vapiSettings, callerId: e.target.value})}
-                readOnly
-              />
-              <p className="text-xs text-muted-foreground">ID do chamador configurado: 97141b30-c5bc-4234-babb-d38b79452e2a</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="assistantId">Assistente Vapi</Label>
-              <Select 
-                value={vapiSettings.assistantId} 
-                onValueChange={(value) => setVapiSettings({...vapiSettings, assistantId: value})}
-              >
-                <SelectTrigger id="assistantId">
-                  <SelectValue placeholder="Selecione um assistente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {assistants.map((assistant) => (
-                    <SelectItem key={assistant.id} value={assistant.id}>
-                      {assistant.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {assistants.length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhum assistente encontrado. Use a API key 494da5a9-4a54-4155-bffb-d7206bd72afd.</p>
-              )}
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="model">Modelo de IA</Label>
-              <Select 
-                value={vapiSettings.model} 
-                onValueChange={(value) => setVapiSettings({...vapiSettings, model: value})}
-              >
-                <SelectTrigger id="model">
-                  <SelectValue placeholder="Selecione um modelo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODEL_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="voice">Voz</Label>
-              <Select 
-                value={vapiSettings.voice} 
-                onValueChange={(value) => setVapiSettings({...vapiSettings, voice: value})}
-              >
-                <SelectTrigger id="voice">
-                  <SelectValue placeholder="Selecione uma voz" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VOICE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>
-          </div>
-        )}
+  
+    return (
+      <Card className="shadow-md">
+        <CardHeader className="pb-2">
+          {/* ... keep existing code (card header) */}
+        </CardHeader>
         
-        {renderEmptyState()}
-      </CardContent>
-      
-      <CardFooter className="gap-2 justify-between flex-wrap">
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
-            <RotateCw className="h-4 w-4 mr-2" />
-            Atualizar
-          </Button>
+        <CardContent className="space-y-4">
+          {settingsOpen && (
+            <div className="bg-muted/30 p-3 rounded-md space-y-3">
+              <h3 className="font-medium mb-2">Configurações da Vapi</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="callerId">Número de Telefone (ID do Chamador)</Label>
+                <Input
+                  id="callerId"
+                  placeholder="+55119999999999"
+                  value={vapiSettings.callerId}
+                  onChange={(e) => setVapiSettings({...vapiSettings, callerId: e.target.value})}
+                  readOnly
+                />
+                <p className="text-xs text-muted-foreground">ID do chamador configurado: 97141b30-c5bc-4234-babb-d38b79452e2a</p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="assistantId">Assistente Vapi</Label>
+                <Select 
+                  value={vapiSettings.assistantId} 
+                  onValueChange={(value) => setVapiSettings({...vapiSettings, assistantId: value})}
+                >
+                  <SelectTrigger id="assistantId">
+                    <SelectValue placeholder="Selecione um assistente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assistants.map((assistant) => (
+                      <SelectItem key={assistant.id} value={assistant.id}>
+                        {assistant.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {assistants.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nenhum assistente encontrado. Use a API key 494da5a9-4a54-4155-bffb-d7206bd72afd.</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="model">Modelo de IA</Label>
+                <Select 
+                  value={vapiSettings.model} 
+                  onValueChange={(value) => setVapiSettings({...vapiSettings, model: value})}
+                >
+                  <SelectTrigger id="model">
+                    <SelectValue placeholder="Selecione um modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="voice">Voz</Label>
+                <Select 
+                  value={vapiSettings.voice} 
+                  onValueChange={(value) => setVapiSettings({...vapiSettings, voice: value})}
+                >
+                  <SelectTrigger id="voice">
+                    <SelectValue placeholder="Selecione uma voz" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VOICE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">A voz PT-BR (ElevenLabs) é recomendada para atendimento em português.</p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="language">Idioma</Label>
+                <Select 
+                  value={vapiSettings.language} 
+                  onValueChange={(value) => setVapiSettings({...vapiSettings, language: value})}
+                >
+                  <SelectTrigger id="language">
+                    <SelectValue placeholder="Selecione um idioma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>
+            </div>
+          )}
           
-          <Button variant="outline" size="sm" onClick={() => setSettingsOpen(!settingsOpen)}>
-            <Settings className="h-4 w-4 mr-2" />
-            Configurações
-          </Button>
-        </div>
+          {renderEmptyState()}
+        </CardContent>
         
-        <Button size="sm" onClick={testWebhook} disabled={loading}>
-          <Phone className="h-4 w-4 mr-2" />
-          Testar Ligação
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-};
-
-export default WorkflowStatus;
+        <CardFooter className="gap-2 justify-between flex-wrap">
+          {/* ... keep existing code (card footer) */}
+        </CardFooter>
+      </Card>
+    );
+  };
+  
+  export default WorkflowStatus;
+  

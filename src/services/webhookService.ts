@@ -28,6 +28,7 @@ export interface WebhookPayload {
   call?: {
     model?: string;
     voice?: string;
+    language?: string;
   };
 }
 
@@ -38,6 +39,8 @@ const FETCH_TIMEOUT = 8000; // 8 segundos de timeout para melhor confiabilidade
 const CLIENT_VERSION = '1.3.0';
 const DEFAULT_MODEL = "gpt-4o-turbo"; // Modelo padrão para chamadas
 const DEFAULT_VOICE = "eleven_labs_gemma"; // Voz padrão para chamadas
+const DEFAULT_VOICE_ID_PTBR = "33B4UnXyTNbgLmdEDh5P"; // Voz para português do Brasil
+const DEFAULT_LANGUAGE = "pt-BR"; // Idioma padrão para chamadas
 
 // Assistente ID fallback - usar apenas em último caso quando não conseguir obter de nenhuma outra fonte
 const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
@@ -608,7 +611,7 @@ export const webhookService = {
       
       // Obter configurações de modelo e voz do localStorage
       let model = DEFAULT_MODEL; // Valor padrão
-      let voice = DEFAULT_VOICE; // Valor padrão
+      let voice = DEFAULT_VOICE_ID_PTBR; // Usar a voz específica para PT-BR
       
       try {
         // Verificar se temos configurações salvas
@@ -616,8 +619,8 @@ export const webhookService = {
         if (savedSettings) {
           const settings = JSON.parse(savedSettings);
           if (settings.model) model = settings.model;
-          if (settings.voice) voice = settings.voice;
-          console.log('Usando configurações da localStorage:', { model, voice });
+          // Sempre usar a voz específica para PT-BR, ignorando configurações salvas
+          console.log('Usando modelo da localStorage e voz específica para PT-BR:', { model, voice });
         }
       } catch (e) {
         console.error('Erro ao obter configurações da localStorage:', e);
@@ -625,7 +628,8 @@ export const webhookService = {
       
       payload.call = {
         model: model, 
-        voice: voice
+        voice: voice,
+        language: DEFAULT_LANGUAGE  // Definir idioma português brasileiro explicitamente
       };
       
       // Adicionar informações de debug para ajudar no troubleshooting
@@ -635,6 +639,7 @@ export const webhookService = {
       
       // Indicar que estamos usando o ID da Vapi
       payload.additional_data.id_type = 'vapi';
+      payload.additional_data.voice_provider = '11labs'; // Especificar o provider da voz
       
       console.log('Enviando payload final para webhook:', payload);
       
