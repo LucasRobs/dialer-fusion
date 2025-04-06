@@ -230,8 +230,12 @@ const assistantService = {
       const assistantToSave = {
         ...assistant,
         assistant_id: vapiId,
-        published: assistant.published || false
+        published: assistant.published || false,
+        // Ensure the model field has a default value if not provided
+        model: assistant.model || "eleven_multilingual_v2"
       };
+      
+      console.log('Tentando salvar no Supabase com os dados:', assistantToSave);
       
       const { data, error } = await supabase
         .from('assistants')
@@ -240,7 +244,11 @@ const assistantService = {
         .single();
       
       if (error) {
-        console.error('Erro ao salvar assistente:', error);
+        console.error('Erro detalhado ao salvar assistente:', error);
+        console.error('SQL executado:', error.details);
+        console.error('Hint:', error.hint);
+        console.error('Código:', error.code);
+        
         toast(`Falha ao salvar assistente: ${error.message}`, {
           description: 'Verifique se todos os campos foram preenchidos corretamente'
         });
@@ -251,7 +259,7 @@ const assistantService = {
       toast('Assistente salvo com sucesso', {
         description: `O assistente "${data.name}" está pronto para uso`,
       });
-      
+
       // After saving, try to publish the assistant
       if (!data.published) {
         try {

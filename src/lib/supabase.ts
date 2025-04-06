@@ -1,4 +1,3 @@
-
 // Arquivo de configuração para conexão com Supabase
 
 import { createClient } from '@supabase/supabase-js';
