@@ -12,11 +12,13 @@ export interface Assistant {
   status?: 'pending' | 'ready' | 'failed';
   model?: string;
   voice?: string;
+  language?: string; // Campo adicionado para controle de idioma
 }
 
-// Default model and voice
+// Default model, voice and language
 const DEFAULT_MODEL = "gpt-4o-turbo";
 const DEFAULT_VOICE = "eleven_labs_gemma";
+const DEFAULT_LANGUAGE = "pt-BR"; // Idioma padrão
 
 // Vapi API Key
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -95,19 +97,38 @@ const assistantService = {
       const vapiAssistants = await response.json();
       console.log('Assistentes da API Vapi:', vapiAssistants);
       
-      // Mapear para o formato da nossa aplicação
-      return vapiAssistants.map((assistant: any) => ({
-        id: assistant.id, // ID da Vapi como ID primário
-        name: assistant.name,
-        assistant_id: assistant.id, // Mesmo ID como assistant_id para compatibilidade
-        system_prompt: assistant.instructions,
-        first_message: assistant.firstMessage,
-        created_at: assistant.createdAt,
-        user_id: assistant.metadata?.user_id,
-        status: assistant.status || 'ready',
-        model: assistant.model || DEFAULT_MODEL,
-        voice: assistant.voice || DEFAULT_VOICE
-      }));
+      // Mapear para o formato da nossa aplicação com tratamento adequado do idioma
+      return vapiAssistants.map((assistant: any) => {
+        // Verificar se há configuração de idioma nos metadados
+        const assistantLanguage = assistant.metadata?.language || 
+                                 assistant.language || 
+                                 DEFAULT_LANGUAGE;
+                                 
+        // Adicionar verificação do idioma nas instruções se não estiver explícito
+        let systemPrompt = assistant.instructions || '';
+        
+        // Se as instruções não mencionam explicitamente o idioma, considerar adicionar
+        if (!systemPrompt.toLowerCase().includes('português') && 
+            !systemPrompt.toLowerCase().includes('portuguese') &&
+            !systemPrompt.toLowerCase().includes('pt-br') &&
+            assistantLanguage === 'pt-BR') {
+          systemPrompt = `Responda sempre em Português do Brasil (pt-BR). ${systemPrompt}`;
+        }
+        
+        return {
+          id: assistant.id, // ID da Vapi como ID primário
+          name: assistant.name,
+          assistant_id: assistant.id, // Mesmo ID como assistant_id para compatibilidade
+          system_prompt: systemPrompt,
+          first_message: assistant.firstMessage,
+          created_at: assistant.createdAt,
+          user_id: assistant.metadata?.user_id,
+          status: assistant.status || 'ready',
+          model: assistant.model || DEFAULT_MODEL,
+          voice: assistant.voice || DEFAULT_VOICE,
+          language: assistantLanguage // Preservar configuração de idioma
+        };
+      });
     } catch (error) {
       console.error('Erro ao buscar assistentes da API Vapi:', error);
       return [];
@@ -173,17 +194,34 @@ const assistantService = {
         const assistant = await response.json();
         console.log('Assistente encontrado na API Vapi:', assistant);
         
+        // Verificar se há configuração de idioma ou adicionar idioma padrão
+        const assistantLanguage = assistant.metadata?.language || 
+                                 assistant.language || 
+                                 DEFAULT_LANGUAGE;
+                                 
+        // Verificar se as instruções mencionam o idioma desejado
+        let systemPrompt = assistant.instructions || '';
+        
+        // Se as instruções não mencionam explicitamente o idioma, adicionar
+        if (!systemPrompt.toLowerCase().includes('português') && 
+            !systemPrompt.toLowerCase().includes('portuguese') &&
+            !systemPrompt.toLowerCase().includes('pt-br') &&
+            assistantLanguage === 'pt-BR') {
+          systemPrompt = `Responda sempre em Português do Brasil (pt-BR). ${systemPrompt}`;
+        }
+        
         return {
           id: assistant.id,
           name: assistant.name,
           assistant_id: assistant.id, // Usar o ID da Vapi também como assistant_id
-          system_prompt: assistant.instructions,
+          system_prompt: systemPrompt,
           first_message: assistant.firstMessage,
           created_at: assistant.createdAt,
           user_id: assistant.metadata?.user_id,
           status: assistant.status || 'ready',
           model: assistant.model || DEFAULT_MODEL,
-          voice: assistant.voice || DEFAULT_VOICE
+          voice: assistant.voice || DEFAULT_VOICE,
+          language: assistantLanguage
         };
       }
       
@@ -221,6 +259,23 @@ const assistantService = {
         console.error('Não foi possível confirmar o ID do assistente na Vapi API');
         toast('Falha ao salvar assistente: ID do assistente Vapi não confirmado');
         return null;
+      }
+      
+      // Garantir que haja uma configuração de idioma
+      if (!assistant.language) {
+        assistant.language = DEFAULT_LANGUAGE;
+        console.log(`Idioma não especificado, usando padrão: ${DEFAULT_LANGUAGE}`);
+      }
+      
+      // Verificar se o system_prompt contém instruções de idioma
+      let systemPrompt = assistant.system_prompt || '';
+      if (!systemPrompt.toLowerCase().includes('português') && 
+          !systemPrompt.toLowerCase().includes('portuguese') &&
+          !systemPrompt.toLowerCase().includes('pt-br') &&
+          assistant.language === 'pt-BR') {
+        systemPrompt = `Responda sempre em Português do Brasil (pt-BR). ${systemPrompt}`;
+        assistant.system_prompt = systemPrompt;
+        console.log('Instruções de idioma adicionadas ao system_prompt');
       }
       
       // Atualizar o assistant_id com o ID confirmado da Vapi
@@ -266,6 +321,7 @@ const assistantService = {
             supabase_id: data.id,
             model: data.model || DEFAULT_MODEL,
             voice: data.voice || DEFAULT_VOICE,
+            language: data.language || DEFAULT_LANGUAGE,
             vapi_status: vapiAssistant?.status || 'ready',
             vapi_created_at: vapiAssistant?.created_at || data.created_at
           }
@@ -304,6 +360,27 @@ const assistantService = {
         if (vapiId && vapiId !== updates.assistant_id) {
           console.log(`Atualizando assistant_id de ${updates.assistant_id} para ${vapiId}`);
           updates.assistant_id = vapiId;
+        }
+      }
+      
+      // Verificar se estamos atualizando o system_prompt e se precisa adicionar instruções de idioma
+      if (updates.system_prompt) {
+        // Obter assistente atual para verificar o idioma configurado
+        const { data: currentAssistant } = await supabase
+          .from('assistants')
+          .select('language')
+          .eq('id', assistantId)
+          .single();
+          
+        const language = updates.language || currentAssistant?.language || DEFAULT_LANGUAGE;
+        
+        // Se for PT-BR e não tiver instruções de idioma, adicionar
+        if (language === 'pt-BR' && 
+            !updates.system_prompt.toLowerCase().includes('português') && 
+            !updates.system_prompt.toLowerCase().includes('portuguese') &&
+            !updates.system_prompt.toLowerCase().includes('pt-br')) {
+          updates.system_prompt = `Responda sempre em Português do Brasil (pt-BR). ${updates.system_prompt}`;
+          console.log('Instruções de idioma adicionadas ao system_prompt na atualização');
         }
       }
       
@@ -347,6 +424,7 @@ const assistantService = {
               supabase_id: data.id,
               model: data.model || DEFAULT_MODEL,
               voice: data.voice || DEFAULT_VOICE,
+              language: data.language || DEFAULT_LANGUAGE,
               vapi_status: vapiAssistant?.status || 'ready',
               updated_fields: Object.keys(updates)
             }
@@ -399,8 +477,14 @@ const assistantService = {
             // Log IDs specifically for clarity
             console.log('Assistente IDs (da API Vapi):', {
               id: vapiAssistant.id,
-              assistant_id: vapiAssistant.assistant_id
+              assistant_id: vapiAssistant.assistant_id,
+              language: vapiAssistant.language || DEFAULT_LANGUAGE
             });
+            
+            // Garantir que o assistente tenha um idioma definido
+            if (!vapiAssistant.language) {
+              vapiAssistant.language = DEFAULT_LANGUAGE;
+            }
             
             // Save to localStorage
             localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant));
@@ -422,6 +506,7 @@ const assistantService = {
                     is_ready: true,
                     model: vapiAssistant.model || DEFAULT_MODEL,
                     voice: vapiAssistant.voice || DEFAULT_VOICE,
+                    language: vapiAssistant.language || DEFAULT_LANGUAGE,
                     source: 'vapi_api'
                   }
                 }),
@@ -450,7 +535,8 @@ const assistantService = {
       // Log IDs specifically for clarity
       console.log('Assistente IDs:', {
         supabaseId: data.id,
-        vapiId: data.assistant_id
+        vapiId: data.assistant_id,
+        language: data.language || DEFAULT_LANGUAGE
       });
       
       // Verificar se o ID da Vapi está correto
@@ -460,6 +546,13 @@ const assistantService = {
         // Atualizar o ID no banco de dados silenciosamente
         this.updateAssistant(data.id, { assistant_id: vapiId });
         data.assistant_id = vapiId;
+      }
+      
+      // Garantir que o assistente tenha um idioma definido
+      if (!data.language) {
+        data.language = DEFAULT_LANGUAGE;
+        // Atualizar o idioma no banco de dados silenciosamente
+        this.updateAssistant(data.id, { language: DEFAULT_LANGUAGE });
       }
       
       // Save to localStorage for compatibility with existing code
@@ -483,6 +576,7 @@ const assistantService = {
               supabase_id: data.id,
               model: data.model || DEFAULT_MODEL,
               voice: data.voice || DEFAULT_VOICE,
+              language: data.language || DEFAULT_LANGUAGE,
               source: 'supabase'
             }
           }),
@@ -545,6 +639,13 @@ const assistantService = {
         data.assistant_id = vapiId;
       }
       
+      // Garantir que o assistente tenha um idioma definido
+      if (!data.language) {
+        data.language = DEFAULT_LANGUAGE;
+        // Atualizar o idioma no banco de dados silenciosamente
+        this.updateAssistant(data.id, { language: DEFAULT_LANGUAGE });
+      }
+      
       return data;
     } catch (error) {
       console.error('Erro em getAssistantById:', error);
@@ -567,8 +668,17 @@ const assistantService = {
       if (assistant) {
         console.log('Assistente IDs (do localStorage):', {
           supabaseId: assistant.id,
-          vapiId: assistant.assistant_id
+          vapiId: assistant.assistant_id,
+          language: assistant.language || DEFAULT_LANGUAGE
         });
+        
+        // Garantir que o assistente tenha um idioma definido
+        if (!assistant.language) {
+          assistant.language = DEFAULT_LANGUAGE;
+          // Salvar novamente no localStorage com o idioma padrão
+          localStorage.setItem('selected_assistant', JSON.stringify(assistant));
+          console.log(`Idioma padrão (${DEFAULT_LANGUAGE}) aplicado ao assistente do localStorage`);
+        }
       }
       
       return assistant;
