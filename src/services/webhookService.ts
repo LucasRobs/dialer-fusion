@@ -14,6 +14,7 @@ export interface VapiAssistant {
   first_message?: string;
   model?: string;
   voice?: string;
+  published?: boolean;
 }
 
 export interface WebhookPayload {
@@ -345,7 +346,8 @@ export const webhookService = {
           metadata: {
             user_id: params.userId,
             created_at: new Date().toISOString(),
-            client_version: CLIENT_VERSION
+            client_version: CLIENT_VERSION,
+            published: true  // Sinalizar que queremos que o assistente seja publicado
           }
         }),
         signal: controller.signal,
@@ -384,7 +386,8 @@ export const webhookService = {
           first_message: params.first_message,
           user_id: params.userId,
           status: 'pending', // Marcamos como pending já que o workflow foi iniciado
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          published: false // Inicialmente não está publicado
         };
         
         console.log('Tentando salvar no Supabase:', assistantData);
@@ -409,6 +412,19 @@ export const webhookService = {
         
         // Atualiza o localStorage com o novo assistente
         localStorage.setItem('selected_assistant', JSON.stringify(savedAssistant));
+        
+        // 3. Tentar publicar o assistente explicitamente
+        try {
+          console.log('Tentando publicar o assistente recém-criado');
+          
+          // Esperar um pouco para dar tempo ao assistente de ser processado
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          await assistantService.publishAssistant(assistantId, savedAssistant.id);
+        } catch (publishError) {
+          console.error('Erro ao publicar assistente após criação:', publishError);
+          // Continuamos mesmo se falhar a publicação
+        }
         
         // Notificar sucesso
         toast.success(`Assistente "${params.name}" está sendo criado! Aguarde alguns minutos...`);
@@ -799,7 +815,8 @@ export const webhookService = {
       system_prompt: assistant.instructions,
       first_message: assistant.firstMessage,
       model: assistant.model,
-      voice: assistant.voice
+      voice: assistant.voice,
+      published: assistant.metadata?.published || false
     };
   },
 
