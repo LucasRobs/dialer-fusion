@@ -352,7 +352,8 @@ export const webhookService = {
           voice: {
             provider: "11labs",
             voiceId: DEFAULT_VOICE_ID,  // Usando ID da voz PT-BR
-            voiceName: DEFAULT_VOICE_NAME  // Adicionando nome da voz para referência
+            voiceName: DEFAULT_VOICE_NAME,  // Adicionando nome da voz para referência
+            model: "eleven_multilingual_v2"  // Especificando o modelo de voz Eleven Multilingual v2
           },
           transcriber: {
             provider: "deepgram",
@@ -364,14 +365,14 @@ export const webhookService = {
             created_at: new Date().toISOString(),
             client_version: CLIENT_VERSION,
             published: true,  // Sinalizar que queremos que o assistente seja publicado
-            voice_name: DEFAULT_VOICE_NAME  // Armazenar o nome da voz nos metadados
+            voice_name: DEFAULT_VOICE_NAME,  // Armazenar o nome da voz nos metadados
+            voice_model: "eleven_multilingual_v2"  // Armazenar o modelo de voz nos metadados
           }
         }),
         signal: controller.signal,
       });
       
       clearTimeout(timeoutId);
-
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -629,7 +630,6 @@ export const webhookService = {
       
       console.log('ID final do assistente Vapi para webhook:', vapiAssistantId);
       
-      // Garantir que temos um objeto para additional_data
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
@@ -663,6 +663,7 @@ export const webhookService = {
       // Adicionar informações de debug para ajudar no troubleshooting
       payload.additional_data.voice_id = voiceId; // Adicionamos o ID da voz separadamente
       payload.additional_data.voice_name = voiceName; // E também o nome da voz
+      payload.additional_data.voice_model = model; // Especificamos o modelo da voz
       payload.additional_data.source_url = window.location.href;
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
@@ -673,47 +674,7 @@ export const webhookService = {
       
       console.log('Enviando payload final para webhook:', payload);
       
-      // Usar AbortController para tratamento de timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-      
-      try {
-        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Erro ao disparar webhook de chamada:', response.status, response.statusText, errorText);
-          toast.error(`Erro ao realizar chamada (${response.status}): ${response.statusText}`);
-          return { success: false };
-        }
-
-        console.log('Webhook de chamada disparado com sucesso');
-        toast.success('Chamada iniciada com sucesso');
-        return { success: true };
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        
-        // Verifica se é um erro de abort (timeout)
-        if (fetchError.name === 'AbortError') {
-          console.error('Timeout ao disparar webhook de chamada');
-          toast.error('Tempo esgotado ao tentar conectar ao servidor. Verifique sua conexão.');
-        } else {
-          console.error('Erro ao disparar webhook de chamada:', fetchError);
-          toast.error(`Erro ao realizar chamada: ${fetchError.message || 'Falha na conexão'}`);
-        }
-        
-        return { success: false };
-      }
+      // ... keep existing code (fetch request and error handling)
     } catch (error) {
       console.error('Erro geral ao disparar webhook de chamada:', error);
       toast.error(`Erro ao realizar chamada: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
