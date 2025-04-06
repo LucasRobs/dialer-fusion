@@ -683,91 +683,90 @@ const assistantService = {
       return null; // Em caso de erro, retornar null para forçar tratamento adequado
     }
   },
-  
-    // NOVO MÉTODO: Publicar um assistente na plataforma Vapi
-    async publishAssistant(assistantId: string, supabaseId?: string): Promise<boolean> {
-      try {
-        console.log(`Iniciando publicação do assistente com ID: ${assistantId}`);
-        
-        // Verificar se o ID é válido
-        const vapiId = await this.ensureVapiAssistantId(assistantId);
-        if (!vapiId) {
-          console.error('Não foi possível confirmar o ID do assistente na Vapi API');
-          toast('Falha ao publicar assistente: ID não confirmado na Vapi API');
-          return false;
-        }
-        
-        console.log(`ID validado para publicação: ${vapiId}`);
-        
-        // Função para fazer a tentativa de publicação
-        const attemptPublish = async (retryCount = 0): Promise<boolean> => {
-          try {
-            console.log(`Tentativa ${retryCount + 1} de publicação do assistente ${vapiId}`);
+
+  async publishAssistant(assistantId: string, supabaseId?: string): Promise<boolean> {
+    try {
+      console.log(`Iniciando publicação do assistente com ID: ${assistantId}`);
+      
+      // Verificar se o ID é válido
+      const vapiId = await this.ensureVapiAssistantId(assistantId);
+      if (!vapiId) {
+        console.error('Não foi possível confirmar o ID do assistente na Vapi API');
+        toast('Falha ao publicar assistente: ID não confirmado na Vapi API');
+        return false;
+      }
+      
+      console.log(`ID validado para publicação: ${vapiId}`);
+      
+      // Função para fazer a tentativa de publicação
+      const attemptPublish = async (retryCount = 0): Promise<boolean> => {
+        try {
+          console.log(`Tentativa ${retryCount + 1} de publicação do assistente ${vapiId}`);
+          
+          const response = await fetch(`${VAPI_API_URL}/assistant/${vapiId}/publish`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${VAPI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({})
+          });
+          
+          if (response.ok) {
+            console.log(`Assistente ${vapiId} publicado com sucesso!`);
+            toast.success('Assistente publicado com sucesso!');
             
-            const response = await fetch(`${VAPI_API_URL}/assistant/${vapiId}/publish`, {
-              method: 'PUT',
-              headers: {
-                'Authorization': `Bearer ${VAPI_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({})
-            });
-            
-            if (response.ok) {
-              console.log(`Assistente ${vapiId} publicado com sucesso!`);
-              toast.success('Assistente publicado com sucesso!');
-              
-              // Atualizar status no banco de dados se temos o ID do Supabase
-              if (supabaseId) {
-                const { error } = await supabase
-                  .from('assistants')
-                  .update({ published: true })
-                  .eq('id', supabaseId);
-                  
-                if (error) {
-                  console.error('Erro ao atualizar status de publicação no banco:', error);
-                }
+            // Atualizar status no banco de dados se temos o ID do Supabase
+            if (supabaseId) {
+              const { error } = await supabase
+                .from('assistants')
+                .update({ published: true })
+                .eq('id', supabaseId);
+                
+              if (error) {
+                console.error('Erro ao atualizar status de publicação no banco:', error);
               }
-              
-              return true;
-            } else {
-              const errorData = await response.text();
-              const statusCode = response.status;
-              
-              console.error(`Erro na API ao publicar (${statusCode}):`, errorData);
-              
-              // Se for erro 404 (não encontrado) ou 409 (conflito), tentamos novamente após um delay
-              if ((statusCode === 404 || statusCode === 409) && retryCount < 3) {
-                console.log(`Assistente pode não estar pronto ainda. Aguardando ${(retryCount + 1) * 2}s antes de tentar novamente...`);
-                await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 2000));
-                return attemptPublish(retryCount + 1);
-              }
-              
-              toast.error(`Erro ao publicar assistente: ${response.statusText}`);
-              return false;
             }
-          } catch (error) {
-            console.error('Erro na tentativa de publicação:', error);
             
-            if (retryCount < 3) {
-              console.log(`Erro na rede. Aguardando ${(retryCount + 1) * 2}s antes de tentar novamente...`);
+            return true;
+          } else {
+            const errorData = await response.text();
+            const statusCode = response.status;
+            
+            console.error(`Erro na API ao publicar (${statusCode}):`, errorData);
+            
+            // Se for erro 404 (não encontrado) ou 409 (conflito), tentamos novamente após um delay
+            if ((statusCode === 404 || statusCode === 409) && retryCount < 3) {
+              console.log(`Assistente pode não estar pronto ainda. Aguardando ${(retryCount + 1) * 2}s antes de tentar novamente...`);
               await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 2000));
               return attemptPublish(retryCount + 1);
             }
             
-            toast.error(`Erro ao publicar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+            toast.error(`Erro ao publicar assistente: ${response.statusText}`);
             return false;
           }
-        };
-        
-        // Iniciar tentativas de publicação
-        return attemptPublish();
-      } catch (error) {
-        console.error('Erro geral em publishAssistant:', error);
-        toast.error(`Erro ao publicar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-        return false;
-      }
+        } catch (error) {
+          console.error('Erro na tentativa de publicação:', error);
+          
+          if (retryCount < 3) {
+            console.log(`Erro na rede. Aguardando ${(retryCount + 1) * 2}s antes de tentar novamente...`);
+            await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 2000));
+            return attemptPublish(retryCount + 1);
+          }
+          
+          toast.error(`Erro ao publicar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+          return false;
+        }
+      };
+      
+      // Iniciar tentativas de publicação
+      return attemptPublish();
+    } catch (error) {
+      console.error('Erro geral em publishAssistant:', error);
+      toast.error(`Erro ao publicar assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      return false;
     }
-  };
+  }
+};
 
 export default assistantService;

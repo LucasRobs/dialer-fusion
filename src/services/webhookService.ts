@@ -38,8 +38,8 @@ const VAPI_API_URL = "https://api.vapi.ai";
 const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook';
 const FETCH_TIMEOUT = 8000; // 8 segundos de timeout para melhor confiabilidade
 const CLIENT_VERSION = '1.3.0';
-const DEFAULT_MODEL = "gpt-4o-turbo"; // Modelo padrão para chamadas
-const DEFAULT_VOICE = "eleven_labs_gemma"; // Voz padrão para chamadas
+const DEFAULT_MODEL = "eleven_multilingual_v2"; // Modelo atualizado para eleven_multilingual_v2
+const DEFAULT_VOICE = "33B4UnXyTNbgLmdEDh5P"; // Voz para português do Brasil
 const DEFAULT_VOICE_ID_PTBR = "33B4UnXyTNbgLmdEDh5P"; // Voz para português do Brasil
 const DEFAULT_LANGUAGE = "pt-BR"; // Idioma padrão para chamadas
 
@@ -343,6 +343,21 @@ export const webhookService = {
           name: params.name,
           firstMessage: params.first_message,
           instructions: params.system_prompt,
+          model: {
+            provider: "openai",
+            model: "gpt-4o-mini",  // Usando o modelo GPT-4o mini
+            temperature: 0.5,
+            systemPrompt: params.system_prompt
+          },
+          voice: {
+            provider: "11labs",
+            voiceId: DEFAULT_VOICE  // Usando a voz PT-BR
+          },
+          transcriber: {
+            provider: "deepgram",
+            language: DEFAULT_LANGUAGE,
+            model: "nova-2"
+          },
           metadata: {
             user_id: params.userId,
             created_at: new Date().toISOString(),
@@ -387,6 +402,8 @@ export const webhookService = {
           user_id: params.userId,
           status: 'pending', // Marcamos como pending já que o workflow foi iniciado
           created_at: new Date().toISOString(),
+          model: DEFAULT_MODEL, // Usando modelo eleven_multilingual_v2 para português
+          voice: DEFAULT_VOICE, // Usando voz PT-BR
           published: false // Inicialmente não está publicado
         };
         
@@ -625,22 +642,12 @@ export const webhookService = {
       // Adicionar provider e configurações da chamada
       payload.provider = "vapi"; // Indicar que estamos usando Vapi como provedor
       
-      // Obter configurações de modelo e voz do localStorage
-      let model = DEFAULT_MODEL; // Valor padrão
-      let voice = DEFAULT_VOICE_ID_PTBR; // Usar a voz específica para PT-BR
+      // Usar sempre os valores atualizados para modelo e voz
+      let model = DEFAULT_MODEL; // Modelo atualizado para português
+      let voice = DEFAULT_VOICE; // Voz específica para PT-BR
       
-      try {
-        // Verificar se temos configurações salvas
-        const savedSettings = localStorage.getItem('vapi_settings');
-        if (savedSettings) {
-          const settings = JSON.parse(savedSettings);
-          if (settings.model) model = settings.model;
-          // Sempre usar a voz específica para PT-BR, ignorando configurações salvas
-          console.log('Usando modelo da localStorage e voz específica para PT-BR:', { model, voice });
-        }
-      } catch (e) {
-        console.error('Erro ao obter configurações da localStorage:', e);
-      }
+      // Não usar configurações salvas, sempre usar as configurações definidas para português
+      console.log('Usando modelo e voz específicos para PT-BR:', { model, voice });
       
       payload.call = {
         model: model, 
