@@ -7,4 +7,12 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Configurações da Voz
+export const VOICE_CONFIG = {
+  MODEL: "eleven_multilingual_v2",
+  VOICE_NAME: "Voz Feminina (PT-BR)",
+  VOICE_ID: "33B4UnXyTNbgLmdEDh5P",
+  LANGUAGE: "pt-BR"
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);

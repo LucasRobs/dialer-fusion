@@ -17,3 +17,12 @@ export const getSupabaseClient = (accessToken: string) => {
     },
   });
 };
+
+// Configurações para vozes do 11Labs
+export const VOICE_SETTINGS = {
+  PTBR_FEMALE: {
+    name: "Voz Feminina (PT-BR)",
+    id: "33B4UnXyTNbgLmdEDh5P"
+  },
+  // Adicionar mais vozes conforme necessário
+};

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, VOICE_SETTINGS } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import assistantService from './assistantService'; 
@@ -39,8 +39,8 @@ const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook
 const FETCH_TIMEOUT = 8000; // 8 segundos de timeout para melhor confiabilidade
 const CLIENT_VERSION = '1.3.0';
 const DEFAULT_MODEL = "eleven_multilingual_v2"; // Modelo atualizado para eleven_multilingual_v2
-const DEFAULT_VOICE = "33B4UnXyTNbgLmdEDh5P"; // Voz para português do Brasil
-const DEFAULT_VOICE_ID_PTBR = "33B4UnXyTNbgLmdEDh5P"; // Voz para português do Brasil
+const DEFAULT_VOICE_NAME = VOICE_SETTINGS.PTBR_FEMALE.name; // Nome da voz em português do Brasil
+const DEFAULT_VOICE_ID = VOICE_SETTINGS.PTBR_FEMALE.id; // ID da voz para português do Brasil
 const DEFAULT_LANGUAGE = "pt-BR"; // Idioma padrão para chamadas
 
 // Assistente ID fallback - usar apenas em último caso quando não conseguir obter de nenhuma outra fonte
@@ -351,7 +351,8 @@ export const webhookService = {
           },
           voice: {
             provider: "11labs",
-            voiceId: DEFAULT_VOICE  // Usando a voz PT-BR
+            voiceId: DEFAULT_VOICE_ID,  // Usando ID da voz PT-BR
+            voiceName: DEFAULT_VOICE_NAME  // Adicionando nome da voz para referência
           },
           transcriber: {
             provider: "deepgram",
@@ -362,13 +363,15 @@ export const webhookService = {
             user_id: params.userId,
             created_at: new Date().toISOString(),
             client_version: CLIENT_VERSION,
-            published: true  // Sinalizar que queremos que o assistente seja publicado
+            published: true,  // Sinalizar que queremos que o assistente seja publicado
+            voice_name: DEFAULT_VOICE_NAME  // Armazenar o nome da voz nos metadados
           }
         }),
         signal: controller.signal,
       });
       
       clearTimeout(timeoutId);
+
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -403,7 +406,8 @@ export const webhookService = {
           status: 'pending', // Marcamos como pending já que o workflow foi iniciado
           created_at: new Date().toISOString(),
           model: DEFAULT_MODEL, // Usando modelo eleven_multilingual_v2 para português
-          voice: DEFAULT_VOICE, // Usando voz PT-BR
+          voice: DEFAULT_VOICE_NAME, // Armazenando o nome da voz ao invés do ID
+          voice_id: DEFAULT_VOICE_ID, // Também armazenamos o ID para referência
           published: false // Inicialmente não está publicado
         };
         
@@ -644,18 +648,21 @@ export const webhookService = {
       
       // Usar sempre os valores atualizados para modelo e voz
       let model = DEFAULT_MODEL; // Modelo atualizado para português
-      let voice = DEFAULT_VOICE; // Voz específica para PT-BR
+      let voiceName = DEFAULT_VOICE_NAME; // Nome da voz para PT-BR
+      let voiceId = DEFAULT_VOICE_ID; // ID da voz para PT-BR
       
       // Não usar configurações salvas, sempre usar as configurações definidas para português
-      console.log('Usando modelo e voz específicos para PT-BR:', { model, voice });
+      console.log('Usando modelo e voz específicos para PT-BR:', { model, voiceName, voiceId });
       
       payload.call = {
         model: model, 
-        voice: voice,
+        voice: voiceName, // Agora usamos o nome da voz
         language: DEFAULT_LANGUAGE  // Definir idioma português brasileiro explicitamente
       };
       
       // Adicionar informações de debug para ajudar no troubleshooting
+      payload.additional_data.voice_id = voiceId; // Adicionamos o ID da voz separadamente
+      payload.additional_data.voice_name = voiceName; // E também o nome da voz
       payload.additional_data.source_url = window.location.href;
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
