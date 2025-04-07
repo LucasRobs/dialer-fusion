@@ -19,10 +19,11 @@ export const clientService = {
       .select('*');
 
     if (error) {
+      console.error("Error fetching clients:", error);
       throw new Error(`Erro ao buscar clientes: ${error.message}`);
     }
 
-    return data;
+    return data || [];
   },
 
   // Buscar um cliente por ID
@@ -86,25 +87,30 @@ export const clientService = {
 
   // Obter estatísticas dos clientes
   async getClientStats() {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) throw new Error(`Erro ao obter usuário: ${userError.message}`);
+    try {
+      const { data: allClients, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, status');
 
-    const userId = userData?.user?.id;
+      if (clientsError) {
+        console.error("Error fetching client stats:", clientsError);
+        throw new Error(`Erro ao buscar estatísticas: ${clientsError.message}`);
+      }
 
-    const { data: allClients, error: clientsError } = await supabase
-      .from('clients')
-      .select('id, status')
-      .eq('user_id', userId);
+      const totalClients = allClients?.length || 0;
+      const activeClients = allClients?.filter(client => client.status === 'Active')?.length || 0;
 
-    if (clientsError) throw new Error(`Erro ao buscar estatísticas: ${clientsError.message}`);
-
-    const totalClients = allClients?.length || 0;
-    const activeClients = allClients?.filter(client => client.status === 'Active')?.length || 0;
-
-    return {
-      totalClients,
-      activeClients,
-    };
+      return {
+        totalClients,
+        activeClients,
+      };
+    } catch (error) {
+      console.error("Error in getClientStats:", error);
+      return {
+        totalClients: 0,
+        activeClients: 0,
+      };
+    }
   },
 
   // Buscar clientes por grupo

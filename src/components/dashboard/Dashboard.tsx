@@ -16,14 +16,18 @@ const Dashboard = () => {
     queryKey: ['clientStats'],
     queryFn: async () => {
       try {
-        const clientStatsData = await clientService.getClientStats();
+        // Get all clients to count them accurately
+        const clients = await clientService.getClients();
+        const totalClients = clients?.length || 0;
+        const activeClients = clients?.filter(client => client.status === 'Active')?.length || 0;
         
         // Fetch client groups count
         const clientGroups = await clientGroupService.getClientGroups();
         const groupsCount = clientGroups?.length || 0;
         
         return { 
-          ...clientStatsData,
+          totalClients,
+          activeClients,
           totalGroups: groupsCount
         };
       } catch (error) {
