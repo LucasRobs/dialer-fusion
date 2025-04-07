@@ -1,7 +1,7 @@
 import { supabase, VOICE_SETTINGS } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import assistantService from './assistantService'; 
+import assistantService from './assistantService';
 
 export interface VapiAssistant {
   id: string;
