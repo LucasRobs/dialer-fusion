@@ -470,85 +470,79 @@ export const webhookService = {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
       
-      // Simplificar a obtenção do ID do assistente
-      let vapiAssistantId: string | null = null;
-      let assistantNameToUse: string | null = null;
+      // SIMPLIFIED APPROACH: Get assistant ID from localStorage directly
+      let assistantId: string | null = null;
       
-      // 1. Primeiro tenta obter do payload
-      if (payload.additional_data?.vapi_assistant_id && UUID_REGEX.test(payload.additional_data.vapi_assistant_id)) {
-        vapiAssistantId = payload.additional_data.vapi_assistant_id;
-        console.log('Usando ID Vapi do payload:', vapiAssistantId);
+      // 1. First try to get from payload if available and valid
+      if (payload.additional_data?.vapi_assistant_id && 
+          UUID_REGEX.test(payload.additional_data.vapi_assistant_id)) {
+        assistantId = payload.additional_data.vapi_assistant_id;
+        console.log('Using Vapi assistant ID from payload:', assistantId);
       }
-      
-      // 2. Se não tiver no payload, tenta obter do localStorage (comportamento original)
-      if (!vapiAssistantId) {
+      // 2. Otherwise, try to get from localStorage
+      else {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
             const assistant = JSON.parse(storedAssistant);
             if (assistant) {
-              // Preferir assistant_id sobre id (assistant_id já deve ser o ID da Vapi)
-              const potentialId = assistant.assistant_id || assistant.id;
-              
-              // Validar se é um UUID válido
-              if (potentialId && UUID_REGEX.test(potentialId)) {
-                vapiAssistantId = potentialId;
-                assistantNameToUse = assistant.name;
-                console.log('Usando ID do assistente do localStorage:', vapiAssistantId);
-              } else {
-                console.warn('ID obtido do localStorage não é um UUID válido:', potentialId);
+              // Try assistant_id first (which should be the Vapi ID)
+              if (assistant.assistant_id && UUID_REGEX.test(assistant.assistant_id)) {
+                assistantId = assistant.assistant_id;
+                console.log('Using assistant_id from localStorage:', assistantId);
+              } 
+              // Or try the regular id field
+              else if (assistant.id && UUID_REGEX.test(assistant.id)) {
+                assistantId = assistant.id;
+                console.log('Using id from localStorage:', assistantId);
               }
             }
           }
         } catch (e) {
-          console.error('Erro ao obter assistente do localStorage:', e);
+          console.error('Error getting assistant ID from localStorage:', e);
         }
       }
       
-      // 3. Se ainda não tiver ID, usa o fallback
-      if (!vapiAssistantId) {
-        vapiAssistantId = FALLBACK_VAPI_ASSISTANT_ID;
-        assistantNameToUse = "Assistente Padrão";
-        console.warn('Usando ID de fallback:', FALLBACK_VAPI_ASSISTANT_ID);
+      // 3. If still no valid ID, use fallback
+      if (!assistantId || !UUID_REGEX.test(assistantId)) {
+        assistantId = FALLBACK_VAPI_ASSISTANT_ID;
+        console.log('Using fallback assistant ID:', assistantId);
       }
       
-      // Validação final do ID antes de prosseguir
-      if (!UUID_REGEX.test(vapiAssistantId)) {
-        console.error('ID do assistente não é um UUID válido:', vapiAssistantId);
+      // Final validation check
+      if (!UUID_REGEX.test(assistantId)) {
+        console.error('Invalid assistant ID format (not a UUID):', assistantId);
         toast.error('Erro: ID do assistente inválido. Verifique se o formato é de um UUID válido.');
         return { success: false };
       }
       
-      console.log('ID final do assistente para webhook:', vapiAssistantId);
+      console.log('ID final do assistente para webhook:', assistantId);
       
-      // Garantir que temos um objeto para additional_data
+      // Prepare payload
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
       
-      // Atualizar os IDs no payload - Simplificar para usar diretamente o ID
-      payload.additional_data.vapi_assistant_id = vapiAssistantId;
-      if (assistantNameToUse) {
-        payload.additional_data.assistant_name = assistantNameToUse;
-      }
+      // Set the verified assistant ID in payload
+      payload.additional_data.vapi_assistant_id = assistantId;
       
-      // Definir provider como "vapi"
+      // Set provider as "vapi"
       payload.provider = "vapi";
       
-      // Configurações da chamada - Usar sempre PT-BR
+      // Set voice settings
       payload.call = {
         model: DEFAULT_MODEL,
         voice: DEFAULT_VOICE_ID,
         language: DEFAULT_LANGUAGE
       };
       
-      // Adicionar informações de debug
+      // Add debug info
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
       
       console.log('Enviando payload final para webhook:', payload);
       
-      // Usar AbortController para tratamento de timeout
+      // Use AbortController for timeout handling
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
       
