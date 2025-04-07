@@ -46,6 +46,9 @@ const DEFAULT_LANGUAGE = "pt-BR"; // Idioma padrão para chamadas
 // Assistente ID fallback - usar apenas em último caso quando não conseguir obter de nenhuma outra fonte
 const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const webhookService = {
   /**
    * Busca todos os assistentes de um usuário
@@ -462,62 +465,57 @@ export const webhookService = {
       throw error;
     }
   },
-  
+
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
       
-      // Buscar assistente do localStorage para garantir que temos o ID correto
-      let vapiAssistantId = payload.additional_data?.vapi_assistant_id;
-      let supabaseAssistantId = payload.additional_data?.assistant_id;
-      let assistantNameToUse = payload.additional_data?.assistant_name;
+      // Simplificar a obtenção do ID do assistente
+      let vapiAssistantId: string | null = null;
+      let assistantNameToUse: string | null = null;
       
-      // Voltar ao comportamento anterior: primeiro buscar do localStorage
-      try {
-        const storedAssistant = localStorage.getItem('selected_assistant');
-        if (storedAssistant) {
-          const assistant = JSON.parse(storedAssistant);
-          if (assistant) {
-            // Para Vapi, usamos diretamente o ID ou assistant_id
-            vapiAssistantId = assistant.assistant_id || assistant.id;
-            supabaseAssistantId = assistant.id;
-            assistantNameToUse = assistant.name;
-            
-            console.log('Using assistant from localStorage:', {
-              id: assistant.id,
-              assistant_id: assistant.assistant_id,
-              name: assistant.name
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Erro ao obter assistente do localStorage:', e);
+      // 1. Primeiro tenta obter do payload
+      if (payload.additional_data?.vapi_assistant_id && UUID_REGEX.test(payload.additional_data.vapi_assistant_id)) {
+        vapiAssistantId = payload.additional_data.vapi_assistant_id;
+        console.log('Usando ID Vapi do payload:', vapiAssistantId);
       }
       
-      // Se ainda não temos o ID, verificar no payload
-      if (!vapiAssistantId && payload.additional_data?.assistant_id) {
-        vapiAssistantId = payload.additional_data.assistant_id;
-        console.log('Usando ID do assistente do payload:', vapiAssistantId);
-      }
-      
-      // Se ainda não temos, usar o ID de fallback
+      // 2. Se não tiver no payload, tenta obter do localStorage (comportamento original)
       if (!vapiAssistantId) {
-        console.warn('Usando ID de fallback como último recurso:', FALLBACK_VAPI_ASSISTANT_ID);
+        try {
+          const storedAssistant = localStorage.getItem('selected_assistant');
+          if (storedAssistant) {
+            const assistant = JSON.parse(storedAssistant);
+            if (assistant) {
+              // Preferir assistant_id sobre id (assistant_id já deve ser o ID da Vapi)
+              const potentialId = assistant.assistant_id || assistant.id;
+              
+              // Validar se é um UUID válido
+              if (potentialId && UUID_REGEX.test(potentialId)) {
+                vapiAssistantId = potentialId;
+                assistantNameToUse = assistant.name;
+                console.log('Usando ID do assistente do localStorage:', vapiAssistantId);
+              } else {
+                console.warn('ID obtido do localStorage não é um UUID válido:', potentialId);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Erro ao obter assistente do localStorage:', e);
+        }
+      }
+      
+      // 3. Se ainda não tiver ID, usa o fallback
+      if (!vapiAssistantId) {
         vapiAssistantId = FALLBACK_VAPI_ASSISTANT_ID;
         assistantNameToUse = "Assistente Padrão";
+        console.warn('Usando ID de fallback:', FALLBACK_VAPI_ASSISTANT_ID);
       }
       
-      if (!vapiAssistantId) {
-        console.error('CRÍTICO: Nenhum ID de assistente Vapi disponível para a chamada webhook');
-        toast.error('Erro: Nenhum assistente selecionado ou ID inválido. Por favor, crie ou selecione um assistente.');
-        return { success: false };
-      }
-      
-      // Verificar se o ID é um UUID válido
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(vapiAssistantId)) {
-        console.error('CRÍTICO: ID do assistente não é um UUID válido:', vapiAssistantId);
-        toast.error('Erro: ID do assistente inválido. Deve ser um UUID válido.');
+      // Validação final do ID antes de prosseguir
+      if (!UUID_REGEX.test(vapiAssistantId)) {
+        console.error('ID do assistente não é um UUID válido:', vapiAssistantId);
+        toast.error('Erro: ID do assistente inválido. Verifique se o formato é de um UUID válido.');
         return { success: false };
       }
       
@@ -528,23 +526,23 @@ export const webhookService = {
         payload.additional_data = {};
       }
       
-      // Atualizar os IDs no payload - SIMPLIFICADO para usar diretamente o ID
-      payload.additional_data.assistant_id = vapiAssistantId; // Usar diretamente o ID do assistente como antes
+      // Atualizar os IDs no payload - Simplificar para usar diretamente o ID
+      payload.additional_data.vapi_assistant_id = vapiAssistantId;
       if (assistantNameToUse) {
         payload.additional_data.assistant_name = assistantNameToUse;
       }
       
-      // Adicionar provider e configurações da chamada
-      payload.provider = "vapi"; // Indicar que estamos usando Vapi como provedor
+      // Definir provider como "vapi"
+      payload.provider = "vapi";
       
-      // Usar sempre os valores atualizados para modelo e voz
+      // Configurações da chamada - Usar sempre PT-BR
       payload.call = {
-        model: DEFAULT_MODEL, 
-        voice: DEFAULT_VOICE_ID, // Usar o ID da voz diretamente como antes
-        language: DEFAULT_LANGUAGE  // Definir idioma português brasileiro explicitamente
+        model: DEFAULT_MODEL,
+        voice: DEFAULT_VOICE_ID,
+        language: DEFAULT_LANGUAGE
       };
       
-      // Adicionar informações de debug para ajudar no troubleshooting
+      // Adicionar informações de debug
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
       

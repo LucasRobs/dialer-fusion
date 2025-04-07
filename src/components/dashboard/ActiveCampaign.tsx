@@ -47,66 +47,40 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     try {
       setIsStoppingCampaign(true);
       
-      // Get assistant name
-      const assistantName = campaign.assistantName;
-      let vapiAssistantId = null;
+      // Get the Vapi assistant ID (prioritize the explicit field)
+      let vapiAssistantId = campaign.vapiAssistantId || null;
       
-      // Get Vapi assistant ID by name if available
-      if (assistantName) {
+      // If no Vapi ID is available, try to get it from the assistantId field
+      if (!vapiAssistantId && campaign.assistantId) {
         try {
-          console.log('Buscando ID do assistente pelo nome:', assistantName);
-          vapiAssistantId = await assistantService.getVapiAssistantIdByName(assistantName);
-          
-          if (vapiAssistantId) {
-            console.log('ID Vapi encontrado pelo nome do assistente:', vapiAssistantId);
+          // Check if assistantId is already a valid UUID
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (uuidRegex.test(campaign.assistantId)) {
+            vapiAssistantId = campaign.assistantId;
+            console.log('Using assistantId as vapiAssistantId (valid UUID):', vapiAssistantId);
           } else {
-            console.warn('Nenhum assistente encontrado com o nome:', assistantName);
+            // If not a valid UUID, try to get the Vapi ID
+            vapiAssistantId = await assistantService.ensureVapiAssistantId(campaign.assistantId);
+            console.log('ID Vapi obtido a partir do ID do Supabase:', vapiAssistantId);
           }
+        } catch (e) {
+          console.error('Erro ao confirmar ID Vapi:', e);
+        }
+      }
+      
+      // If still no Vapi ID and we have a name, try to get it by name
+      if (!vapiAssistantId && campaign.assistantName) {
+        try {
+          vapiAssistantId = await assistantService.getVapiAssistantIdByName(campaign.assistantName);
+          console.log('ID Vapi encontrado pelo nome do assistente:', vapiAssistantId);
         } catch (e) {
           console.error('Erro ao buscar assistente pelo nome:', e);
         }
       }
       
-      // If still no Vapi ID, use the existing IDs
-      if (!vapiAssistantId) {
-        // Get the Supabase assistant ID (from the assistantId field)
-        let supabaseAssistantId = campaign.assistantId;
-        // Get the Vapi assistant ID (from the vapiAssistantId field)
-        vapiAssistantId = campaign.vapiAssistantId;
-        
-        console.log('IDs de assistente para interrupção de campanha:', {
-          supabaseAssistantId,
-          vapiAssistantId
-        });
-        
-        // If we have a Supabase ID but no Vapi ID, try to get Vapi ID
-        if (supabaseAssistantId && !vapiAssistantId) {
-          try {
-            vapiAssistantId = await assistantService.ensureVapiAssistantId(supabaseAssistantId);
-            console.log('ID Vapi obtido a partir do ID do Supabase:', vapiAssistantId);
-          } catch (e) {
-            console.error('Erro ao confirmar ID Vapi:', e);
-          }
-        }
-      }
-      
-      // Last resort - Get all assistants and use the first one
-      if (!vapiAssistantId) {
-        try {
-          console.log('Tentando obter lista de assistentes da API Vapi');
-          const vapiAssistants = await webhookService.getAssistantsFromVapiApi();
-          if (vapiAssistants && vapiAssistants.length > 0) {
-            vapiAssistantId = vapiAssistants[0].id;
-            console.log('Usando primeiro assistente da API Vapi:', vapiAssistantId);
-          }
-        } catch (e) {
-          console.error('Erro ao buscar assistentes da API Vapi:', e);
-        }
-      }
-
       console.log('ID final do assistente para a campanha:', vapiAssistantId);
       
-      // Send data to webhook with both IDs
+      // Send data to webhook with the IDs
       const result = await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
@@ -115,8 +89,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: campaign.assistantId, // ID do Supabase (banco)
-          vapi_assistant_id: vapiAssistantId, // ID da Vapi (API externa)
+          assistant_id: campaign.assistantId, // Supabase ID
+          vapi_assistant_id: vapiAssistantId, // Vapi API ID
           assistant_name: campaign.assistantName
         }
       });
@@ -133,7 +107,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         toast.success("Campanha interrompida com sucesso");
       } else {
         // Even if the webhook call fails, we still want to allow the user to stop the campaign
-        // since we already showed an error message in the webhook service
         if (onCampaignStopped) {
           onCampaignStopped();
         }
