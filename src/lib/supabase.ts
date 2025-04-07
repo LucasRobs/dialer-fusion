@@ -1,5 +1,3 @@
-// Arquivo de configuração para conexão com Supabase
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co';
@@ -24,5 +22,4 @@ export const VOICE_SETTINGS = {
     name: "Voz Feminina (PT-BR)",
     id: "33B4UnXyTNbgLmdEDh5P"
   },
-  // Adicionar mais vozes conforme necessário
-};
+}

@@ -353,7 +353,7 @@ export const webhookService = {
             provider: "11labs",
             voiceId: DEFAULT_VOICE_ID,  // Usando ID da voz PT-BR
             voiceName: DEFAULT_VOICE_NAME,  // Adicionando nome da voz para referência
-            model: "eleven_multilingual_v2"  // Especificando o modelo de voz Eleven Multilingual v2
+            model: "eleven_multilingual_v2"  // Especificando o modelo de voz
           },
           transcriber: {
             provider: "deepgram",
@@ -462,7 +462,6 @@ export const webhookService = {
       throw error;
     }
   },
-
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
@@ -472,150 +471,35 @@ export const webhookService = {
       let supabaseAssistantId = payload.additional_data?.assistant_id;
       let assistantNameToUse = payload.additional_data?.assistant_name;
       
-      // Estratégia 1: Tentar obter o ID Vapi diretamente pelo nome do assistente
-      if (assistantNameToUse && !vapiAssistantId) {
-        try {
-          console.log('Tentando obter ID Vapi pelo nome do assistente:', assistantNameToUse);
-          const idByName = await assistantService.getVapiAssistantIdByName(assistantNameToUse);
-          
-          if (idByName) {
-            console.log('ID Vapi encontrado pelo nome:', idByName);
-            vapiAssistantId = idByName;
-          } else {
-            console.log('Nome do assistente não encontrado na Vapi API:', assistantNameToUse);
-          }
-        } catch (e) {
-          console.error('Erro ao buscar ID pelo nome do assistente:', e);
-        }
-      }
-      
-      // Estratégia 2: Tentar obter o ID Vapi diretamente se temos algum ID
-      if (!vapiAssistantId && (supabaseAssistantId || payload.additional_data?.assistant_id)) {
-        try {
-          // Usar o método ensureVapiAssistantId para garantir que temos um ID Vapi válido
-          const confirmedVapiId = await assistantService.ensureVapiAssistantId(
-            supabaseAssistantId || payload.additional_data?.assistant_id
-          );
-          
-          if (confirmedVapiId) {
-            vapiAssistantId = confirmedVapiId;
-            console.log('ID Vapi confirmado:', vapiAssistantId);
+      // Voltar ao comportamento anterior: primeiro buscar do localStorage
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          const assistant = JSON.parse(storedAssistant);
+          if (assistant) {
+            // Para Vapi, usamos diretamente o ID ou assistant_id
+            vapiAssistantId = assistant.assistant_id || assistant.id;
+            supabaseAssistantId = assistant.id;
+            assistantNameToUse = assistant.name;
             
-            // Buscar detalhes adicionais como nome se necessário
-            if (!assistantNameToUse) {
-              const assistantDetails = await this.getVapiAssistantById(confirmedVapiId);
-              if (assistantDetails && assistantDetails.name) {
-                assistantNameToUse = assistantDetails.name;
-                console.log('Nome do assistente obtido da API Vapi:', assistantNameToUse);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Erro ao confirmar ID Vapi:', e);
-        }
-      }
-      
-      // Estratégia 3: Se não temos o ID Vapi ainda, tentar obter do Supabase
-      if (!vapiAssistantId && supabaseAssistantId) {
-        try {
-          const assistantFromDb = await assistantService.getAssistantById(supabaseAssistantId);
-          if (assistantFromDb && assistantFromDb.assistant_id) {
-            vapiAssistantId = assistantFromDb.assistant_id;
-            assistantNameToUse = assistantFromDb.name;
-            
-            console.log('Obtido ID do Vapi a partir do banco de dados:', {
-              vapiId: vapiAssistantId,
-              name: assistantNameToUse
+            console.log('Using assistant from localStorage:', {
+              id: assistant.id,
+              assistant_id: assistant.assistant_id,
+              name: assistant.name
             });
           }
-        } catch (e) {
-          console.error('Erro ao buscar assistente do banco de dados:', e);
         }
+      } catch (e) {
+        console.error('Erro ao obter assistente do localStorage:', e);
       }
       
-      // Estratégia 4: Tentar buscar do localStorage
-      if (!vapiAssistantId) {
-        try {
-          const storedAssistant = localStorage.getItem('selected_assistant');
-          if (storedAssistant) {
-            const assistant = JSON.parse(storedAssistant);
-            if (assistant) {
-              // Para Vapi, precisamos usar o assistant_id específico ou o ID
-              vapiAssistantId = assistant.assistant_id || assistant.id;
-              supabaseAssistantId = assistant.id;
-              assistantNameToUse = assistant.name;
-              
-              console.log('Using assistant IDs from localStorage:', {
-                supabaseId: supabaseAssistantId,
-                vapiId: vapiAssistantId,
-                name: assistantNameToUse
-              });
-              
-              // Se temos o nome mas não temos o ID, tentar buscar pelo nome
-              if (assistantNameToUse && !vapiAssistantId) {
-                try {
-                  const idByName = await assistantService.getVapiAssistantIdByName(assistantNameToUse);
-                  
-                  if (idByName) {
-                    console.log('ID encontrado pelo nome do assistente do localStorage:', idByName);
-                    vapiAssistantId = idByName;
-                  }
-                } catch (e) {
-                  console.error('Erro ao buscar ID pelo nome do localStorage:', e);
-                }
-              }
-              
-              // Confirmar se o ID é válido usando a API Vapi
-              if (vapiAssistantId) {
-                const confirmedVapiId = await assistantService.ensureVapiAssistantId(vapiAssistantId);
-                if (confirmedVapiId) {
-                  console.log('ID do localStorage confirmado na API Vapi:', confirmedVapiId);
-                  vapiAssistantId = confirmedVapiId;
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Erro ao obter ID do assistente do localStorage:', e);
-        }
+      // Se ainda não temos o ID, verificar no payload
+      if (!vapiAssistantId && payload.additional_data?.assistant_id) {
+        vapiAssistantId = payload.additional_data.assistant_id;
+        console.log('Usando ID do assistente do payload:', vapiAssistantId);
       }
       
-      // Estratégia 5: Buscar da API Vapi diretamente
-      if (!vapiAssistantId) {
-        try {
-          console.log('Tentando buscar assistentes da API Vapi como último recurso');
-          const vapiAssistants = await this.getAssistantsFromVapiApi();
-          if (vapiAssistants && vapiAssistants.length > 0) {
-            // Procurar primeiro pelo nome, se disponível
-            if (assistantNameToUse) {
-              const matchingAssistant = vapiAssistants.find(
-                a => a.name.toLowerCase().includes(assistantNameToUse.toLowerCase()) || 
-                     assistantNameToUse.toLowerCase().includes(a.name.toLowerCase())
-              );
-              
-              if (matchingAssistant) {
-                vapiAssistantId = matchingAssistant.id;
-                console.log(`Encontrado assistente "${matchingAssistant.name}" na API Vapi por correspondência de nome:`, vapiAssistantId);
-              }
-            }
-            
-            // Se ainda não encontrou, usar o primeiro disponível
-            if (!vapiAssistantId) {
-              vapiAssistantId = vapiAssistants[0].id;
-              assistantNameToUse = vapiAssistants[0].name;
-              console.log('Usando primeiro assistente da API Vapi:', {
-                id: vapiAssistantId,
-                name: assistantNameToUse
-              });
-            }
-          }
-        } catch (e) {
-          console.error('Erro ao buscar assistentes da API Vapi:', e);
-        }
-      }
-      
-      // Estratégia 6: Usar ID de fallback como último recurso
-      const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
+      // Se ainda não temos, usar o ID de fallback
       if (!vapiAssistantId) {
         console.warn('Usando ID de fallback como último recurso:', FALLBACK_VAPI_ASSISTANT_ID);
         vapiAssistantId = FALLBACK_VAPI_ASSISTANT_ID;
@@ -628,17 +512,15 @@ export const webhookService = {
         return { success: false };
       }
       
-      console.log('ID final do assistente Vapi para webhook:', vapiAssistantId);
+      console.log('ID final do assistente para webhook:', vapiAssistantId);
       
+      // Garantir que temos um objeto para additional_data
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
       
-      // Atualizar os IDs no payload
-      payload.additional_data.vapi_assistant_id = vapiAssistantId;
-      if (supabaseAssistantId) {
-        payload.additional_data.assistant_id = supabaseAssistantId;
-      }
+      // Atualizar os IDs no payload - SIMPLIFICADO para usar diretamente o ID
+      payload.additional_data.assistant_id = vapiAssistantId; // Usar diretamente o ID do assistente como antes
       if (assistantNameToUse) {
         payload.additional_data.assistant_name = assistantNameToUse;
       }
@@ -647,40 +529,66 @@ export const webhookService = {
       payload.provider = "vapi"; // Indicar que estamos usando Vapi como provedor
       
       // Usar sempre os valores atualizados para modelo e voz
-      let model = DEFAULT_MODEL; // Modelo atualizado para português
-      let voiceName = DEFAULT_VOICE_NAME; // Nome da voz para PT-BR
-      let voiceId = DEFAULT_VOICE_ID; // ID da voz para PT-BR
-      
-      // Não usar configurações salvas, sempre usar as configurações definidas para português
-      console.log('Usando modelo e voz específicos para PT-BR:', { model, voiceName, voiceId });
-      
       payload.call = {
-        model: model, 
-        voice: voiceName, // Agora usamos o nome da voz
+        model: DEFAULT_MODEL, 
+        voice: DEFAULT_VOICE_ID, // Usar o ID da voz diretamente como antes
         language: DEFAULT_LANGUAGE  // Definir idioma português brasileiro explicitamente
       };
       
       // Adicionar informações de debug para ajudar no troubleshooting
-      payload.additional_data.voice_id = voiceId; // Adicionamos o ID da voz separadamente
-      payload.additional_data.voice_name = voiceName; // E também o nome da voz
-      payload.additional_data.voice_model = model; // Especificamos o modelo da voz
-      payload.additional_data.source_url = window.location.href;
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
       
-      // Indicar que estamos usando o ID da Vapi
-      payload.additional_data.id_type = 'vapi';
-      payload.additional_data.voice_provider = '11labs'; // Especificar o provider da voz
-      
       console.log('Enviando payload final para webhook:', payload);
       
-      // ... keep existing code (fetch request and error handling)
+      // Usar AbortController para tratamento de timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      
+      try {
+        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${VAPI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Erro ao disparar webhook de chamada:', response.status, response.statusText, errorText);
+          toast.error(`Erro ao realizar chamada (${response.status}): ${response.statusText}`);
+          return { success: false };
+        }
+
+        console.log('Webhook de chamada disparado com sucesso');
+        toast.success('Chamada iniciada com sucesso');
+        return { success: true };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        // Verifica se é um erro de abort (timeout)
+        if (fetchError.name === 'AbortError') {
+          console.error('Timeout ao disparar webhook de chamada');
+          toast.error('Tempo esgotado ao tentar conectar ao servidor. Verifique sua conexão.');
+        } else {
+          console.error('Erro ao disparar webhook de chamada:', fetchError);
+          toast.error(`Erro ao realizar chamada: ${fetchError.message || 'Falha na conexão'}`);
+        }
+        
+        return { success: false };
+      }
     } catch (error) {
       console.error('Erro geral ao disparar webhook de chamada:', error);
       toast.error(`Erro ao realizar chamada: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       return { success: false };
     }
   },
+
 
   /**
    * Fazer uma chamada para um cliente
