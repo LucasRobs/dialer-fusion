@@ -42,6 +42,7 @@ const DEFAULT_MODEL = "eleven_multilingual_v2"; // Modelo atualizado para eleven
 const DEFAULT_VOICE_NAME = VOICE_SETTINGS.PTBR_FEMALE.name; // Nome da voz em português do Brasil
 const DEFAULT_VOICE_ID = VOICE_SETTINGS.PTBR_FEMALE.id; // ID da voz para português do Brasil
 const DEFAULT_LANGUAGE = "pt-BR"; // Idioma padrão para chamadas
+const DEFAULT_CALLER_ID = "97141b30-c5bc-4234-babb-d38b79452e2a"; // Default caller ID
 
 // Assistente ID fallback - usar apenas em último caso quando não conseguir obter de nenhuma outra fonte
 const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
@@ -608,6 +609,8 @@ export const webhookService = {
       // Obter configurações de modelo e voz
       let model = DEFAULT_MODEL;
       let voice = DEFAULT_VOICE_ID;
+      let apiKey = VAPI_API_KEY;
+      let callerId = DEFAULT_CALLER_ID;
       
       try {
         // Verificar se temos configurações salvas
@@ -616,7 +619,9 @@ export const webhookService = {
           const settings = JSON.parse(savedSettings);
           if (settings.model) model = settings.model;
           if (settings.voice) voice = settings.voice;
-          console.log('Usando configurações da localStorage:', { model, voice });
+          if (settings.apiKey) apiKey = settings.apiKey;
+          if (settings.callerId) callerId = settings.callerId;
+          console.log('Usando configurações da localStorage:', { model, voice, apiKey: apiKey ? "***" : "não definida", callerId });
         }
         
         // Se o assistente selecionado tem configurações próprias, usar elas
@@ -624,6 +629,17 @@ export const webhookService = {
           if (selectedAssistant.model) model = selectedAssistant.model;
           if (selectedAssistant.voice) voice = selectedAssistant.voice;
           console.log('Usando configurações do assistente selecionado:', { model, voice });
+        }
+        
+        // Prioritize caller_id and api_key from payload if available
+        if (payload.additional_data?.caller_id) {
+          callerId = payload.additional_data.caller_id;
+          console.log('Usando callerId do payload:', callerId);
+        }
+        
+        if (payload.additional_data?.api_key) {
+          apiKey = payload.additional_data.api_key;
+          console.log('Usando apiKey do payload');
         }
       } catch (e) {
         console.error('Erro ao obter configurações:', e);
@@ -636,12 +652,22 @@ export const webhookService = {
         language: DEFAULT_LANGUAGE
       };
       
+      // Adicionar informações de autenticação
+      payload.additional_data.caller_id = callerId;
+      payload.additional_data.api_key = apiKey;
+      
       // Adicionar informações de debug
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
       payload.additional_data.id_source = 'vapi_api_direct';
       
-      console.log('Enviando payload final para webhook:', payload);
+      console.log('Enviando payload final para webhook:', {
+        ...payload,
+        additional_data: {
+          ...payload.additional_data,
+          api_key: '***REDACTED***' // Don't log the actual API key
+        }
+      });
       
       // Usar AbortController para timeout
       const controller = new AbortController();
@@ -651,8 +677,9 @@ export const webhookService = {
         const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${VAPI_API_KEY}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'X-Caller-Id': callerId // Add caller ID to headers
           },
           body: JSON.stringify(payload),
           signal: controller.signal,
@@ -690,7 +717,6 @@ export const webhookService = {
       return { success: false };
     }
   },
-
 
 
   /**
