@@ -462,6 +462,7 @@ export const webhookService = {
       throw error;
     }
   },
+  
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
@@ -509,6 +510,14 @@ export const webhookService = {
       if (!vapiAssistantId) {
         console.error('CRÍTICO: Nenhum ID de assistente Vapi disponível para a chamada webhook');
         toast.error('Erro: Nenhum assistente selecionado ou ID inválido. Por favor, crie ou selecione um assistente.');
+        return { success: false };
+      }
+      
+      // Verificar se o ID é um UUID válido
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(vapiAssistantId)) {
+        console.error('CRÍTICO: ID do assistente não é um UUID válido:', vapiAssistantId);
+        toast.error('Erro: ID do assistente inválido. Deve ser um UUID válido.');
         return { success: false };
       }
       
