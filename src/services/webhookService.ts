@@ -493,79 +493,157 @@ export const webhookService = {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
       
-      // SIMPLIFIED APPROACH: Get assistant ID from localStorage directly
+      // Obtém assistentes diretamente da API da Vapi
+      const vapiAssistants = await this.getAssistantsFromVapiApi();
+      console.log('Assistentes obtidos diretamente da Vapi API:', vapiAssistants.length);
+      
+      // Escolher o assistente apropriado
+      let selectedAssistant = null;
       let assistantId: string | null = null;
       
-      // 1. First try to get from payload if available and valid
+      // 1. Tentar por ID no payload se disponível
       if (payload.additional_data?.vapi_assistant_id && 
           UUID_REGEX.test(payload.additional_data.vapi_assistant_id)) {
-        assistantId = payload.additional_data.vapi_assistant_id;
-        console.log('Using Vapi assistant ID from payload:', assistantId);
+        // Verificar se este ID existe na lista de assistentes da Vapi
+        selectedAssistant = vapiAssistants.find(a => a.id === payload.additional_data?.vapi_assistant_id);
+        if (selectedAssistant) {
+          assistantId = selectedAssistant.id;
+          console.log('ID do assistente no payload validado na Vapi API:', assistantId);
+        } else {
+          console.log('ID do assistente no payload não encontrado na Vapi API, buscando alternativas');
+        }
       }
-      // 2. Otherwise, try to get from localStorage
-      else {
+      
+      // 2. Tentar por nome no payload
+      if (!assistantId && payload.additional_data?.assistant_name) {
+        const assistantName = payload.additional_data.assistant_name;
+        // Procurar por correspondência exata ou parcial do nome
+        selectedAssistant = vapiAssistants.find(a => 
+          a.name.toLowerCase() === assistantName.toLowerCase() ||
+          a.name.toLowerCase().includes(assistantName.toLowerCase()) ||
+          assistantName.toLowerCase().includes(a.name.toLowerCase())
+        );
+        
+        if (selectedAssistant) {
+          assistantId = selectedAssistant.id;
+          console.log(`Assistente encontrado por nome "${assistantName}":`, assistantId);
+        }
+      }
+      
+      // 3. Tentar obter do localStorage
+      if (!assistantId) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
           if (storedAssistant) {
             const assistant = JSON.parse(storedAssistant);
             if (assistant) {
-              // Try assistant_id first (which should be the Vapi ID)
-              if (assistant.assistant_id && UUID_REGEX.test(assistant.assistant_id)) {
-                assistantId = assistant.assistant_id;
-                console.log('Using assistant_id from localStorage:', assistantId);
-              } 
-              // Or try the regular id field
-              else if (assistant.id && UUID_REGEX.test(assistant.id)) {
-                assistantId = assistant.id;
-                console.log('Using id from localStorage:', assistantId);
+              // Tentar validar o ID contra a Vapi API
+              if (assistant.assistant_id) {
+                selectedAssistant = vapiAssistants.find(a => a.id === assistant.assistant_id);
+                if (selectedAssistant) {
+                  assistantId = selectedAssistant.id;
+                  console.log('ID do assistente do localStorage validado na Vapi API:', assistantId);
+                }
+              }
+              
+              // Se ainda não encontrou, tentar pelo nome
+              if (!assistantId && assistant.name) {
+                selectedAssistant = vapiAssistants.find(a => 
+                  a.name.toLowerCase() === assistant.name.toLowerCase() ||
+                  a.name.toLowerCase().includes(assistant.name.toLowerCase()) ||
+                  assistant.name.toLowerCase().includes(a.name.toLowerCase())
+                );
+                
+                if (selectedAssistant) {
+                  assistantId = selectedAssistant.id;
+                  console.log(`Assistente encontrado por nome do localStorage "${assistant.name}":`, assistantId);
+                }
               }
             }
           }
         } catch (e) {
-          console.error('Error getting assistant ID from localStorage:', e);
+          console.error('Erro ao processar assistente do localStorage:', e);
         }
       }
       
-      // 3. If still no valid ID, use fallback
-      if (!assistantId || !UUID_REGEX.test(assistantId)) {
-        assistantId = FALLBACK_VAPI_ASSISTANT_ID;
-        console.log('Using fallback assistant ID:', assistantId);
+      // 4. Se ainda não temos um assistente, pegar o primeiro da lista
+      if (!assistantId && vapiAssistants.length > 0) {
+        selectedAssistant = vapiAssistants[0];
+        assistantId = selectedAssistant.id;
+        console.log('Usando o primeiro assistente disponível na Vapi API:', assistantId);
       }
       
-      // Final validation check
-      if (!UUID_REGEX.test(assistantId)) {
-        console.error('Invalid assistant ID format (not a UUID):', assistantId);
-        toast.error('Erro: ID do assistente inválido. Verifique se o formato é de um UUID válido.');
-        return { success: false };
+      // 5. Se ainda assim não temos um ID, usar o fallback
+      if (!assistantId) {
+        // Tentar validar o fallback primeiro
+        selectedAssistant = vapiAssistants.find(a => a.id === FALLBACK_VAPI_ASSISTANT_ID);
+        if (selectedAssistant) {
+          assistantId = FALLBACK_VAPI_ASSISTANT_ID;
+          console.log('Usando ID de fallback validado na Vapi API:', assistantId);
+        } else {
+          // Se mesmo o fallback não for válido, não temos opção
+          console.error('Nenhum assistente válido encontrado na Vapi API, incluindo o fallback');
+          toast.error('Erro: Não foi possível encontrar um assistente válido. Por favor, crie um novo assistente.');
+          return { success: false };
+        }
       }
       
-      console.log('ID final do assistente para webhook:', assistantId);
-      
-      // Prepare payload
+      // Garantir que temos um objeto para additional_data
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
       
-      // Set the verified assistant ID in payload
+      // Atualizar os dados do assistente no payload
       payload.additional_data.vapi_assistant_id = assistantId;
+      if (selectedAssistant) {
+        payload.additional_data.assistant_name = selectedAssistant.name;
+        // Incluir outros detalhes úteis
+        payload.additional_data.assistant_created_at = selectedAssistant.created_at;
+        payload.additional_data.assistant_status = selectedAssistant.status;
+      }
       
-      // Set provider as "vapi"
+      // Definir provider como "vapi"
       payload.provider = "vapi";
       
-      // Set voice settings
+      // Obter configurações de modelo e voz
+      let model = DEFAULT_MODEL;
+      let voice = DEFAULT_VOICE_ID;
+      
+      try {
+        // Verificar se temos configurações salvas
+        const savedSettings = localStorage.getItem('vapi_settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          if (settings.model) model = settings.model;
+          if (settings.voice) voice = settings.voice;
+          console.log('Usando configurações da localStorage:', { model, voice });
+        }
+        
+        // Se o assistente selecionado tem configurações próprias, usar elas
+        if (selectedAssistant) {
+          if (selectedAssistant.model) model = selectedAssistant.model;
+          if (selectedAssistant.voice) voice = selectedAssistant.voice;
+          console.log('Usando configurações do assistente selecionado:', { model, voice });
+        }
+      } catch (e) {
+        console.error('Erro ao obter configurações:', e);
+      }
+      
+      // Definir configurações da chamada
       payload.call = {
-        model: DEFAULT_MODEL,
-        voice: DEFAULT_VOICE_ID,
+        model: model,
+        voice: voice,
         language: DEFAULT_LANGUAGE
       };
       
-      // Add debug info
+      // Adicionar informações de debug
       payload.additional_data.timestamp = new Date().toISOString();
       payload.additional_data.client_version = CLIENT_VERSION;
+      payload.additional_data.id_source = 'vapi_api_direct';
       
       console.log('Enviando payload final para webhook:', payload);
       
-      // Use AbortController for timeout handling
+      // Usar AbortController para timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
       
@@ -612,6 +690,7 @@ export const webhookService = {
       return { success: false };
     }
   },
+
 
 
   /**
