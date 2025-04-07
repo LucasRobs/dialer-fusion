@@ -438,14 +438,37 @@ export const webhookService = {
         // Atualiza o localStorage com o novo assistente
         localStorage.setItem('selected_assistant', JSON.stringify(savedAssistant));
         
-        // 3. Tentar publicar o assistente explicitamente
+        // 3. Tentar publicar o assistente explicitamente através do webhook
         try {
           console.log('Tentando publicar o assistente recém-criado');
           
           // Esperar um pouco para dar tempo ao assistente de ser processado
           await new Promise(resolve => setTimeout(resolve, 3000));
           
-          await assistantService.publishAssistant(assistantId, savedAssistant.id);
+          // Enviar solicitação para publicar o assistente
+          await fetch(`${WEBHOOK_BASE_URL}/publishassistant`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${VAPI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              assistant_id: assistantId,
+              supabase_id: savedAssistant.id,
+              publish: true
+            }),
+          });
+          
+          console.log(`Solicitação de publicação enviada para o assistente ${assistantId}`);
+          
+          // Atualizar o status no banco de dados
+          await supabase
+            .from('assistants')
+            .update({ published: true })
+            .eq('id', savedAssistant.id);
+            
+          console.log('Status de publicação atualizado no banco de dados');
+          
         } catch (publishError) {
           console.error('Erro ao publicar assistente após criação:', publishError);
           // Continuamos mesmo se falhar a publicação
