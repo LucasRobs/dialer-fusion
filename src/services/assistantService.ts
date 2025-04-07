@@ -692,6 +692,53 @@ const assistantService = {
     }
   },
 
+
+  async validateVapiAssistantId(assistantId: string): Promise<boolean> {
+    try {
+      if (!assistantId) return false;
+      
+      // UUID validation regex
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      // Check if the ID is a valid UUID
+      if (!UUID_REGEX.test(assistantId)) {
+        console.warn('Invalid UUID format for assistant ID:', assistantId);
+        return false;
+      }
+      
+      console.log(`Validating Vapi assistant ID: ${assistantId}`);
+      
+      const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
+      const response = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      }).catch(err => {
+        console.warn('Error fetching assistant from Vapi API:', err);
+        return null;
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response || !response.ok) {
+        console.warn(`Assistant ID not found or invalid in Vapi API: ${assistantId}`);
+        return false;
+      }
+      
+      console.log(`Successfully validated Vapi assistant ID: ${assistantId}`);
+      return true;
+    } catch (error) {
+      console.error('Error validating Vapi assistant ID:', error);
+      return false;
+    }
+  },
+
   async publishAssistant(assistantId: string, supabaseId?: string): Promise<boolean> {
     try {
       console.log(`Iniciando publicação do assistente com ID: ${assistantId}`);

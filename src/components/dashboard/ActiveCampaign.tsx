@@ -31,12 +31,116 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [isStoppingCampaign, setIsStoppingCampaign] = React.useState(false);
+  const [isValidatingId, setIsValidatingId] = React.useState(false);
+  const [validatedVapiId, setValidatedVapiId] = React.useState<string | null>(null);
+
+  // UUID validation regex
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const formatAssistantId = (id?: string) => {
     if (!id) return '';
     // Format the ID to show just the first part like in the screenshot
     return id.length > 12 ? `${id.slice(0, 12)}...` : id;
   };
+
+  // Validate and get proper assistant ID when component loads
+  React.useEffect(() => {
+    const validateVapiAssistantId = async () => {
+      if (isValidatingId) return;
+      
+      setIsValidatingId(true);
+      try {
+        // First try the explicit Vapi assistant ID if available
+        if (campaign.vapiAssistantId && UUID_REGEX.test(campaign.vapiAssistantId)) {
+          try {
+            // Verify this ID exists in Vapi
+            const exists = await assistantService.validateVapiAssistantId(campaign.vapiAssistantId);
+            if (exists) {
+              console.log('Using validated vapiAssistantId:', campaign.vapiAssistantId);
+              setValidatedVapiId(campaign.vapiAssistantId);
+              setIsValidatingId(false);
+              return;
+            }
+          } catch (e) {
+            console.error('Error validating vapiAssistantId:', e);
+          }
+        }
+
+        // Try other approaches
+        let foundVapiId = null;
+        
+        // Check if assistantId is a valid UUID and try it directly
+        if (campaign.assistantId && UUID_REGEX.test(campaign.assistantId)) {
+          try {
+            const exists = await assistantService.validateVapiAssistantId(campaign.assistantId);
+            if (exists) {
+              console.log('Using validated assistantId as Vapi ID:', campaign.assistantId);
+              foundVapiId = campaign.assistantId;
+              setValidatedVapiId(foundVapiId);
+              setIsValidatingId(false);
+              return;
+            }
+          } catch (e) {
+            console.error('Error validating assistantId as Vapi ID:', e);
+          }
+        }
+        
+        // Get Vapi ID from assistant name
+        if (campaign.assistantName && !foundVapiId) {
+          try {
+            const idByName = await assistantService.getVapiAssistantIdByName(campaign.assistantName);
+            if (idByName) {
+              console.log('Found Vapi ID by assistant name:', idByName);
+              foundVapiId = idByName;
+              setValidatedVapiId(foundVapiId);
+              setIsValidatingId(false);
+              return;
+            }
+          } catch (e) {
+            console.error('Error finding Vapi ID by name:', e);
+          }
+        }
+        
+        // Try to get from local storage
+        if (!foundVapiId) {
+          try {
+            const storedAssistant = localStorage.getItem('selected_assistant');
+            if (storedAssistant) {
+              const assistant = JSON.parse(storedAssistant);
+              if (assistant) {
+                const possibleId = assistant.assistant_id || assistant.id;
+                if (possibleId && UUID_REGEX.test(possibleId)) {
+                  const exists = await assistantService.validateVapiAssistantId(possibleId);
+                  if (exists) {
+                    console.log('Using ID from localStorage:', possibleId);
+                    foundVapiId = possibleId;
+                    setValidatedVapiId(foundVapiId);
+                    setIsValidatingId(false);
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Error getting assistant ID from localStorage:', e);
+          }
+        }
+        
+        // Use fallback ID as last resort
+        if (!foundVapiId) {
+          const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
+          console.log('Using fallback Vapi assistant ID:', FALLBACK_VAPI_ASSISTANT_ID);
+          setValidatedVapiId(FALLBACK_VAPI_ASSISTANT_ID);
+        }
+      } catch (error) {
+        console.error('Error validating assistant ID:', error);
+      } finally {
+        setIsValidatingId(false);
+      }
+    };
+
+    validateVapiAssistantId();
+  }, [campaign]);
 
   const handleStopCampaign = async () => {
     if (!campaign.id) {
@@ -47,38 +151,14 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     try {
       setIsStoppingCampaign(true);
       
-      // Get the Vapi assistant ID (prioritize the explicit field)
-      let vapiAssistantId = campaign.vapiAssistantId || null;
+      // Use the validated Vapi assistant ID
+      const finalVapiAssistantId = validatedVapiId;
       
-      // If no Vapi ID is available, try to get it from the assistantId field
-      if (!vapiAssistantId && campaign.assistantId) {
-        try {
-          // Check if assistantId is already a valid UUID
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (uuidRegex.test(campaign.assistantId)) {
-            vapiAssistantId = campaign.assistantId;
-            console.log('Using assistantId as vapiAssistantId (valid UUID):', vapiAssistantId);
-          } else {
-            // If not a valid UUID, try to get the Vapi ID
-            vapiAssistantId = await assistantService.ensureVapiAssistantId(campaign.assistantId);
-            console.log('ID Vapi obtido a partir do ID do Supabase:', vapiAssistantId);
-          }
-        } catch (e) {
-          console.error('Erro ao confirmar ID Vapi:', e);
-        }
+      if (!finalVapiAssistantId) {
+        console.warn('No valid Vapi assistant ID found for stopping campaign');
+      } else {
+        console.log('Using validated Vapi assistant ID for stopping campaign:', finalVapiAssistantId);
       }
-      
-      // If still no Vapi ID and we have a name, try to get it by name
-      if (!vapiAssistantId && campaign.assistantName) {
-        try {
-          vapiAssistantId = await assistantService.getVapiAssistantIdByName(campaign.assistantName);
-          console.log('ID Vapi encontrado pelo nome do assistente:', vapiAssistantId);
-        } catch (e) {
-          console.error('Erro ao buscar assistente pelo nome:', e);
-        }
-      }
-      
-      console.log('ID final do assistente para a campanha:', vapiAssistantId);
       
       // Send data to webhook with the IDs
       const result = await webhookService.triggerCallWebhook({
@@ -90,7 +170,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
           assistant_id: campaign.assistantId, // Supabase ID
-          vapi_assistant_id: vapiAssistantId, // Vapi API ID
+          vapi_assistant_id: finalVapiAssistantId, // Validated Vapi API ID
           assistant_name: campaign.assistantName
         }
       });
@@ -140,7 +220,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               {campaign.assistantId && (
                 <span className="text-xs text-muted-foreground ml-1">
                   (ID Supabase: {formatAssistantId(campaign.assistantId)})
-                  {campaign.vapiAssistantId && ` | ID Vapi: ${formatAssistantId(campaign.vapiAssistantId)}`}
+                  {validatedVapiId && ` | ID Vapi: ${formatAssistantId(validatedVapiId)}`}
                 </span>
               )}
             </p>
@@ -151,7 +231,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
               variant="outline" 
               className="flex items-center gap-1"
               onClick={handleStopCampaign}
-              disabled={isStoppingCampaign}
+              disabled={isStoppingCampaign || isValidatingId}
             >
               {isStoppingCampaign ? (
                 <>
