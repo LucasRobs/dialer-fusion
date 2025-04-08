@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 import { 
   MoreHorizontal, 
   Search, 
@@ -24,14 +25,12 @@ import {
   Pencil, 
   Trash2, 
   Phone,
-  Check, 
-  X,
   Filter,
   FileUp,
   RefreshCw,
-  Building
+  Building,
+  UserPlus
 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientService } from '@/services/clientService';
 import { webhookService } from '@/services/webhookService';
@@ -61,8 +60,8 @@ export default function ClientList() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('Active');
   const [accountId, setAccountId] = useState('');
+  const [newClientGroupId, setNewClientGroupId] = useState<string>('none');
   
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   
   // Consulta de contas para o filtro de contas
@@ -116,44 +115,38 @@ export default function ClientList() {
   });
   
   const addClientMutation = useMutation({
-    mutationFn: (clientData: { name: string; phone: string; email: string; status: string; account_id?: string }) => 
-      clientService.addClient(clientData),
+    mutationFn: ({ clientData, groupId }: { clientData: any, groupId?: string }) => {
+      if (groupId && groupId !== 'none') {
+        return clientService.addClientWithGroup(clientData, groupId);
+      }
+      return clientService.addClient(clientData);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
-      toast({
-        title: "Cliente adicionado",
-        description: "Cliente adicionado com sucesso.",
-      });
+      if (newClientGroupId && newClientGroupId !== 'none') {
+        queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
+      }
+      toast.success("Cliente adicionado com sucesso.");
       setShowNewClientDialog(false);
       clearForm();
     },
     onError: (error: Error) => {
-      toast({
-        title: "Erro ao adicionar cliente",
-        description: error.message || "Ocorreu um erro ao adicionar o cliente.",
-        variant: "destructive",
-      });
+      toast.error(`Erro ao adicionar cliente: ${error.message}`);
     },
   });
+  
   
   const updateClientMutation = useMutation({
     mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => 
       clientService.updateClient(data.id, data.client),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
-      toast({
-        title: "Cliente atualizado",
-        description: "Cliente atualizado com sucesso.",
-      });
+      toast.success("Cliente atualizado com sucesso");
       setShowEditClientDialog(false);
       clearForm();
     },
     onError: (error: Error) => {
-      toast({
-        title: "Erro ao atualizar cliente",
-        description: error.message || "Ocorreu um erro ao atualizar o cliente.",
-        variant: "destructive",
-      });
+      toast.error(`Erro ao atualizar cliente: ${error.message || "Ocorreu um erro ao atualizar o cliente."}`);
     },
   });
   
@@ -161,19 +154,12 @@ export default function ClientList() {
     mutationFn: (id: number) => clientService.deleteClient(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
-      toast({
-        title: "Cliente excluído",
-        description: "Cliente excluído com sucesso.",
-      });
+      toast.success("Cliente excluído com sucesso");
       setShowDeleteClientDialog(false);
       clearForm();
     },
     onError: (error: Error) => {
-      toast({
-        title: "Erro ao excluir cliente",
-        description: error.message || "Ocorreu um erro ao excluir o cliente.",
-        variant: "destructive",
-      });
+      toast.error(`Erro ao excluir cliente: ${error.message || "Ocorreu um erro ao excluir o cliente."}`);
     },
   });
   
@@ -210,14 +196,16 @@ export default function ClientList() {
   const handleSubmitNew = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const clientData = { name, phone, email, status };
+    const clientData = { 
+      name, 
+      phone, 
+      status: 'Active'  // Simplificado para sempre 'Active'
+    };
     
-    // Adicionar account_id se selecionado
-    if (accountId) {
-      Object.assign(clientData, { account_id: accountId });
-    }
-    
-    addClientMutation.mutate(clientData);
+    addClientMutation.mutate({ 
+      clientData, 
+      groupId: newClientGroupId
+    });
   };
   
   const handleSubmitEdit = async (e: React.FormEvent) => {
@@ -252,6 +240,7 @@ export default function ClientList() {
     setEmail('');
     setStatus('Active');
     setAccountId('');
+    setNewClientGroupId('none');
     setSelectedClient(null);
   };
 
@@ -269,35 +258,24 @@ export default function ClientList() {
         client_name: client.name,
         client_phone: client.phone,
         user_id: userId,
-        account_id: client.account_id, // Incluir account_id do cliente
+        account_id: client.account_id,
         additional_data: {
           source: 'client_list',
           client_email: client.email,
           client_status: client.status,
           vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
-          account_id: client.account_id // Duplicar no additional_data para garantir
+          account_id: client.account_id
         }
       });
       
       if (result.success) {
-        toast({
-          title: "Ligação iniciada",
-          description: `Iniciando ligação para ${client.name} (${client.phone})`,
-        });
+        toast.success(`Iniciando ligação para ${client.name} (${client.phone})`);
       } else {
-        toast({
-          title: "Erro ao iniciar ligação", 
-          description: "Não foi possível iniciar a ligação. Tente novamente.",
-          variant: "destructive"
-        });
+        toast.error("Não foi possível iniciar a ligação. Tente novamente.");
       }
     } catch (error) {
       console.error('Erro ao iniciar ligação:', error);
-      toast({
-        title: "Erro", 
-        description: "Ocorreu um erro ao tentar iniciar a ligação.",
-        variant: "destructive"
-      });
+      toast.error("Ocorreu um erro ao tentar iniciar a ligação.");
     }
   };
 
@@ -513,20 +491,37 @@ export default function ClientList() {
             <DialogTitle>Adicionar Novo Cliente</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmitNew} className="space-y-4">
-            {/* ... keep existing code (form fields) */}
+            <div>
+              <Input 
+                placeholder="Nome" 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                required 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              <Input 
+                placeholder="Telefone" 
+                value={phone} 
+                onChange={(e) => setPhone(e.target.value)} 
+                required 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
             <div>
               <Select
-                value={accountId}
-                onValueChange={setAccountId}
+                value={newClientGroupId}
+                onValueChange={setNewClientGroupId}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione uma conta (opcional)" />
+                  <SelectValue placeholder="Selecione um grupo (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Sem conta</SelectItem>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.name}
+                  <SelectItem value="none">Sem grupo</SelectItem>
+                  {clientGroups?.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -534,7 +529,7 @@ export default function ClientList() {
             </div>
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
-                <Plus className="h-4 w-4 mr-2" />
+                <UserPlus className="h-4 w-4 mr-2" />
                 Adicionar
               </Button>
             </DialogFooter>

@@ -76,6 +76,46 @@ export const clientService = {
     return data;
   },
 
+  async addClientWithGroup(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>, groupId: string) {
+    try {
+      // Primeiro adiciona o cliente
+      const { data, error } = await supabase
+        .from('clients')
+        .insert(client)
+        .select();
+
+      if (error) {
+        throw new Error(`Erro ao adicionar cliente: ${error.message}`);
+      }
+      
+      if (!data || data.length === 0) {
+        throw new Error('Erro ao adicionar cliente: Nenhum dado retornado');
+      }
+      
+      const newClient = data[0];
+      
+      // Se um grupo foi especificado, adiciona o cliente ao grupo
+      if (groupId && groupId !== 'none') {
+        const { error: groupError } = await supabase
+          .from('client_group_members')
+          .insert({
+            client_id: newClient.id,
+            group_id: groupId
+          });
+          
+        if (groupError) {
+          console.error('Erro ao adicionar cliente ao grupo:', groupError);
+          // Não falha a operação principal se a associação com o grupo falhar
+        }
+      }
+
+      return newClient;
+    } catch (error) {
+      console.error('Erro em addClientWithGroup:', error);
+      throw error;
+    }
+  },
+
   // Atualizar um cliente existente
   async updateClient(id: number, client: Partial<Client>) {
     const { data, error } = await supabase
