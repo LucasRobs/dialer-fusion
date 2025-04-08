@@ -24,6 +24,7 @@ export interface WebhookPayload {
   client_name?: string;
   client_phone?: string;
   user_id?: string;
+  account_id?: string; // Added account_id for filtering clients by account
   additional_data?: Record<string, any>;
   provider?: string;
   call?: {
@@ -490,9 +491,42 @@ export const webhookService = {
     }
   },
 
+
+  async getClientsByAccount(accountId: string) {
+    try {
+      console.log(`Buscando clientes para a conta ${accountId}`);
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('account_id', accountId);
+        
+      if (error) {
+        console.error('Erro ao buscar clientes por conta:', error);
+        throw error;
+      }
+      
+      console.log(`Encontrados ${data?.length || 0} clientes para a conta ${accountId}`);
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao buscar clientes por conta:', error);
+      toast.error(`Erro ao buscar clientes: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      return [];
+    }
+  },
+
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
+      
+      // Adicionar account_id ao payload se fornecido
+      if (payload.account_id) {
+        if (!payload.additional_data) {
+          payload.additional_data = {};
+        }
+        payload.additional_data.account_id = payload.account_id;
+        console.log(`Filtrando chamadas para conta: ${payload.account_id}`);
+      }
       
       // Obtém assistentes diretamente da API da Vapi
       const vapiAssistants = await this.getAssistantsFromVapiApi();
@@ -589,7 +623,6 @@ export const webhookService = {
         }
       }
       
-      // Garantir que temos um objeto para additional_data
       if (!payload.additional_data) {
         payload.additional_data = {};
       }
@@ -722,9 +755,9 @@ export const webhookService = {
   /**
    * Fazer uma chamada para um cliente
    */
-  async makeCall(clientId: number, phoneNumber: string, campaignId: number): Promise<{ success: boolean, message?: string, data?: any }> {
+  async makeCall(clientId: number, phoneNumber: string, campaignId: number, accountId?: string): Promise<{ success: boolean, message?: string, data?: any }> {
     try {
-      console.log(`Iniciando chamada para cliente ${clientId} com número ${phoneNumber} na campanha ${campaignId}`);
+      console.log(`Iniciando chamada para cliente ${clientId} com número ${phoneNumber} na campanha ${campaignId}${accountId ? `, conta ${accountId}` : ''}`);
       
       // Obtém o assistente atual do localStorage
       let assistant = null;
@@ -743,6 +776,7 @@ export const webhookService = {
         campaign_id: campaignId,
         client_id: clientId,
         client_phone: phoneNumber,
+        account_id: accountId, // Incluir account_id se fornecido
         additional_data: {
           timestamp: new Date().toISOString(),
           client_version: CLIENT_VERSION,
@@ -760,7 +794,7 @@ export const webhookService = {
       const result = await this.triggerCallWebhook(payload);
       
       if (result.success) {
-        return { success: true, message: 'Chamada iniciada com sucesso', data: { clientId, phoneNumber, campaignId } };
+        return { success: true, message: 'Chamada iniciada com sucesso', data: { clientId, phoneNumber, campaignId, accountId } };
       } else {
         return { success: false, message: 'Falha ao iniciar chamada', data: null };
       }

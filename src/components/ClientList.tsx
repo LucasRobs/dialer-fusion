@@ -28,7 +28,8 @@ import {
   X,
   Filter,
   FileUp,
-  RefreshCw
+  RefreshCw,
+  Building
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -54,13 +55,37 @@ export default function ClientList() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('Active');
+  const [accountId, setAccountId] = useState('');
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Consulta de contas para o filtro de contas
+  const { 
+    data: accounts = [], 
+    isLoading: isLoadingAccounts 
+  } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from('accounts')
+          .select('*')
+          .order('name', { ascending: true });
+          
+        if (error) throw error;
+        return data || [];
+      } catch (error) {
+        console.error('Erro ao buscar contas:', error);
+        return [];
+      }
+    }
+  });
   
   const { 
     data: clientGroups = [], 
@@ -76,17 +101,22 @@ export default function ClientList() {
     error, 
     refetch 
   } = useQuery({
-    queryKey: ['clients', selectedGroupId],
-    queryFn: () => {
-      if (selectedGroupId) {
+    queryKey: ['clients', selectedGroupId, selectedAccountId],
+    queryFn: async () => {
+      if (selectedGroupId && selectedGroupId !== 'all-clients') {
         return clientService.getClientsByGroupId(selectedGroupId);
       }
+      
+      if (selectedAccountId && selectedAccountId !== 'all-accounts') {
+        return webhookService.getClientsByAccount(selectedAccountId);
+      }
+      
       return clientService.getClients();
     },
   });
   
   const addClientMutation = useMutation({
-    mutationFn: (clientData: { name: string; phone: string; email: string; status: string }) => 
+    mutationFn: (clientData: { name: string; phone: string; email: string; status: string; account_id?: string }) => 
       clientService.addClient(clientData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
@@ -107,7 +137,7 @@ export default function ClientList() {
   });
   
   const updateClientMutation = useMutation({
-    mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string } }) => 
+    mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => 
       clientService.updateClient(data.id, data.client),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
@@ -166,6 +196,7 @@ export default function ClientList() {
     setPhone(client.phone);
     setEmail(client.email || '');
     setStatus(client.status || 'Active');
+    setAccountId(client.account_id || '');
     setShowEditClientDialog(true);
   };
   
@@ -179,16 +210,30 @@ export default function ClientList() {
   const handleSubmitNew = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addClientMutation.mutate({ name, phone, email, status });
+    const clientData = { name, phone, email, status };
+    
+    // Adicionar account_id se selecionado
+    if (accountId) {
+      Object.assign(clientData, { account_id: accountId });
+    }
+    
+    addClientMutation.mutate(clientData);
   };
   
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (selectedClient) {
+      const clientData = { name, phone, email, status };
+      
+      // Adicionar account_id se selecionado
+      if (accountId) {
+        Object.assign(clientData, { account_id: accountId });
+      }
+      
       updateClientMutation.mutate({ 
         id: selectedClient.id, 
-        client: { name, phone, email, status } 
+        client: clientData
       });
     }
   };
@@ -206,6 +251,7 @@ export default function ClientList() {
     setPhone('');
     setEmail('');
     setStatus('Active');
+    setAccountId('');
     setSelectedClient(null);
   };
 
@@ -223,11 +269,13 @@ export default function ClientList() {
         client_name: client.name,
         client_phone: client.phone,
         user_id: userId,
+        account_id: client.account_id, // Incluir account_id do cliente
         additional_data: {
           source: 'client_list',
           client_email: client.email,
           client_status: client.status,
-          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a"
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
+          account_id: client.account_id // Duplicar no additional_data para garantir
         }
       });
       
@@ -260,6 +308,24 @@ export default function ClientList() {
 
   const handleGroupFilterChange = (value: string) => {
     setSelectedGroupId(value);
+    // Limpar o filtro de conta se um grupo for selecionado
+    if (value && value !== 'all-clients') {
+      setSelectedAccountId('');
+    }
+  };
+
+  const handleAccountFilterChange = (value: string) => {
+    setSelectedAccountId(value);
+    // Limpar o filtro de grupo se uma conta for selecionada
+    if (value && value !== 'all-accounts') {
+      setSelectedGroupId('');
+    }
+  };
+
+  // Encontrar o nome da conta para exibição
+  const getAccountName = (accountId: string) => {
+    const account = accounts.find(acc => acc.id === accountId);
+    return account ? account.name : accountId;
   };
 
   return (
@@ -301,10 +367,32 @@ export default function ClientList() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all-clients">Todos os clientes</SelectItem>
+              <SelectItem value="">Todos os clientes</SelectItem>
               {clientGroups.map((group) => (
                 <SelectItem key={group.id} value={group.id}>
                   {group.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="w-full md:w-64">
+          <Select
+            value={selectedAccountId}
+            onValueChange={handleAccountFilterChange}
+          >
+            <SelectTrigger className="w-full">
+              <div className="flex items-center">
+                <Building className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Filtrar por conta" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todas as contas</SelectItem>
+              {accounts.map((account) => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -337,10 +425,12 @@ export default function ClientList() {
           <p className="text-lg text-muted-foreground mb-4">
             {selectedGroupId 
               ? "Este grupo não possui clientes" 
-              : "Nenhum cliente encontrado"
+              : selectedAccountId
+                ? "Esta conta não possui clientes"
+                : "Nenhum cliente encontrado"
             }
           </p>
-          {!selectedGroupId && (
+          {!selectedGroupId && !selectedAccountId && (
             <Button onClick={handleNew}>
               <Plus className="h-4 w-4 mr-2" />
               Adicionar seu primeiro cliente
@@ -359,6 +449,7 @@ export default function ClientList() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Conta</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -369,6 +460,7 @@ export default function ClientList() {
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>{client.phone}</TableCell>
                   <TableCell>{client.email || '-'}</TableCell>
+                  <TableCell>{client.account_id ? getAccountName(client.account_id) : '-'}</TableCell>
                   <TableCell>
                     <Badge variant={client.status === 'Active' ? 'default' : 'secondary'}>
                       {client.status}
@@ -458,6 +550,24 @@ export default function ClientList() {
                 <option value="Inactive">Inativo</option>
               </select>
             </div>
+            <div>
+              <Select
+                value={accountId}
+                onValueChange={setAccountId}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione uma conta (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sem conta</SelectItem>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -514,6 +624,24 @@ export default function ClientList() {
                 <option value="Active">Ativo</option>
                 <option value="Inactive">Inativo</option>
               </select>
+            </div>
+            <div>
+              <Select
+                value={accountId}
+                onValueChange={setAccountId}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione uma conta (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sem conta</SelectItem>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>

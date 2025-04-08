@@ -6,6 +6,7 @@ export type Client = {
   phone: string;
   email: string;
   status: string;
+  account_id?: string;
   created_at?: string;
   updated_at?: string;
   user_id?: string;
@@ -23,6 +24,26 @@ export const clientService = {
       throw new Error(`Erro ao buscar clientes: ${error.message}`);
     }
 
+    return data || [];
+  },
+
+  // Buscar todos os clientes de uma conta específica
+  async getClientsByAccount(accountId: string) {
+    if (!accountId) {
+      throw new Error('ID da conta é obrigatório');
+    }
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('account_id', accountId);
+
+    if (error) {
+      console.error(`Error fetching clients for account ${accountId}:`, error);
+      throw new Error(`Erro ao buscar clientes da conta: ${error.message}`);
+    }
+
+    console.log(`Encontrados ${data?.length || 0} clientes para a conta ${accountId}`);
     return data || [];
   },
 
