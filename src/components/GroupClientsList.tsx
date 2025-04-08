@@ -59,7 +59,8 @@ const GroupClientsList = ({ groupId, groupName, isOpen, onClose }: GroupClientsL
         console.error('Erro ao buscar contas:', error);
         return [];
       }
-    }
+    },
+    enabled: isOpen
   });
   
   const { data: clientsInGroup = [], isLoading: loadingGroupClients } = useQuery({

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Table, 
   TableHeader, 
@@ -108,7 +108,7 @@ export default function ClientList() {
       }
       
       if (selectedAccountId && selectedAccountId !== 'all-accounts') {
-        return webhookService.getClientsByAccount(selectedAccountId);
+        return clientService.getClientsByAccount(selectedAccountId);
       }
       
       return clientService.getClients();
@@ -324,6 +324,7 @@ export default function ClientList() {
 
   // Encontrar o nome da conta para exibição
   const getAccountName = (accountId: string) => {
+    if (!accountId) return '-';
     const account = accounts.find(acc => acc.id === accountId);
     return account ? account.name : accountId;
   };
@@ -367,7 +368,7 @@ export default function ClientList() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos os clientes</SelectItem>
+              <SelectItem value="all-clients">Todos os clientes</SelectItem>
               {clientGroups.map((group) => (
                 <SelectItem key={group.id} value={group.id}>
                   {group.name}
@@ -389,7 +390,7 @@ export default function ClientList() {
               </div>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todas as contas</SelectItem>
+              <SelectItem value="all-accounts">Todas as contas</SelectItem>
               {accounts.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
                   {account.name}
@@ -512,44 +513,7 @@ export default function ClientList() {
             <DialogTitle>Adicionar Novo Cliente</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmitNew} className="space-y-4">
-            <div>
-              <Input 
-                placeholder="Nome" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <Input 
-                placeholder="Telefone" 
-                value={phone} 
-                onChange={(e) => setPhone(e.target.value)} 
-                required 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <Input 
-                placeholder="Email" 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <select 
-                className="w-full border rounded-md py-2 px-3"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <option value="Active">Ativo</option>
-                <option value="Inactive">Inativo</option>
-              </select>
-            </div>
+            {/* ... keep existing code (form fields) */}
             <div>
               <Select
                 value={accountId}
@@ -559,7 +523,7 @@ export default function ClientList() {
                   <SelectValue placeholder="Selecione uma conta (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sem conta</SelectItem>
+                  <SelectItem value="none">Sem conta</SelectItem>
                   {accounts.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
                       {account.name}
@@ -634,7 +598,7 @@ export default function ClientList() {
                   <SelectValue placeholder="Selecione uma conta (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sem conta</SelectItem>
+                  <SelectItem value="none">Sem conta</SelectItem>
                   {accounts.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
                       {account.name}
