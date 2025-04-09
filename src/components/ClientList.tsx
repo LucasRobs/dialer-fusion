@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Table, 
@@ -510,27 +511,27 @@ export default function ClientList() {
               />
             </div>
             <div>
-  <Select
-    value={newClientGroupId}
-    onValueChange={setNewClientGroupId}
-  >
-    <SelectTrigger className="w-full">
-      <div className="flex items-center">
-        {newClientGroupId === 'none' 
-          ? 'Sem grupo' 
-          : clientGroups?.find(group => group.id === newClientGroupId)?.name || 'Selecione um grupo (opcional)'}
-      </div>
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="none">Sem grupo</SelectItem>
-      {clientGroups?.map((group) => (
-        <SelectItem key={group.id} value={group.id}>
-          {group.name}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
+              <Select
+                value={newClientGroupId}
+                onValueChange={setNewClientGroupId}
+              >
+                <SelectTrigger className="w-full">
+                  <div className="flex items-center">
+                    {newClientGroupId === 'none' 
+                      ? 'Sem grupo' 
+                      : clientGroups?.find(group => group.id === newClientGroupId)?.name || 'Selecione um grupo (opcional)'}
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem grupo</SelectItem>
+                  {clientGroups?.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <UserPlus className="h-4 w-4 mr-2" />

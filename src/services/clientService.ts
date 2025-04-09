@@ -76,6 +76,7 @@ export const clientService = {
     return data;
   },
 
+  // Adicionar um cliente e associá-lo a um grupo
   async addClientWithGroup(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>, groupId: string) {
     try {
       // Primeiro adiciona o cliente
