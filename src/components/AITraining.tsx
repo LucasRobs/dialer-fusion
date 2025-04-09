@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -140,7 +139,7 @@ const AITraining = () => {
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
       console.log(`Sending delete request to webhook for assistant ID: ${assistantToDelete.assistant_id || assistantToDelete.id}`);
       
-      // Using POST with proper payload structure including assistant_id
+      // Using POST with the exact payload structure as shown in the n8n webhook
       await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -148,7 +147,7 @@ const AITraining = () => {
         },
         mode: 'no-cors', // Add no-cors mode to bypass CORS restrictions
         body: JSON.stringify({
-          action: 'delete_assistant',
+          action: "delete_assistant",
           assistant_id: assistantToDelete.assistant_id || assistantToDelete.id,
           additional_data: {
             assistant_name: assistantToDelete.name,
