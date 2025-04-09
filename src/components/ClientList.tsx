@@ -514,10 +514,7 @@ export default function ClientList() {
                 value={newClientGroupId}
                 onValueChange={setNewClientGroupId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione um grupo (opcional)">
-                    {newClientGroupId === 'none' ? 'Sem grupo' : 
-                      clientGroups?.find(g => g.id === newClientGroupId)?.name || 'Selecione um grupo'}
-                  </SelectValue>
+                  <SelectValue placeholder="Selecione um grupo (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem grupo</SelectItem>
