@@ -631,7 +631,7 @@ export default function ClientList() {
               <p className="text-red-500 text-sm mt-1">{phoneError}</p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              Formato: DDD + número (ex: 85997484924)
+              Formato: DDD + número (ex: 85912345678)
             </p>
           </div>
           <div>
