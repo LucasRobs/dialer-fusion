@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -167,36 +166,93 @@ const AITraining = () => {
     }
   };
 
-  // Find the Vapi assistant ID that matches our local assistant
   const findVapiAssistantId = (localAssistantId: string): string | null => {
-    // First, try to find the assistant in vapiAssistants by matching metadata.supabase_id
-    const matchByMetadata = vapiAssistants.find(va => 
+    // First priority: match by the exact supabase_id in metadata which is unique
+    const matchByExactMetadata = vapiAssistants.find(va => 
       va.metadata?.supabase_id === localAssistantId
     );
     
-    if (matchByMetadata) {
-      console.log(`Found Vapi assistant by metadata.supabase_id: ${matchByMetadata.id}`);
-      return matchByMetadata.id;
+    if (matchByExactMetadata) {
+      console.log(`Found Vapi assistant by exact metadata.supabase_id match: ${matchByExactMetadata.id}`);
+      return matchByExactMetadata.id;
     }
     
-    // Then, try to match by assistant_id
+    // Second priority: match by user_id in metadata and created timestamp if available
     const localAssistant = assistants?.find(a => a.id === localAssistantId);
-    if (localAssistant?.assistant_id) {
-      const matchById = vapiAssistants.find(va => va.id === localAssistant.assistant_id);
-      if (matchById) {
-        console.log(`Found Vapi assistant by assistant_id: ${matchById.id}`);
-        return matchById.id;
+    if (localAssistant) {
+      // Try to match by user_id AND name - this is more specific than just name
+      const matchByUserAndName = vapiAssistants.find(va => 
+        va.metadata?.user_id === user?.id && 
+        va.name === localAssistant.name
+      );
+      
+      if (matchByUserAndName) {
+        console.log(`Found Vapi assistant by user_id and name match: ${matchByUserAndName.id}`);
+        return matchByUserAndName.id;
+      }
+      
+      // Try to match by creation time proximity if we have timestamps
+      if (localAssistant.created_at) {
+        const localTimestamp = new Date(localAssistant.created_at).getTime();
+        
+        // Find the assistant with the closest creation timestamp
+        let closestAssistant = null;
+        let smallestTimeDiff = Infinity;
+        
+        vapiAssistants.forEach(va => {
+          if (va.name === localAssistant.name && va.metadata?.created_at) {
+            const vapiTimestamp = new Date(va.metadata.created_at).getTime();
+            const timeDiff = Math.abs(vapiTimestamp - localTimestamp);
+            
+            if (timeDiff < smallestTimeDiff) {
+              smallestTimeDiff = timeDiff;
+              closestAssistant = va;
+            }
+          }
+        });
+        
+        if (closestAssistant && smallestTimeDiff < 86400000) { // Within 24 hours
+          console.log(`Found Vapi assistant by name and closest creation time: ${closestAssistant.id}`);
+          return closestAssistant.id;
+        }
+      }
+      
+      // If we have an assistant_id stored, try that
+      if (localAssistant.assistant_id) {
+        const matchById = vapiAssistants.find(va => va.id === localAssistant.assistant_id);
+        if (matchById) {
+          console.log(`Found Vapi assistant by direct assistant_id match: ${matchById.id}`);
+          return matchById.id;
+        }
       }
     }
     
-    // Try to match by name as last resort
+    // Lower priority: Try to match by just the name, but only if we have few candidates
     if (localAssistant?.name) {
-      const matchByName = vapiAssistants.find(va => 
+      const nameMatches = vapiAssistants.filter(va => 
         va.name.toLowerCase() === localAssistant.name.toLowerCase()
       );
-      if (matchByName) {
-        console.log(`Found Vapi assistant by name: ${matchByName.id}`);
-        return matchByName.id;
+      
+      // If there's just one match by name, we can use it
+      if (nameMatches.length === 1) {
+        console.log(`Found single Vapi assistant by name: ${nameMatches[0].id}`);
+        return nameMatches[0].id;
+      } 
+      // If there are multiple matches, try to narrow down by user_id if available
+      else if (nameMatches.length > 1) {
+        console.log(`Found ${nameMatches.length} assistants with name "${localAssistant.name}"`);
+        
+        // Try to find the one that belongs to this user first
+        const userMatch = nameMatches.find(va => va.metadata?.user_id === user?.id);
+        if (userMatch) {
+          console.log(`Selected assistant by user_id among name matches: ${userMatch.id}`);
+          return userMatch.id;
+        }
+        
+        // If still no unique match, let the user know about the ambiguity
+        toast.error(`Múltiplos assistentes com o nome "${localAssistant.name}" encontrados. A exclusão pode não ser precisa.`);
+        console.warn(`Multiple assistants with name "${localAssistant.name}" found. Using the first one.`);
+        return nameMatches[0].id;
       }
     }
     
@@ -209,7 +265,7 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
-      // Get the Vapi assistant ID from our mapping function
+      // Get the Vapi assistant ID from our enhanced mapping function
       const vapiAssistantId = findVapiAssistantId(assistantToDelete.id);
       
       if (!vapiAssistantId) {
