@@ -225,70 +225,81 @@ export default function ClientList() {
     setShowDeleteClientDialog(true);
   };
 
-    // Validate phone field
-    const validatePhone = (value: string): boolean => {
-      try {
-        formatPhoneNumber(value);
-        setPhoneError(null);
-        return true;
-      } catch (error) {
-        if (error instanceof Error) {
-          setPhoneError(error.message);
-        } else {
-          setPhoneError('Número de telefone inválido');
-        }
+  // Validate phone field - Melhorando a função de validação
+  const validatePhone = (value: string): boolean => {
+    try {
+      const formattedPhone = formatPhoneNumber(value);
+      
+      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+        setPhoneError("Número de telefone inválido. Por favor, digite um número com DDD (ex: 85997484924)");
         return false;
       }
-    };
+      
+      setPhoneError(null);
+      return true;
+    } catch (error) {
+      if (error instanceof Error) {
+        setPhoneError(error.message);
+      } else {
+        setPhoneError('Número de telefone inválido');
+      }
+      return false;
+    }
+  };
   
-    const handleSubmitNew = async (e: React.FormEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleSubmitNew = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Validar campos obrigatórios
+    if (!name.trim()) {
+      toast.error("O nome do cliente é obrigatório");
+      return;
+    }
+    
+    if (!phone.trim()) {
+      toast.error("O telefone do cliente é obrigatório");
+      return;
+    }
+    
+    try {
+      // Format phone number without validation first to see the value
+      const formattedPhone = formatPhoneNumber(phone);
+      console.log("Número formatado para validação:", formattedPhone);
       
-      // Validar campos obrigatórios
-      if (!name.trim()) {
-        toast.error("O nome do cliente é obrigatório");
+      // Explicitly validate using our validator
+      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+        console.log("Número considerado inválido:", formattedPhone);
+        toast.error("Número de telefone inválido. Por favor, digite um número com DDD (ex: 85997484924)");
         return;
       }
       
-      if (!phone.trim()) {
-        toast.error("O telefone do cliente é obrigatório");
-        return;
+      console.log("Número considerado válido:", formattedPhone);
+      
+      const clientData = { 
+        name, 
+        phone: formattedPhone, 
+        status: 'Active'  // Simplificado para sempre 'Active'
+      };
+      
+      if (email) {
+        Object.assign(clientData, { email });
       }
       
-      try {
-        // Format and validate phone number
-        const formattedPhone = formatPhoneNumber(phone);
-        
-        if (!isValidBrazilianPhoneNumber(formattedPhone)) {
-          toast.error("Número de telefone inválido. Por favor, digite um número válido com DDD.");
-          return;
-        }
-        
-        const clientData = { 
-          name, 
-          phone: formattedPhone, 
-          status: 'Active'  // Simplificado para sempre 'Active'
-        };
-        
-        if (email) {
-          Object.assign(clientData, { email });
-        }
-        
-        if (accountId && accountId !== 'none') {
-          Object.assign(clientData, { account_id: accountId });
-        }
-        
-        console.log("Enviando dados do cliente:", clientData);
-        addClientMutation.mutate({ 
-          clientData, 
-          groupId: newClientGroupId !== 'none' ? newClientGroupId : undefined
-        });
-      } catch (error) {
-        console.error("Erro ao enviar dados:", error);
-        toast.error(`Erro ao adicionar cliente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      if (accountId && accountId !== 'none') {
+        Object.assign(clientData, { account_id: accountId });
       }
-    };
+      
+      console.log("Enviando dados do cliente:", clientData);
+      addClientMutation.mutate({ 
+        clientData, 
+        groupId: newClientGroupId !== 'none' ? newClientGroupId : undefined
+      });
+    } catch (error) {
+      console.error("Erro ao enviar dados:", error);
+      toast.error(`Erro ao adicionar cliente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  };
 
   const handleSubmitEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -308,11 +319,16 @@ export default function ClientList() {
     try {
       // Format and validate phone number
       const formattedPhone = formatPhoneNumber(phone);
+      console.log("Número formatado para edição:", formattedPhone);
       
+      // Explicitly validate
       if (!isValidBrazilianPhoneNumber(formattedPhone)) {
-        toast.error("Número de telefone inválido. Por favor, digite um número válido com DDD.");
+        console.log("Número considerado inválido na edição:", formattedPhone);
+        toast.error("Número de telefone inválido. Por favor, digite um número com DDD (ex: 85997484924)");
         return;
       }
+      
+      console.log("Número considerado válido na edição:", formattedPhone);
       
       if (selectedClient) {
         const clientData: any = { 
