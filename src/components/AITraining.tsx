@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -274,8 +275,24 @@ const AITraining = () => {
     try {
       console.log(`Starting deletion process for assistant: ${assistantToDelete.id}, name: ${assistantToDelete.name}`);
       
-      // Get the Vapi assistant ID from our enhanced mapping function
-      const vapiAssistantId = findVapiAssistantId(assistantToDelete.id);
+      // Buscar o assistente no banco local para obter todas as informações disponíveis
+      const { data: assistant, error: fetchError } = await supabase
+        .from('assistants')
+        .select('*')
+        .eq('id', assistantToDelete.id)
+        .single();
+      
+      if (fetchError) {
+        console.error('Erro ao buscar detalhes do assistente:', fetchError);
+        toast.error('Erro ao buscar detalhes do assistente');
+        setIsDeleting(false);
+        return;
+      }
+      
+      // Usar o assistantService para encontrar o Vapi ID de forma mais robusta
+      const vapiAssistantId = findVapiAssistantId(
+        assistantToDelete.id
+      );
       
       if (!vapiAssistantId) {
         console.error(`Could not find Vapi assistant ID for: ${assistantToDelete.id}`);
@@ -355,7 +372,6 @@ const AITraining = () => {
       setAssistantToDelete(null);
     }
   };
-
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
