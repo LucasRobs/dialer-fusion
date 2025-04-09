@@ -140,7 +140,7 @@ const AITraining = () => {
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
       console.log(`Sending delete request to webhook for assistant ID: ${assistantToDelete.id}`);
       
-      // Using no-cors mode to bypass CORS restrictions
+      // Using POST with no-cors mode and properly formatted JSON body
       await fetch(webhookUrl, {
         method: 'POST',
         headers: {
