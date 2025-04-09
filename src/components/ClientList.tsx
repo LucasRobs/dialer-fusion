@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Table, 
   TableHeader, 
@@ -82,6 +81,7 @@ export default function ClientList() {
           .order('name', { ascending: true });
           
         if (error) throw error;
+        console.log('Contas carregadas:', data?.length || 0);
         return data || [];
       } catch (error) {
         console.error('Erro ao buscar contas:', error);
@@ -106,14 +106,19 @@ export default function ClientList() {
   } = useQuery({
     queryKey: ['clients', selectedGroupId, selectedAccountId],
     queryFn: async () => {
+      console.log('Buscando clientes com filtros - Grupo:', selectedGroupId, 'Conta:', selectedAccountId);
+      
       if (selectedGroupId && selectedGroupId !== 'all-clients') {
+        console.log('Buscando por grupo:', selectedGroupId);
         return clientService.getClientsByGroupId(selectedGroupId);
       }
       
       if (selectedAccountId && selectedAccountId !== 'all-accounts') {
+        console.log('Buscando por conta:', selectedAccountId);
         return clientService.getClientsByAccount(selectedAccountId);
       }
       
+      console.log('Buscando todos os clientes');
       return clientService.getClients();
     },
   });
@@ -473,6 +478,7 @@ export default function ClientList() {
   };
 
   const handleAccountFilterChange = (value: string) => {
+    console.log('Filtro de conta alterado para:', value);
     setSelectedAccountId(value);
     // Limpar o filtro de grupo se uma conta for selecionada
     if (value && value !== 'all-accounts') {

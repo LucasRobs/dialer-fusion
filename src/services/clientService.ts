@@ -16,9 +16,13 @@ export type Client = {
 export const clientService = {
   // Buscar todos os clientes do usuário atual
   async getClients() {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
     const { data, error } = await supabase
       .from('clients')
-      .select('*');
+      .select('*')
+      .eq('user_id', userId);
 
     if (error) {
       console.error("Error fetching clients:", error);
@@ -30,6 +34,8 @@ export const clientService = {
 
   // Buscar todos os clientes de uma conta específica
   async getClientsByAccount(accountId: string) {
+    console.log(`Buscando clientes para a conta: ${accountId}`);
+    
     if (!accountId) {
       throw new Error('ID da conta é obrigatório');
     }
