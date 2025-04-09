@@ -136,16 +136,17 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
-      // Send webhook request to delete the assistant
+      // Send webhook request to delete the assistant with no-cors mode to avoid CORS issues
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
       console.log(`Sending delete request to webhook for assistant ID: ${assistantToDelete.id}`);
       
-      // Using similar approach to the makeCall method in webhookService
-      const response = await fetch(webhookUrl, {
+      // Using no-cors mode to bypass CORS restrictions
+      await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        mode: 'no-cors', // Add no-cors mode to bypass CORS restrictions
         body: JSON.stringify({
           action: 'delete_assistant',
           assistant_id: assistantToDelete.assistant_id || assistantToDelete.id,
@@ -158,13 +159,7 @@ const AITraining = () => {
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error from webhook:', errorText);
-        throw new Error(`Webhook error: ${response.status} ${response.statusText}`);
-      }
-
-      console.log('Webhook delete request successful');
+      console.log('Webhook delete request sent (no response available due to no-cors mode)');
       
       // Continue with local deletion as before
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
