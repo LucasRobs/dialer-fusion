@@ -142,7 +142,7 @@ const AITraining = () => {
       
       // Using no-cors mode to bypass CORS restrictions
       await fetch(webhookUrl, {
-        method: 'DELETE',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
