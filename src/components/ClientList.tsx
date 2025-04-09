@@ -134,6 +134,12 @@ export default function ClientList() {
       toast.error(`Erro ao adicionar cliente: ${error.message}`);
     },
   });
+
+  const getGroupName = (groupId: string) => {
+    if (groupId === 'none') return 'Sem grupo';
+    const group = clientGroups.find(g => g.id === groupId);
+    return group ? group.name : 'Selecione um grupo (opcional)';
+  };
   
   
   const updateClientMutation = useMutation({
@@ -516,9 +522,7 @@ export default function ClientList() {
   >
     <SelectTrigger className="w-full">
       <div className="flex items-center">
-        {newClientGroupId === 'none' 
-          ? 'Sem grupo' 
-          : clientGroups?.find(group => group.id === newClientGroupId)?.name || 'Selecione um grupo (opcional)'}
+      {getGroupName(newClientGroupId)}
       </div>
     </SelectTrigger>
     <SelectContent>
