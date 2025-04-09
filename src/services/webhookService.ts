@@ -1,8 +1,36 @@
-
 import { supabase, VOICE_SETTINGS } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import assistantService from './assistantService';
+
+export interface WebhookPayload {
+  action: string;
+  campaign_id?: number;
+  client_id?: number;
+  client_name?: string;
+  client_phone?: string;
+  account_id?: string;
+  provider?: string;
+  call?: {
+    model?: string;
+    voice?: string;
+    language?: string;
+  };
+  additional_data?: {
+    source?: string;
+    user_interface?: string;
+    assistant_name?: string;
+    assistant_id?: string | null;
+    vapi_assistant_id?: string;
+    caller_id?: string;
+    api_key?: string;
+    timestamp?: string;
+    client_version?: string;
+    account_id?: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
 
 export interface VapiAssistant {
   id: string;
@@ -22,19 +50,7 @@ export interface VapiAssistant {
   };
 }
 
-export interface VapiAssistant {
-  id: string;
-  name: string;
-  assistant_id: string;
-  user_id: string;
-  status?: string;
-  created_at?: string;
-  system_prompt?: string;
-  first_message?: string;
-  model?: string;
-  voice?: string;
-  published?: boolean;
-}
+
 
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
