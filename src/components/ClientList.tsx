@@ -512,10 +512,12 @@ export default function ClientList() {
             <div>
               <Select
                 value={newClientGroupId}
-                onValueChange={setNewClientGroupId}
-              >
+                onValueChange={setNewClientGroupId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione um grupo (opcional)" />
+                  <SelectValue placeholder="Selecione um grupo (opcional)">
+                    {newClientGroupId === 'none' ? 'Sem grupo' : 
+                      clientGroups?.find(g => g.id === newClientGroupId)?.name || 'Selecione um grupo'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem grupo</SelectItem>
@@ -587,10 +589,12 @@ export default function ClientList() {
             <div>
               <Select
                 value={accountId}
-                onValueChange={setAccountId}
-              >
+                onValueChange={setAccountId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione uma conta (opcional)" />
+                  <SelectValue placeholder="Selecione uma conta (opcional)">
+                    {accountId === 'none' ? 'Sem conta' : 
+                      accounts?.find(a => a.id === accountId)?.name || 'Selecione uma conta'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem conta</SelectItem>
@@ -601,7 +605,7 @@ export default function ClientList() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div>            
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Pencil className="h-4 w-4 mr-2" />
