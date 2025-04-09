@@ -30,7 +30,8 @@ import {
   FileUp,
   RefreshCw,
   Building,
-  UserPlus
+  UserPlus,
+  Bot
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientService } from '@/services/clientService';
@@ -46,12 +47,14 @@ import {
 } from '@/components/ui/select';
 import { clientGroupService } from '@/services/clientGroupService';
 import ImportClientsSheet from './ImportClientsSheet';
+import SelectAssistantDialog from './SelectAssistantDialog';
 
 export default function ClientList() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
   const [showEditClientDialog, setShowEditClientDialog] = useState(false);
   const [showDeleteClientDialog, setShowDeleteClientDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showAssistantDialog, setShowAssistantDialog] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
@@ -64,7 +67,6 @@ export default function ClientList() {
   const [newClientGroupId, setNewClientGroupId] = useState<string>('none');
   
   const queryClient = useQueryClient();
-  
   // Consulta de contas para o filtro de contas
   const { 
     data: accounts = [], 
@@ -167,7 +169,7 @@ export default function ClientList() {
   const filteredClients = clients?.filter(client =>
     client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.phone.includes(searchTerm) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
   
   const handleNew = (e: React.MouseEvent) => {
@@ -243,6 +245,48 @@ export default function ClientList() {
     setAccountId('');
     setNewClientGroupId('none');
     setSelectedClient(null);
+  };
+
+  const handleCallWithAssistant = (client: any) => {
+    setSelectedClient(client);
+    setShowAssistantDialog(true);
+  };
+
+  const handleMakeCall = async (assistantId: string, assistantName: string) => {
+    if (!selectedClient) return;
+    
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
+      
+      const result = await webhookService.triggerCallWebhook({
+        action: 'start_call',
+        campaign_id: 0,
+        client_id: selectedClient.id,
+        client_name: selectedClient.name,
+        client_phone: selectedClient.phone,
+        user_id: userId,
+        account_id: selectedClient.account_id, // Incluir account_id do cliente
+        additional_data: {
+          source: 'client_list',
+          client_email: selectedClient.email,
+          client_status: selectedClient.status,
+          vapi_caller_id: "97141b30-c5bc-4234-babb-d38b79452e2a",
+          account_id: selectedClient.account_id, // Duplicar no additional_data para garantir
+          vapi_assistant_id: assistantId, // ID do assistente selecionado
+          assistant_name: assistantName // Nome do assistente selecionado
+        }
+      });
+      
+      if (result.success) {
+        toast(`Iniciando ligação para ${selectedClient.name} usando o assistente "${assistantName}"`);
+      } else {
+        toast("Não foi possível iniciar a ligação. Tente novamente.");
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar ligação:', error);
+      toast("Ocorreu um erro ao tentar iniciar a ligação.");
+    }
   };
 
   const handleCall = async (e: React.MouseEvent, client: any) => {
@@ -452,10 +496,12 @@ export default function ClientList() {
                       <Button 
                         size="sm" 
                         variant="outline"
-                        onClick={(e) => handleCall(e, client)}
+                        onClick={() => handleCallWithAssistant(client)}
                         title="Ligar para cliente"
+                        className="flex items-center gap-1"
                       >
                         <Phone className="h-4 w-4" />
+                        <Bot className="h-3 w-3" />
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -650,6 +696,13 @@ export default function ClientList() {
       <ImportClientsSheet 
         isOpen={showImportDialog}
         onClose={() => setShowImportDialog(false)}
+      />
+
+        <SelectAssistantDialog
+        isOpen={showAssistantDialog}
+        onClose={() => setShowAssistantDialog(false)}
+        onSelect={handleMakeCall}
+        client={selectedClient}
       />
     </div>
   );
