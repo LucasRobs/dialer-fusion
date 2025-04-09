@@ -30,8 +30,13 @@ const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssi
   // Fetch current user ID
   useEffect(() => {
     const fetchUserId = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUserId(data?.user?.id || null);
+      try {
+        const { data } = await supabase.auth.getUser();
+        console.log("Usuário atual:", data?.user);
+        setUserId(data?.user?.id || null);
+      } catch (error) {
+        console.error("Erro ao buscar ID do usuário:", error);
+      }
     };
     
     if (isOpen) {
@@ -39,6 +44,7 @@ const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssi
     }
   }, [isOpen]);
   
+  // Busca assistentes quando o diálogo é aberto e o ID do usuário está disponível
   const { 
     data: assistants = [], 
     isLoading, 
@@ -48,69 +54,107 @@ const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssi
     queryKey: ['assistants', userId],
     queryFn: async () => {
       try {
+        console.log("Buscando assistentes para usuário:", userId);
         if (!userId) return [];
         
-        // Buscar assistentes da Vapi API filtrados pelo user_id
+        // Buscar assistentes diretamente da Vapi API
         const vapiAssistants = await webhookService.getAssistantsFromVapiApi();
+        console.log("Assistentes obtidos da Vapi API:", vapiAssistants);
         
         // Filtrar apenas assistentes do usuário atual
         const userAssistants = vapiAssistants.filter(assistant => 
           assistant.metadata?.user_id === userId
         );
         
+        console.log("Assistentes filtrados para o usuário:", userAssistants);
+        
         if (userAssistants && userAssistants.length > 0) {
-          console.log(`Encontrados ${userAssistants.length} assistentes para o usuário ${userId}`);
           return userAssistants;
         }
         
-        // Fallback para assistentes locais se necessário
-        return [];
+        // Se não encontrar na API, buscar localmente como fallback
+        const localAssistants = await webhookService.getLocalAssistants(userId);
+        console.log("Assistentes locais:", localAssistants);
+        return localAssistants;
       } catch (error) {
         console.error('Erro ao buscar assistentes:', error);
-        return [];
+        // Tentar buscar localmente em caso de erro na API
+        try {
+          const localAssistants = await webhookService.getLocalAssistants(userId || '');
+          return localAssistants;
+        } catch (err) {
+          console.error('Erro ao buscar assistentes localmente:', err);
+          return [];
+        }
       }
     },
     enabled: isOpen && userId !== null,
   });
 
-  // Usar o assistente do localStorage como valor padrão
+  // Inicializar assistente selecionado
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && assistants.length > 0) {
       try {
+        // Tentar obter do localStorage primeiro
         const storedAssistant = localStorage.getItem('selected_assistant');
         if (storedAssistant) {
           const assistant = JSON.parse(storedAssistant);
           if (assistant && assistant.id) {
-            setSelectedAssistantId(assistant.id);
+            // Verificar se o assistente armazenado existe na lista atual
+            const exists = assistants.some(a => a.id === assistant.id);
+            if (exists) {
+              console.log("Usando assistente do localStorage:", assistant.id);
+              setSelectedAssistantId(assistant.id);
+              return;
+            }
           }
-        } else if (assistants.length > 0) {
-          // Se não houver assistente selecionado no localStorage, use o primeiro da lista
+        }
+        
+        // Se não encontrar no localStorage ou se não for válido, usar o primeiro da lista
+        console.log("Usando primeiro assistente da lista:", assistants[0].id);
+        setSelectedAssistantId(assistants[0].id);
+      } catch (e) {
+        console.error('Erro ao inicializar assistente:', e);
+        if (assistants.length > 0) {
           setSelectedAssistantId(assistants[0].id);
         }
-      } catch (e) {
-        console.error('Erro ao carregar assistente do localStorage:', e);
       }
     }
   }, [isOpen, assistants]);
 
   const handleSelect = () => {
     if (!selectedAssistantId) {
-      toast("Por favor, selecione um assistente virtual");
+      toast.error("Por favor, selecione um assistente virtual");
       return;
     }
     
     const assistant = assistants.find(a => a.id === selectedAssistantId);
-    const assistantName = assistant ? assistant.name : "Assistente";
+    if (!assistant) {
+      toast.error("Assistente selecionado não encontrado");
+      return;
+    }
+    
+    const assistantName = assistant.name || "Assistente";
     
     // Salvar o assistente selecionado no localStorage
+    console.log("Salvando assistente no localStorage:", {id: selectedAssistantId, name: assistantName});
     localStorage.setItem('selected_assistant', JSON.stringify({
       id: selectedAssistantId,
       name: assistantName,
     }));
     
+    console.log("Chamando onSelect com:", selectedAssistantId, assistantName);
     onSelect(selectedAssistantId, assistantName);
     onClose();
   };
+
+  console.log("Estado atual do componente:", {
+    isOpen,
+    assistantsCount: assistants.length,
+    selectedAssistantId,
+    isLoading,
+    error: error ? "Erro ao carregar" : null
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>

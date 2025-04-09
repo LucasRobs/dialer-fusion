@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Table, 
@@ -244,30 +245,67 @@ export default function ClientList() {
       e.preventDefault();
       e.stopPropagation();
       
-      // Format and validate phone number
-      const formattedPhone = formatPhoneNumber(phone);
-      
-      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
-        toast.error("Número de telefone inválido. Por favor, digite um número válido com DDD.");
+      // Validar campos obrigatórios
+      if (!name.trim()) {
+        toast.error("O nome do cliente é obrigatório");
         return;
       }
       
-      const clientData = { 
-        name, 
-        phone: formattedPhone, 
-        status: 'Active'  // Simplificado para sempre 'Active'
-      };
+      if (!phone.trim()) {
+        toast.error("O telefone do cliente é obrigatório");
+        return;
+      }
       
-      addClientMutation.mutate({ 
-        clientData, 
-        groupId: newClientGroupId
-      });
+      try {
+        // Format and validate phone number
+        const formattedPhone = formatPhoneNumber(phone);
+        
+        if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+          toast.error("Número de telefone inválido. Por favor, digite um número válido com DDD.");
+          return;
+        }
+        
+        const clientData = { 
+          name, 
+          phone: formattedPhone, 
+          status: 'Active'  // Simplificado para sempre 'Active'
+        };
+        
+        if (email) {
+          Object.assign(clientData, { email });
+        }
+        
+        if (accountId && accountId !== 'none') {
+          Object.assign(clientData, { account_id: accountId });
+        }
+        
+        console.log("Enviando dados do cliente:", clientData);
+        addClientMutation.mutate({ 
+          clientData, 
+          groupId: newClientGroupId !== 'none' ? newClientGroupId : undefined
+        });
+      } catch (error) {
+        console.error("Erro ao enviar dados:", error);
+        toast.error(`Erro ao adicionar cliente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
     };
+
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     
-    const handleSubmitEdit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
+    // Validar campos obrigatórios
+    if (!name.trim()) {
+      toast.error("O nome do cliente é obrigatório");
+      return;
+    }
+    
+    if (!phone.trim()) {
+      toast.error("O telefone do cliente é obrigatório");
+      return;
+    }
+    
+    try {
       // Format and validate phone number
       const formattedPhone = formatPhoneNumber(phone);
       
@@ -277,24 +315,36 @@ export default function ClientList() {
       }
       
       if (selectedClient) {
-        const clientData = { 
+        const clientData: any = { 
           name, 
           phone: formattedPhone, 
-          email, 
           status 
         };
         
-        // Adicionar account_id se selecionado
-        if (accountId) {
-          Object.assign(clientData, { account_id: accountId });
+        // Adicionar email se fornecido
+        if (email) {
+          clientData.email = email;
         }
         
+        // Adicionar account_id se selecionado e diferente de 'none'
+        if (accountId && accountId !== 'none') {
+          clientData.account_id = accountId;
+        } else if (accountId === 'none') {
+          // Se 'none' foi selecionado explicitamente, remover a associação com a conta
+          clientData.account_id = null;
+        }
+        
+        console.log("Enviando dados atualizados:", clientData);
         updateClientMutation.mutate({ 
           id: selectedClient.id, 
           client: clientData
         });
       }
-    };
+    } catch (error) {
+      console.error("Erro ao enviar dados atualizados:", error);
+      toast.error(`Erro ao atualizar cliente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  };
   
   const confirmDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -315,7 +365,9 @@ export default function ClientList() {
     setPhoneError(null);
   };
 
+  // Melhorar a função para lidar com assistentes
   const handleCallWithAssistant = (client: any) => {
+    console.log("Selecionando cliente para chamada com assistente:", client);
     setSelectedClient(client);
     setShowAssistantDialog(true);
   };
