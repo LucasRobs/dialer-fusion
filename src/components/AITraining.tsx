@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ const AITraining = () => {
   const [error, setError] = useState<string | null>(null);
   const [assistantToDelete, setAssistantToDelete] = useState<VapiAssistant | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
 
   // Fetch assistants
   const { data: assistants, isLoading, refetch } = useQuery({
@@ -134,6 +136,37 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
+      // Send webhook request to delete the assistant
+      const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
+      console.log(`Sending delete request to webhook for assistant ID: ${assistantToDelete.id}`);
+      
+      // Using similar approach to the makeCall method in webhookService
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'delete_assistant',
+          assistant_id: assistantToDelete.assistant_id || assistantToDelete.id,
+          additional_data: {
+            assistant_name: assistantToDelete.name,
+            user_id: user?.id,
+            timestamp: new Date().toISOString(),
+            supabase_id: assistantToDelete.id
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error from webhook:', errorText);
+        throw new Error(`Webhook error: ${response.status} ${response.statusText}`);
+      }
+
+      console.log('Webhook delete request successful');
+      
+      // Continue with local deletion as before
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
       
       if (success) {
@@ -164,6 +197,7 @@ const AITraining = () => {
       setAssistantToDelete(null);
     }
   };
+
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
