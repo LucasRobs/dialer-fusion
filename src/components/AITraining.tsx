@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
+const VAPI_API_URL = "https://api.vapi.ai";
+
 const AITraining = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -32,7 +36,7 @@ const AITraining = () => {
   const [error, setError] = useState<string | null>(null);
   const [assistantToDelete, setAssistantToDelete] = useState<VapiAssistant | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
+  const [vapiAssistants, setVapiAssistants] = useState<any[]>([]);
 
   // Fetch assistants
   const { data: assistants, isLoading, refetch } = useQuery({
@@ -43,6 +47,37 @@ const AITraining = () => {
     },
     enabled: !!user?.id
   });
+
+  // Fetch assistants directly from Vapi API
+  const fetchVapiAssistants = async () => {
+    try {
+      console.log('Fetching assistants directly from Vapi API...');
+      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error fetching Vapi assistants: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Assistants from Vapi API:', data);
+      setVapiAssistants(data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching assistants from Vapi API:', error);
+      return [];
+    }
+  };
+
+  // Fetch Vapi assistants on component mount
+  useEffect(() => {
+    fetchVapiAssistants();
+  }, []);
 
   // Load selected assistant from localStorage
   useEffect(() => {
@@ -123,6 +158,8 @@ const AITraining = () => {
   const handleRefreshAssistants = async () => {
     try {
       await refetch();
+      // Also refresh Vapi assistants directly
+      await fetchVapiAssistants();
       toast.success('Lista de assistentes atualizada');
     } catch (error) {
       console.error('Erro ao atualizar lista de assistentes:', error);
@@ -130,20 +167,67 @@ const AITraining = () => {
     }
   };
 
+  // Find the Vapi assistant ID that matches our local assistant
+  const findVapiAssistantId = (localAssistantId: string): string | null => {
+    // First, try to find the assistant in vapiAssistants by matching metadata.supabase_id
+    const matchByMetadata = vapiAssistants.find(va => 
+      va.metadata?.supabase_id === localAssistantId
+    );
+    
+    if (matchByMetadata) {
+      console.log(`Found Vapi assistant by metadata.supabase_id: ${matchByMetadata.id}`);
+      return matchByMetadata.id;
+    }
+    
+    // Then, try to match by assistant_id
+    const localAssistant = assistants?.find(a => a.id === localAssistantId);
+    if (localAssistant?.assistant_id) {
+      const matchById = vapiAssistants.find(va => va.id === localAssistant.assistant_id);
+      if (matchById) {
+        console.log(`Found Vapi assistant by assistant_id: ${matchById.id}`);
+        return matchById.id;
+      }
+    }
+    
+    // Try to match by name as last resort
+    if (localAssistant?.name) {
+      const matchByName = vapiAssistants.find(va => 
+        va.name.toLowerCase() === localAssistant.name.toLowerCase()
+      );
+      if (matchByName) {
+        console.log(`Found Vapi assistant by name: ${matchByName.id}`);
+        return matchByName.id;
+      }
+    }
+    
+    console.warn(`Could not find Vapi assistant for local ID: ${localAssistantId}`);
+    return null;
+  };
+
   const handleDeleteAssistant = async () => {
     if (!assistantToDelete) return;
     
     setIsDeleting(true);
     try {
-      // Send webhook request to delete the assistant with raw body format
-      const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
-      console.log(`Sending delete request to webhook for assistant ID: ${assistantToDelete.assistant_id || assistantToDelete.id}`);
+      // Get the Vapi assistant ID from our mapping function
+      const vapiAssistantId = findVapiAssistantId(assistantToDelete.id);
       
-      // Using POST with the exact payload structure as shown in the n8n webhook
-      // Send this as raw JSON (not form data) to ensure proper format
+      if (!vapiAssistantId) {
+        console.error(`Could not find Vapi assistant ID for: ${assistantToDelete.id}`);
+        toast.error('Não foi possível encontrar o ID do assistente na Vapi');
+        setIsDeleting(false);
+        return;
+      }
+      
+      console.log(`Found Vapi assistant ID: ${vapiAssistantId} for local assistant: ${assistantToDelete.id}`);
+      
+      // The webhook URL for deleting the assistant
+      const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
+      
+      // Create the payload in the exact format expected by n8n webhook
       const payload = {
         action: "delete_assistant",
-        assistant_id: assistantToDelete.assistant_id || assistantToDelete.id,
+        assistant_id: vapiAssistantId,
         additional_data: {
           assistant_name: assistantToDelete.name,
           user_id: user?.id,
@@ -155,15 +239,23 @@ const AITraining = () => {
       // Log the exact payload we're sending
       console.log("Sending webhook payload:", JSON.stringify(payload));
       
-      await fetch(webhookUrl, {
+      // Make sure the payload matches the expected webhook format
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload), // Send as a raw JSON string
+        body: JSON.stringify(payload),
       });
-
-      console.log('Webhook delete request sent');
+      
+      // Check for response
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response from webhook:', response.status, errorText);
+        throw new Error(`Webhook error: ${response.status} ${errorText}`);
+      }
+      
+      console.log('Webhook delete request sent successfully');
       
       // Continue with local deletion as before
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
@@ -171,6 +263,8 @@ const AITraining = () => {
       if (success) {
         // Update the list of assistants
         await refetch();
+        // Also refresh Vapi assistants
+        await fetchVapiAssistants();
         
         // If the deleted assistant was selected, select another one
         if (selectedAssistant?.id === assistantToDelete.id) {
@@ -190,7 +284,7 @@ const AITraining = () => {
       }
     } catch (error) {
       console.error('Erro ao excluir assistente:', error);
-      toast.error('Erro ao excluir assistente');
+      toast.error(`Erro ao excluir assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setIsDeleting(false);
       setAssistantToDelete(null);
