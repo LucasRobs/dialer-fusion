@@ -397,6 +397,178 @@ const assistantService = {
       return null;
     }
   },
+
+
+    // Completely rewritten findVapiAssistantId method with better detection and logging
+    async findVapiAssistantId(localAssistantId: string, assistantName?: string, userId?: string): Promise<string | null> {
+      if (!localAssistantId) {
+        console.error('Cannot find Vapi assistant: No local ID provided');
+        return null;
+      }
+      
+      console.log(`🔍 Starting lookup for Vapi assistant ID from local ID: ${localAssistantId}`);
+      
+      try {
+        // Step 1: Try to validate if the localAssistantId is already a valid Vapi ID
+        const isAlreadyValidVapiId = await this.validateVapiAssistantId(localAssistantId);
+        if (isAlreadyValidVapiId) {
+          console.log(`✅ Local ID is directly valid as a Vapi ID: ${localAssistantId}`);
+          return localAssistantId;
+        }
+        
+        // Step 2: Get the local assistant details if available
+        let localAssistant = null;
+        try {
+          const { data } = await supabase
+            .from('assistants')
+            .select('*')
+            .eq('id', localAssistantId)
+            .single();
+          
+          if (data) {
+            localAssistant = data;
+            console.log(`📄 Found local assistant details: ${data.name} (${data.id})`);
+            
+            // If it has an assistant_id field, try that directly
+            if (data.assistant_id) {
+              const isValid = await this.validateVapiAssistantId(data.assistant_id);
+              if (isValid) {
+                console.log(`✅ Found valid Vapi ID from assistant_id field: ${data.assistant_id}`);
+                return data.assistant_id;
+              }
+            }
+          }
+        } catch (error) {
+          console.log('⚠️ Could not fetch local assistant details, continuing with search');
+        }
+        
+        // Step 3: Fetch all Vapi assistants for matching
+        console.log('📚 Fetching all assistants from Vapi API for matching...');
+        const vapiAssistants = await this.getVapiAssistants();
+        
+        if (!vapiAssistants || vapiAssistants.length === 0) {
+          console.error('❌ No assistants found in Vapi API');
+          return null;
+        }
+        
+        console.log(`📊 Found ${vapiAssistants.length} assistants in Vapi API`);
+        
+        // Step 4: Try to match by metadata.supabase_id (most reliable)
+        const matchBySupabaseId = vapiAssistants.find(va => 
+          va.metadata?.supabase_id === localAssistantId
+        );
+        
+        if (matchBySupabaseId) {
+          console.log(`✅ Found exact match by metadata.supabase_id: ${matchBySupabaseId.id}`);
+          return matchBySupabaseId.id;
+        }
+        
+        // Step 5: If we have local assistant details, try various matching strategies
+        if (localAssistant) {
+          // Get name from local assistant or passed parameter
+          const name = localAssistant.name || assistantName;
+          const userIdToMatch = localAssistant.user_id || userId;
+          
+          if (name && userIdToMatch) {
+            // Try matching by both user_id AND name (more specific)
+            const matchByUserAndName = vapiAssistants.find(va => 
+              va.metadata?.user_id === userIdToMatch && 
+              va.name === name
+            );
+            
+            if (matchByUserAndName) {
+              console.log(`✅ Found match by user_id and name: ${matchByUserAndName.id}`);
+              return matchByUserAndName.id;
+            }
+          }
+          
+          // Try matching by timestamp if available
+          if (localAssistant.created_at) {
+            console.log(`🕒 Attempting to match by creation timestamp: ${localAssistant.created_at}`);
+            const localTimestamp = new Date(localAssistant.created_at).getTime();
+            
+            let closestAssistant = null;
+            let smallestTimeDiff = Infinity;
+            
+            // Find assistants with the same name and closest creation time
+            vapiAssistants.forEach(va => {
+              if (name && va.name === name && va.metadata?.created_at) {
+                const vapiTimestamp = new Date(va.metadata.created_at).getTime();
+                const timeDiff = Math.abs(vapiTimestamp - localTimestamp);
+                
+                if (timeDiff < smallestTimeDiff) {
+                  smallestTimeDiff = timeDiff;
+                  closestAssistant = va;
+                }
+              }
+            });
+            
+            // Consider it a match if within 24 hours (86400000 ms)
+            if (closestAssistant && smallestTimeDiff < 86400000) {
+              console.log(`✅ Found match by name and closest creation time (${smallestTimeDiff}ms difference): ${closestAssistant.id}`);
+              return closestAssistant.id;
+            }
+          }
+        }
+        
+        // Step 6: Try matching just by name as a fallback
+        if (assistantName || (localAssistant && localAssistant.name)) {
+          const nameToMatch = assistantName || (localAssistant ? localAssistant.name : '');
+          console.log(`🔤 Attempting to match by name: "${nameToMatch}"`);
+          
+          // Find all matches by name (case insensitive)
+          const nameMatches = vapiAssistants.filter(va => 
+            va.name.toLowerCase() === nameToMatch.toLowerCase()
+          );
+          
+          if (nameMatches.length === 1) {
+            console.log(`✅ Found single match by name: ${nameMatches[0].id}`);
+            return nameMatches[0].id;
+          } else if (nameMatches.length > 1) {
+            console.log(`⚠️ Found ${nameMatches.length} assistants with name "${nameToMatch}" - trying to narrow down`);
+            
+            // If multiple matches, try to find one with the matching user_id
+            if (userId || (localAssistant && localAssistant.user_id)) {
+              const userIdToMatch = userId || (localAssistant ? localAssistant.user_id : '');
+              const userMatch = nameMatches.find(va => va.metadata?.user_id === userIdToMatch);
+              
+              if (userMatch) {
+                console.log(`✅ Narrowed down to single assistant by user_id among name matches: ${userMatch.id}`);
+                return userMatch.id;
+              }
+            }
+            
+            // If still no unique match, use the first one but log a warning
+            console.warn(`⚠️ Multiple assistants with name "${nameToMatch}" found. Using the first one: ${nameMatches[0].id}`);
+            return nameMatches[0].id;
+          }
+        }
+        
+        // Step 7: As a last resort, try partial name matching
+        if (assistantName || (localAssistant && localAssistant.name)) {
+          const nameToMatch = assistantName || (localAssistant ? localAssistant.name : '');
+          console.log(`🔍 Attempting partial name matching for: "${nameToMatch}"`);
+          
+          // Find any assistant with a partially matching name
+          const partialMatch = vapiAssistants.find(va => 
+            va.name.toLowerCase().includes(nameToMatch.toLowerCase()) ||
+            nameToMatch.toLowerCase().includes(va.name.toLowerCase())
+          );
+          
+          if (partialMatch) {
+            console.log(`⚠️ Found partial name match: "${partialMatch.name}" (${partialMatch.id})`);
+            return partialMatch.id;
+          }
+        }
+        
+        // If we got here, we couldn't find a match
+        console.error(`❌ Could not find any matching Vapi assistant for ID: ${localAssistantId}`);
+        return null;
+      } catch (error) {
+        console.error('❌ Error in findVapiAssistantId:', error);
+        return null;
+      }
+    },
   
   async selectAssistant(assistantId: string): Promise<Assistant | null> {
     try {
