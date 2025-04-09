@@ -50,7 +50,6 @@ import ImportClientsSheet from './ImportClientsSheet';
 import SelectAssistantDialog from './SelectAssistantDialog';
 import { formatPhoneNumber, isValidBrazilianPhoneNumber } from '@/lib/utils';
 
-
 export default function ClientList() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
   const [showEditClientDialog, setShowEditClientDialog] = useState(false);
@@ -68,8 +67,23 @@ export default function ClientList() {
   const [accountId, setAccountId] = useState('');
   const [newClientGroupId, setNewClientGroupId] = useState<string>('none');
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
+
+  // Obter ID do usuário atual ao inicializar
+  useEffect(() => {
+    const fetchUserId = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        setUserId(data.user.id);
+        console.log("ID do usuário atual:", data.user.id);
+      }
+    };
+    
+    fetchUserId();
+  }, []);
+  
   // Consulta de contas para o filtro de contas
   const { 
     data: accounts = [], 
@@ -107,9 +121,15 @@ export default function ClientList() {
     error, 
     refetch 
   } = useQuery({
-    queryKey: ['clients', selectedGroupId, selectedAccountId],
+    queryKey: ['clients', selectedGroupId, selectedAccountId, userId],
     queryFn: async () => {
-      console.log('Buscando clientes com filtros - Grupo:', selectedGroupId, 'Conta:', selectedAccountId);
+      console.log('Buscando clientes com filtros - Grupo:', selectedGroupId, 'Conta:', selectedAccountId, 'UserID:', userId);
+      
+      // Garantir que o usuário esteja autenticado
+      if (!userId) {
+        console.log("Usuário não autenticado, retornando lista vazia");
+        return [];
+      }
       
       if (selectedGroupId && selectedGroupId !== 'all-clients') {
         console.log('Buscando por grupo:', selectedGroupId);
@@ -121,19 +141,28 @@ export default function ClientList() {
         return clientService.getClientsByAccount(selectedAccountId);
       }
       
-      console.log('Buscando todos os clientes');
+      console.log('Buscando todos os clientes para o usuário:', userId);
       return clientService.getClients();
     },
+    enabled: !!userId, // Só busca clientes quando o userId estiver disponível
   });
   
   const addClientMutation = useMutation({
-    mutationFn: ({ clientData, groupId }: { clientData: any, groupId?: string }) => {
+    mutationFn: async ({ clientData, groupId }: { clientData: any, groupId?: string }) => {
+      console.log("Adicionando cliente com dados:", clientData);
+      
+      // Garantir que o user_id seja incluído
+      if (userId) {
+        clientData.user_id = userId;
+      }
+      
       if (groupId && groupId !== 'none') {
         return clientService.addClientWithGroup(clientData, groupId);
       }
       return clientService.addClient(clientData);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("Cliente adicionado com sucesso:", data);
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       if (newClientGroupId && newClientGroupId !== 'none') {
         queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
@@ -143,6 +172,7 @@ export default function ClientList() {
       clearForm();
     },
     onError: (error: Error) => {
+      console.error("Erro ao adicionar cliente:", error);
       if (error.message.includes('telefone')) {
         setPhoneError(error.message);
       } else {
@@ -150,6 +180,7 @@ export default function ClientList() {
       }
     },
   });
+  
   
   const updateClientMutation = useMutation({
     mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => {
@@ -283,7 +314,8 @@ export default function ClientList() {
         name, 
         phone: formattedPhone, 
         email: email || null,
-        status: 'Active'
+        status: 'Active',
+        user_id: userId // Importante: garantir que o user_id seja definido
       };
       
       if (accountId && accountId !== 'none') {
@@ -744,94 +776,94 @@ export default function ClientList() {
         </DialogContent>
       </Dialog>
       
-    <Dialog open={showEditClientDialog} onOpenChange={(open) => {
-      if (!open) clearForm();
-      setShowEditClientDialog(open);
-    }}>
-      <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
-        <DialogHeader>
-          <DialogTitle>Editar Cliente</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmitEdit} className="space-y-4">
-          <div>
-            <Input 
-              placeholder="Nome" 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              required 
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          <div>
-            <Input 
-              placeholder="Telefone (DDD + número)" 
-              value={phone} 
-              onChange={(e) => {
-                setPhone(e.target.value);
-                if (phoneError) validatePhone(e.target.value);
-              }} 
-              required 
-              onClick={(e) => e.stopPropagation()}
-              className={phoneError ? "border-red-500" : ""}
-            />
-            {phoneError && (
-              <p className="text-red-500 text-sm mt-1">{phoneError}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Formato: DDD + número (ex: 85997484924)
-            </p>
-          </div>
-          <div>
-            <Input 
-              placeholder="Email" 
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          <div>
-            <select 
-              className="w-full border rounded-md py-2 px-3"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <option value="Active">Ativo</option>
-              <option value="Inactive">Inativo</option>
-            </select>
-          </div>
-          <div>
-            <Select
-              value={accountId}
-              onValueChange={setAccountId}
-            >
-              <SelectTrigger className="w-full">
-                <div className="flex items-center">
-                  {accountId === 'none' || !accountId
-                    ? 'Sem conta' 
-                    : accounts?.find(account => account.id === accountId)?.name || 'Selecione uma conta (opcional)'}
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sem conta</SelectItem>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button type="submit" onClick={(e) => e.stopPropagation()}>
-              <Pencil className="h-4 w-4 mr-2" />
-              Salvar
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      <Dialog open={showEditClientDialog} onOpenChange={(open) => {
+        if (!open) clearForm();
+        setShowEditClientDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Editar Cliente</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitEdit} className="space-y-4">
+            <div>
+              <Input 
+                placeholder="Nome" 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                required 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              <Input 
+                placeholder="Telefone (DDD + número)" 
+                value={phone} 
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (phoneError) validatePhone(e.target.value);
+                }} 
+                required 
+                onClick={(e) => e.stopPropagation()}
+                className={phoneError ? "border-red-500" : ""}
+              />
+              {phoneError && (
+                <p className="text-red-500 text-sm mt-1">{phoneError}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Formato: DDD + número (ex: 85997484924)
+              </p>
+            </div>
+            <div>
+              <Input 
+                placeholder="Email" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              <select 
+                className="w-full border rounded-md py-2 px-3"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <option value="Active">Ativo</option>
+                <option value="Inactive">Inativo</option>
+              </select>
+            </div>
+            <div>
+              <Select
+                value={accountId}
+                onValueChange={setAccountId}
+              >
+                <SelectTrigger className="w-full">
+                  <div className="flex items-center">
+                    {accountId === 'none' || !accountId
+                      ? 'Sem conta' 
+                      : accounts?.find(account => account.id === accountId)?.name || 'Selecione uma conta (opcional)'}
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem conta</SelectItem>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       
       <Dialog open={showDeleteClientDialog} onOpenChange={(open) => {
         if (!open) setSelectedClient(null);
@@ -864,7 +896,7 @@ export default function ClientList() {
         onClose={() => setShowImportDialog(false)}
       />
 
-        <SelectAssistantDialog
+      <SelectAssistantDialog
         isOpen={showAssistantDialog}
         onClose={() => setShowAssistantDialog(false)}
         onSelect={handleMakeCall}

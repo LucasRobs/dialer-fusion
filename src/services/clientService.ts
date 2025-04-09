@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { formatPhoneNumber, isValidBrazilianPhoneNumber } from '@/lib/utils';
 
@@ -16,20 +17,32 @@ export type Client = {
 export const clientService = {
   // Buscar todos os clientes do usuário atual
   async getClients() {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      
+      if (!userId) {
+        console.error("Usuário não autenticado ao buscar clientes");
+        return [];
+      }
 
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', userId);
+      console.log("Buscando clientes para o usuário:", userId);
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', userId);
 
-    if (error) {
-      console.error("Error fetching clients:", error);
-      throw new Error(`Erro ao buscar clientes: ${error.message}`);
+      if (error) {
+        console.error("Error fetching clients:", error);
+        throw new Error(`Erro ao buscar clientes: ${error.message}`);
+      }
+
+      console.log(`Encontrados ${data?.length || 0} clientes para o usuário ${userId}`);
+      return data || [];
+    } catch (error) {
+      console.error("Erro ao buscar clientes:", error);
+      throw error;
     }
-
-    return data || [];
   },
 
   // Buscar todos os clientes de uma conta específica
@@ -40,38 +53,77 @@ export const clientService = {
       throw new Error('ID da conta é obrigatório');
     }
 
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('account_id', accountId);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      
+      if (!userId) {
+        console.error("Usuário não autenticado ao buscar clientes por conta");
+        return [];
+      }
 
-    if (error) {
-      console.error(`Error fetching clients for account ${accountId}:`, error);
-      throw new Error(`Erro ao buscar clientes da conta: ${error.message}`);
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error(`Error fetching clients for account ${accountId}:`, error);
+        throw new Error(`Erro ao buscar clientes da conta: ${error.message}`);
+      }
+
+      console.log(`Encontrados ${data?.length || 0} clientes para a conta ${accountId}`);
+      return data || [];
+    } catch (error) {
+      console.error("Erro ao buscar clientes por conta:", error);
+      throw error;
     }
-
-    console.log(`Encontrados ${data?.length || 0} clientes para a conta ${accountId}`);
-    return data || [];
   },
 
   // Buscar um cliente por ID
   async getClientById(id: number) {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', id)
-      .single();
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      
+      if (!userId) {
+        console.error("Usuário não autenticado ao buscar cliente por ID");
+        throw new Error('Usuário não autenticado');
+      }
 
-    if (error) {
-      throw new Error(`Erro ao buscar cliente: ${error.message}`);
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        throw new Error(`Erro ao buscar cliente: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Erro ao buscar cliente por ID:", error);
+      throw error;
     }
-
-    return data;
   },
 
   // Adicionar um novo cliente
   async addClient(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) {
     try {
+      // Se o user_id não foi fornecido, buscá-lo
+      if (!client.user_id) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) {
+          throw new Error('Usuário não autenticado');
+        }
+        client.user_id = userData.user.id;
+      }
+      
+      console.log("Adicionando cliente com user_id:", client.user_id);
+      
       // Formatar o telefone antes de salvar
       const formattedPhone = formatPhoneNumber(client.phone);
       
@@ -91,11 +143,14 @@ export const clientService = {
         .select();
 
       if (error) {
+        console.error("Erro ao inserir cliente:", error);
         throw new Error(`Erro ao adicionar cliente: ${error.message}`);
       }
 
+      console.log("Cliente adicionado com sucesso:", data);
       return data;
     } catch (error) {
+      console.error("Erro em addClient:", error);
       if (error instanceof Error) {
         throw error;
       }
@@ -103,10 +158,20 @@ export const clientService = {
     }
   },
 
-
   // Adicionar um cliente e associá-lo a um grupo
   async addClientWithGroup(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>, groupId: string) {
     try {
+      // Se o user_id não foi fornecido, buscá-lo
+      if (!client.user_id) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) {
+          throw new Error('Usuário não autenticado');
+        }
+        client.user_id = userData.user.id;
+      }
+      
+      console.log("Adicionando cliente em grupo com user_id:", client.user_id);
+      
       // Formatar o telefone antes de salvar
       const formattedPhone = formatPhoneNumber(client.phone);
       
@@ -127,6 +192,7 @@ export const clientService = {
         .select();
 
       if (error) {
+        console.error("Erro ao inserir cliente com grupo:", error);
         throw new Error(`Erro ao adicionar cliente: ${error.message}`);
       }
       
@@ -135,6 +201,7 @@ export const clientService = {
       }
       
       const newClient = data[0];
+      console.log("Cliente adicionado com sucesso:", newClient);
       
       // Se um grupo foi especificado, adiciona o cliente ao grupo
       if (groupId && groupId !== 'none') {
@@ -153,6 +220,8 @@ export const clientService = {
         if (groupError) {
           console.error('Erro ao adicionar cliente ao grupo:', groupError);
           // Não falha a operação principal se a associação com o grupo falhar
+        } else {
+          console.log(`Cliente ${newClient.id} adicionado ao grupo ${numericGroupId}`);
         }
       }
 
@@ -162,7 +231,6 @@ export const clientService = {
       throw error;
     }
   },
-
 
   async updateClient(id: number, client: Partial<Client>) {
     try {
@@ -187,11 +255,14 @@ export const clientService = {
         .select();
 
       if (error) {
+        console.error("Erro ao atualizar cliente:", error);
         throw new Error(`Erro ao atualizar cliente: ${error.message}`);
       }
 
+      console.log("Cliente atualizado com sucesso:", data);
       return data;
     } catch (error) {
+      console.error("Erro em updateClient:", error);
       if (error instanceof Error) {
         throw error;
       }
@@ -201,25 +272,44 @@ export const clientService = {
 
   // Excluir um cliente
   async deleteClient(id: number) {
-    const { data, error } = await supabase
-      .from('clients')
-      .delete()
-      .eq('id', id)
-      .select();
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', id)
+        .select();
 
-    if (error) {
-      throw new Error(`Erro ao excluir cliente: ${error.message}`);
+      if (error) {
+        console.error("Erro ao excluir cliente:", error);
+        throw new Error(`Erro ao excluir cliente: ${error.message}`);
+      }
+
+      console.log("Cliente excluído com sucesso:", data);
+      return data;
+    } catch (error) {
+      console.error("Erro em deleteClient:", error);
+      throw error;
     }
-
-    return data;
   },
 
   // Obter estatísticas dos clientes
   async getClientStats() {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      
+      if (!userId) {
+        console.log("Usuário não autenticado ao buscar estatísticas");
+        return {
+          totalClients: 0,
+          activeClients: 0,
+        };
+      }
+
       const { data: allClients, error: clientsError } = await supabase
         .from('clients')
-        .select('id, status');
+        .select('id, status')
+        .eq('user_id', userId);
 
       if (clientsError) {
         console.error("Error fetching client stats:", clientsError);
@@ -243,35 +333,51 @@ export const clientService = {
   },
 
   // Buscar clientes por grupo
-  // Buscar clientes por grupo
   async getClientsByGroupId(groupId: string) {
-    // Converter o groupId para number se necessário
-    const numericGroupId = typeof groupId === 'string' && !isNaN(parseInt(groupId)) 
-      ? parseInt(groupId) 
-      : groupId;
+    try {
+      // Converter o groupId para number se necessário
+      const numericGroupId = typeof groupId === 'string' && !isNaN(parseInt(groupId)) 
+        ? parseInt(groupId) 
+        : groupId;
       
-    const { data, error } = await supabase
-      .from('client_group_members')
-      .select(`
-        client_id,
-        clients(*)
-      `)
-      .eq('group_id', numericGroupId);
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      
+      if (!userId) {
+        console.log("Usuário não autenticado ao buscar clientes por grupo");
+        return [];
+      }
+      
+      console.log(`Buscando clientes para o grupo: ${numericGroupId} (usuário: ${userId})`);
+      
+      const { data, error } = await supabase
+        .from('client_group_members')
+        .select(`
+          client_id,
+          clients(*)
+        `)
+        .eq('group_id', numericGroupId);
 
-    if (error) {
-      throw new Error(`Erro ao buscar clientes por grupo: ${error.message}`);
+      if (error) {
+        console.error("Erro ao buscar clientes por grupo:", error);
+        throw new Error(`Erro ao buscar clientes por grupo: ${error.message}`);
+      }
+
+      const clients = data
+        .map(item => {
+          if (item.clients && typeof item.clients === 'object') {
+            return item.clients as unknown as Client;
+          }
+          return null;
+        })
+        .filter((client): client is Client => client !== null && client.user_id === userId);
+
+      console.log(`Encontrados ${clients.length} clientes para o grupo ${numericGroupId}`);
+      return clients;
+    } catch (error) {
+      console.error("Erro ao buscar clientes por grupo:", error);
+      throw error;
     }
-
-    const clients = data
-      .map(item => {
-        if (item.clients && typeof item.clients === 'object') {
-          return item.clients as unknown as Client;
-        }
-        return null;
-      })
-      .filter((client): client is Client => client !== null);
-
-    return clients;
   },
 
   // Importar clientes de uma planilha
@@ -281,6 +387,9 @@ export const clientService = {
       if (userError) throw new Error(`Erro ao obter usuário: ${userError.message}`);
 
       const userId = userData?.user?.id;
+      if (!userId) {
+        throw new Error('Usuário não autenticado');
+      }
 
       // Formatar o telefone de cada cliente antes de salvar
       const formattedClients = clients.map(client => ({
@@ -289,17 +398,22 @@ export const clientService = {
         user_id: userId,
       }));
 
+      console.log(`Importando ${formattedClients.length} clientes para o usuário ${userId}`);
+      
       const { data, error } = await supabase
         .from('clients')
         .insert(formattedClients)
         .select();
 
       if (error) {
+        console.error("Erro ao importar clientes:", error);
         throw new Error(`Erro ao importar clientes: ${error.message}`);
       }
 
+      console.log(`${data?.length || 0} clientes importados com sucesso`);
       return data as Client[];
     } catch (error) {
+      console.error("Erro em importClients:", error);
       if (error instanceof Error) {
         throw error;
       }
