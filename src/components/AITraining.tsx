@@ -22,8 +22,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+import assistantService from '@/services/assistantService';
+
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
+
 
 const AITraining = () => {
   const { user } = useAuth();
@@ -275,33 +278,21 @@ const AITraining = () => {
     try {
       console.log(`Starting deletion process for assistant: ${assistantToDelete.id}, name: ${assistantToDelete.name}`);
       
-      // Buscar o assistente no banco local para obter todas as informações disponíveis
-      const { data: assistant, error: fetchError } = await supabase
-        .from('assistants')
-        .select('*')
-        .eq('id', assistantToDelete.id)
-        .single();
-      
-      if (fetchError) {
-        console.error('Erro ao buscar detalhes do assistente:', fetchError);
-        toast.error('Erro ao buscar detalhes do assistente');
-        setIsDeleting(false);
-        return;
-      }
-      
-      // Usar o assistantService para encontrar o Vapi ID de forma mais robusta
-      const vapiAssistantId = findVapiAssistantId(
-        assistantToDelete.id
+      // Use the assistantService.findVapiAssistantId method for robust ID lookup
+      const vapiAssistantId = await assistantService.findVapiAssistantId(
+        assistantToDelete.id,
+        assistantToDelete.name,
+        user?.id
       );
       
       if (!vapiAssistantId) {
-        console.error(`Could not find Vapi assistant ID for: ${assistantToDelete.id}`);
+        console.error(`❌ Could not find Vapi assistant ID for: ${assistantToDelete.id}`);
         toast.error('Não foi possível encontrar o ID do assistente na Vapi');
         setIsDeleting(false);
         return;
       }
       
-      console.log(`Found Vapi assistant ID: ${vapiAssistantId} for local assistant: ${assistantToDelete.id}`);
+      console.log(`✅ Found Vapi assistant ID: ${vapiAssistantId} for local assistant: ${assistantToDelete.id}`);
       
       // The webhook URL for deleting the assistant
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
