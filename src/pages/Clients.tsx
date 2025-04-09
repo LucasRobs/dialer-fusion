@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import ClientList from '@/components/ClientList';
 import ClientGroupManager from '@/components/ClientGroupManager';
@@ -25,12 +25,22 @@ const ClientsPage = () => {
       <div className="pt-28 pb-16 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-between items-center mb-6">
-            <Tabs defaultValue="clients" value={activeTab} onValueChange={setActiveTab} className="flex-1">
-              <TabsList className="mb-8">
-                <TabsTrigger value="clients">Clientes</TabsTrigger>
-                <TabsTrigger value="groups">Grupos</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex-1">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="mb-8">
+                  <TabsTrigger value="clients">Clientes</TabsTrigger>
+                  <TabsTrigger value="groups">Grupos</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="clients">
+                  <ClientList />
+                </TabsContent>
+                
+                <TabsContent value="groups">
+                  <ClientGroupManager />
+                </TabsContent>
+              </Tabs>
+            </div>
             <Button 
               variant="outline" 
               size="icon"
@@ -41,13 +51,6 @@ const ClientsPage = () => {
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-          
-          <TabsContent value="clients">
-            <ClientList />
-          </TabsContent>
-          <TabsContent value="groups">
-            <ClientGroupManager />
-          </TabsContent>
         </div>
       </div>
     </div>
