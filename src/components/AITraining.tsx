@@ -167,6 +167,13 @@ const AITraining = () => {
   };
 
   const findVapiAssistantId = (localAssistantId: string): string | null => {
+    if (!localAssistantId || !vapiAssistants || vapiAssistants.length === 0) {
+      console.error(`Cannot find Vapi assistant: Invalid ID or no Vapi assistants available`);
+      return null;
+    }
+    
+    console.log(`Searching for Vapi assistant with local ID: ${localAssistantId} among ${vapiAssistants.length} Vapi assistants`);
+    
     // First priority: match by the exact supabase_id in metadata which is unique
     const matchByExactMetadata = vapiAssistants.find(va => 
       va.metadata?.supabase_id === localAssistantId
@@ -265,6 +272,8 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
+      console.log(`Starting deletion process for assistant: ${assistantToDelete.id}, name: ${assistantToDelete.name}`);
+      
       // Get the Vapi assistant ID from our enhanced mapping function
       const vapiAssistantId = findVapiAssistantId(assistantToDelete.id);
       
