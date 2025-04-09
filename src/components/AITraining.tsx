@@ -135,30 +135,35 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
-      // Send webhook request to delete the assistant with no-cors mode to avoid CORS issues
+      // Send webhook request to delete the assistant with raw body format
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
       console.log(`Sending delete request to webhook for assistant ID: ${assistantToDelete.assistant_id || assistantToDelete.id}`);
       
       // Using POST with the exact payload structure as shown in the n8n webhook
+      // Send this as raw JSON (not form data) to ensure proper format
+      const payload = {
+        action: "delete_assistant",
+        assistant_id: assistantToDelete.assistant_id || assistantToDelete.id,
+        additional_data: {
+          assistant_name: assistantToDelete.name,
+          user_id: user?.id,
+          timestamp: new Date().toISOString(),
+          supabase_id: assistantToDelete.id
+        }
+      };
+      
+      // Log the exact payload we're sending
+      console.log("Sending webhook payload:", JSON.stringify(payload));
+      
       await fetch(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        mode: 'no-cors', // Add no-cors mode to bypass CORS restrictions
-        body: JSON.stringify({
-          action: "delete_assistant",
-          assistant_id: assistantToDelete.assistant_id || assistantToDelete.id,
-          additional_data: {
-            assistant_name: assistantToDelete.name,
-            user_id: user?.id,
-            timestamp: new Date().toISOString(),
-            supabase_id: assistantToDelete.id
-          }
-        }),
+        body: JSON.stringify(payload), // Send as a raw JSON string
       });
 
-      console.log('Webhook delete request sent (no response available due to no-cors mode)');
+      console.log('Webhook delete request sent');
       
       // Continue with local deletion as before
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
