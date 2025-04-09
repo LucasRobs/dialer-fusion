@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -49,6 +50,7 @@ import ImportClientsSheet from './ImportClientsSheet';
 import SelectAssistantDialog from './SelectAssistantDialog';
 import { formatPhoneNumber, isValidBrazilianPhoneNumber } from '@/lib/utils';
 
+
 export default function ClientList() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
   const [showEditClientDialog, setShowEditClientDialog] = useState(false);
@@ -65,6 +67,7 @@ export default function ClientList() {
   const [status, setStatus] = useState('Active');
   const [accountId, setAccountId] = useState('');
   const [newClientGroupId, setNewClientGroupId] = useState<string>('none');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
   // Consulta de contas para o filtro de contas
@@ -89,7 +92,7 @@ export default function ClientList() {
       }
     }
   });
-  
+
   const { 
     data: clientGroups = [], 
     isLoading: isLoadingGroups
@@ -122,23 +125,13 @@ export default function ClientList() {
       return clientService.getClients();
     },
   });
-
-  const [phoneError, setPhoneError] = useState<string | null>(null);
-
   
   const addClientMutation = useMutation({
     mutationFn: ({ clientData, groupId }: { clientData: any, groupId?: string }) => {
-      try {
-        if (groupId && groupId !== 'none') {
-          return clientService.addClientWithGroup(clientData, groupId);
-        }
-        return clientService.addClient(clientData);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('telefone')) {
-          setPhoneError(error.message);
-        }
-        throw error;
+      if (groupId && groupId !== 'none') {
+        return clientService.addClientWithGroup(clientData, groupId);
       }
+      return clientService.addClient(clientData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
@@ -148,7 +141,6 @@ export default function ClientList() {
       toast.success("Cliente adicionado com sucesso.");
       setShowNewClientDialog(false);
       clearForm();
-      setPhoneError(null);
     },
     onError: (error: Error) => {
       if (error.message.includes('telefone')) {
@@ -267,11 +259,18 @@ export default function ClientList() {
     }
     
     try {
-      // Format phone number without validation first to see the value
-      const formattedPhone = formatPhoneNumber(phone);
-      console.log("Número formatado para validação:", formattedPhone);
+      // Format phone number
+      let formattedPhone = phone;
+      try {
+        formattedPhone = formatPhoneNumber(phone);
+        console.log("Número formatado para validação:", formattedPhone);
+      } catch (e) {
+        console.error("Erro ao formatar número:", e);
+        toast.error("Formato de telefone inválido");
+        return;
+      }
       
-      // Valida usando a nova função simplificada
+      // Valida o número
       if (!isValidBrazilianPhoneNumber(formattedPhone)) {
         console.log("Número considerado inválido:", formattedPhone);
         toast.error("Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)");
@@ -283,12 +282,9 @@ export default function ClientList() {
       const clientData = { 
         name, 
         phone: formattedPhone, 
-        status: 'Active'  // Simplificado para sempre 'Active'
+        email: email || null,
+        status: 'Active'
       };
-      
-      if (email) {
-        Object.assign(clientData, { email });
-      }
       
       if (accountId && accountId !== 'none') {
         Object.assign(clientData, { account_id: accountId });
@@ -671,73 +667,82 @@ export default function ClientList() {
       )}
       
       <Dialog open={showNewClientDialog} onOpenChange={(open) => {
-      if (!open) clearForm();
-      setShowNewClientDialog(open);
-    }}>
-      <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
-        <DialogHeader>
-          <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmitNew} className="space-y-4">
-          <div>
-            <Input 
-              placeholder="Nome" 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              required 
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          <div>
-            <Input 
-              placeholder="Telefone (DDD + número)" 
-              value={phone} 
-              onChange={(e) => {
-                setPhone(e.target.value);
-                if (phoneError) validatePhone(e.target.value);
-              }} 
-              required 
-              onClick={(e) => e.stopPropagation()}
-              className={phoneError ? "border-red-500" : ""}
-            />
-            {phoneError && (
-              <p className="text-red-500 text-sm mt-1">{phoneError}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Formato: DDD + número (ex: 85912345678)
-            </p>
-          </div>
-          <div>
-            <Select
-              value={newClientGroupId}
-              onValueChange={setNewClientGroupId}
-            >
-              <SelectTrigger className="w-full">
-                <div className="flex items-center text-left">
-                  {newClientGroupId === 'none' 
-                    ? 'Sem grupo' 
-                    : clientGroups.find(g => g.id.toString() === newClientGroupId)?.name || 'Selecione um grupo'}
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sem grupo</SelectItem>
-                {clientGroups?.map((group) => (
-                  <SelectItem key={group.id} value={group.id.toString()}>
-                    {group.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button type="submit" onClick={(e) => e.stopPropagation()}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Adicionar
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        if (!open) clearForm();
+        setShowNewClientDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitNew} className="space-y-4">
+            <div>
+              <Input 
+                placeholder="Nome" 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                required 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              <Input 
+                placeholder="Telefone (DDD + número)" 
+                value={phone} 
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (phoneError) setPhoneError(null);
+                }} 
+                required 
+                onClick={(e) => e.stopPropagation()}
+                className={phoneError ? "border-red-500" : ""}
+              />
+              {phoneError && (
+                <p className="text-red-500 text-sm mt-1">{phoneError}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Formato: DDD + número (ex: 85912345678)
+              </p>
+            </div>
+            <div>
+              <Input 
+                placeholder="Email (opcional)" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              <Select
+                value={newClientGroupId}
+                onValueChange={setNewClientGroupId}
+              >
+                <SelectTrigger className="w-full">
+                  <div className="flex items-center text-left">
+                    {newClientGroupId === 'none' 
+                      ? 'Sem grupo' 
+                      : clientGroups.find(g => g.id.toString() === newClientGroupId)?.name || 'Selecione um grupo'}
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem grupo</SelectItem>
+                  {clientGroups?.map((group) => (
+                    <SelectItem key={group.id} value={group.id.toString()}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="submit" onClick={(e) => e.stopPropagation()}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Adicionar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       
     <Dialog open={showEditClientDialog} onOpenChange={(open) => {
       if (!open) clearForm();
