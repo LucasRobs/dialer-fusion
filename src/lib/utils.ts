@@ -37,9 +37,11 @@ export function formatPhoneNumber(phone: string): string {
  */
 export function isValidBrazilianPhoneNumber(phone: string): boolean {
   const cleaned = formatPhoneNumber(phone);
-  // Valid Brazilian numbers have 10 or 11 digits (with area code)
-  // Incluindo números que começam com DDD (2 dígitos) seguido de 8 ou 9 dígitos
-  const isValid = /^[1-9]\d{8,9}$/.test(cleaned);
+  
+  // Valid Brazilian numbers have exactly 10 or 11 digits (with area code)
+  // O número deve ter entre 10 e 11 dígitos para ser válido
+  const isValid = cleaned.length >= 10 && cleaned.length <= 11;
+  
   console.log(`Validação de telefone: "${phone}" => ${isValid ? 'válido' : 'inválido'} (${cleaned})`);
   return isValid;
 }

@@ -154,7 +154,6 @@ export default function ClientList() {
     },
   });
   
-  
   const updateClientMutation = useMutation({
     mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => {
       try {
@@ -225,13 +224,13 @@ export default function ClientList() {
     setShowDeleteClientDialog(true);
   };
 
-  // Validate phone field - Melhorando a função de validação
+  // Validação atualizada de telefone
   const validatePhone = (value: string): boolean => {
     try {
       const formattedPhone = formatPhoneNumber(value);
       
       if (!isValidBrazilianPhoneNumber(formattedPhone)) {
-        setPhoneError("Número de telefone inválido. Por favor, digite um número com DDD (ex: 85997484924)");
+        setPhoneError("Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)");
         return false;
       }
       
@@ -267,10 +266,10 @@ export default function ClientList() {
       const formattedPhone = formatPhoneNumber(phone);
       console.log("Número formatado para validação:", formattedPhone);
       
-      // Explicitly validate using our validator
+      // Valida usando a nova função simplificada
       if (!isValidBrazilianPhoneNumber(formattedPhone)) {
         console.log("Número considerado inválido:", formattedPhone);
-        toast.error("Número de telefone inválido. Por favor, digite um número com DDD (ex: 85997484924)");
+        toast.error("Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)");
         return;
       }
       
@@ -321,10 +320,10 @@ export default function ClientList() {
       const formattedPhone = formatPhoneNumber(phone);
       console.log("Número formatado para edição:", formattedPhone);
       
-      // Explicitly validate
+      // Valida usando a nova função simplificada
       if (!isValidBrazilianPhoneNumber(formattedPhone)) {
         console.log("Número considerado inválido na edição:", formattedPhone);
-        toast.error("Número de telefone inválido. Por favor, digite um número com DDD (ex: 85997484924)");
+        toast.error("Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)");
         return;
       }
       

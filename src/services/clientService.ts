@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { formatPhoneNumber } from '@/lib/utils';
+import { formatPhoneNumber, isValidBrazilianPhoneNumber } from '@/lib/utils';
 
 export type Client = {
   id: number;
@@ -67,9 +67,16 @@ export const clientService = {
   async addClient(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) {
     try {
       // Formatar o telefone antes de salvar
+      const formattedPhone = formatPhoneNumber(client.phone);
+      
+      // Verificar se o telefone é válido
+      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+        throw new Error('Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)');
+      }
+      
       const formattedClient = {
         ...client,
-        phone: formatPhoneNumber(client.phone)
+        phone: formattedPhone
       };
 
       const { data, error } = await supabase
@@ -95,9 +102,16 @@ export const clientService = {
   async addClientWithGroup(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>, groupId: string) {
     try {
       // Formatar o telefone antes de salvar
+      const formattedPhone = formatPhoneNumber(client.phone);
+      
+      // Verificar se o telefone é válido
+      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+        throw new Error('Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)');
+      }
+      
       const formattedClient = {
         ...client,
-        phone: formatPhoneNumber(client.phone)
+        phone: formattedPhone
       };
       
       // Primeiro adiciona o cliente
@@ -144,14 +158,20 @@ export const clientService = {
   },
 
 
-  // Atualizar um cliente existente
   async updateClient(id: number, client: Partial<Client>) {
     try {
       const updatedClient = { ...client };
       
       // Se telefone estiver sendo atualizado, formatá-lo
       if (updatedClient.phone) {
-        updatedClient.phone = formatPhoneNumber(updatedClient.phone);
+        const formattedPhone = formatPhoneNumber(updatedClient.phone);
+        
+        // Verificar se o telefone é válido
+        if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+          throw new Error('Número de telefone inválido. Use formato: DDD + número (exemplo: 85997484924)');
+        }
+        
+        updatedClient.phone = formattedPhone;
       }
       
       const { data, error } = await supabase
@@ -172,7 +192,6 @@ export const clientService = {
       throw new Error(`Erro ao atualizar cliente: ${String(error)}`);
     }
   },
-
 
   // Excluir um cliente
   async deleteClient(id: number) {
