@@ -1,3 +1,4 @@
+
 import { supabase, VOICE_SETTINGS } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,23 +16,24 @@ export interface VapiAssistant {
   model?: string;
   voice?: string;
   published?: boolean;
+  metadata?: {
+    user_id?: string;
+    [key: string]: any;
+  };
 }
 
-export interface WebhookPayload {
-  action: string;
-  campaign_id: number;
-  client_id?: number;
-  client_name?: string;
-  client_phone?: string;
-  user_id?: string;
-  account_id?: string; // Added account_id for filtering clients by account
-  additional_data?: Record<string, any>;
-  provider?: string;
-  call?: {
-    model?: string;
-    voice?: string;
-    language?: string;
-  };
+export interface VapiAssistant {
+  id: string;
+  name: string;
+  assistant_id: string;
+  user_id: string;
+  status?: string;
+  created_at?: string;
+  system_prompt?: string;
+  first_message?: string;
+  model?: string;
+  voice?: string;
+  published?: boolean;
 }
 
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -164,7 +166,12 @@ export const webhookService = {
       }
       
       const vapiAssistants = await response.json();
-      console.log(`Recuperados ${vapiAssistants.length || 0} assistentes diretamente da Vapi:`, vapiAssistants);
+      console.log(`Recuperados ${vapiAssistants.length || 0} assistentes diretamente da Vapi`);
+      
+      // Enhanced logging for debugging
+      vapiAssistants.forEach(assistant => {
+        console.log(`Assistente: ${assistant.name}, ID: ${assistant.id}, metadata:`, assistant.metadata);
+      });
       
       // Map the assistants to ensure they have valid status values
       return vapiAssistants.map(assistant => ({
@@ -515,7 +522,12 @@ export const webhookService = {
     }
   },
 
-  async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean }> {
+  async triggerCallWebhook(payload: { 
+    action: string; 
+    account_id?: string; 
+    additional_data?: Record<string, any>; 
+    [key: string]: any; 
+  }): Promise<{ success: boolean }> {
     try {
       console.log('Disparando webhook com payload inicial:', payload);
       
@@ -771,7 +783,20 @@ export const webhookService = {
       }
       
       // Prepara o payload para o webhook
-      const payload: WebhookPayload = {
+      const payload: {
+        action: string;
+        campaign_id: number;
+        client_id: number;
+        client_phone: string;
+        account_id?: string;
+        additional_data?: {
+          timestamp: string;
+          client_version: string;
+          source: string;
+          assistant_id?: string;
+          assistant_name?: string;
+        };
+      } = {
         action: 'initiate_call',
         campaign_id: campaignId,
         client_id: clientId,

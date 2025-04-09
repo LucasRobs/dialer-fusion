@@ -8,6 +8,7 @@ import { webhookService } from '@/services/webhookService';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Loader2, Bot, Phone } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface Assistant {
   id: string;
@@ -24,6 +25,19 @@ interface SelectAssistantDialogProps {
 
 const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssistantDialogProps) => {
   const [selectedAssistantId, setSelectedAssistantId] = useState<string>('');
+  const [userId, setUserId] = useState<string | null>(null);
+  
+  // Fetch current user ID
+  useEffect(() => {
+    const fetchUserId = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUserId(data?.user?.id || null);
+    };
+    
+    if (isOpen) {
+      fetchUserId();
+    }
+  }, [isOpen]);
   
   const { 
     data: assistants = [], 
@@ -31,13 +45,22 @@ const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssi
     error, 
     refetch 
   } = useQuery({
-    queryKey: ['assistants'],
+    queryKey: ['assistants', userId],
     queryFn: async () => {
       try {
-        // Buscar assistentes da Vapi API diretamente
+        if (!userId) return [];
+        
+        // Buscar assistentes da Vapi API filtrados pelo user_id
         const vapiAssistants = await webhookService.getAssistantsFromVapiApi();
-        if (vapiAssistants && vapiAssistants.length > 0) {
-          return vapiAssistants;
+        
+        // Filtrar apenas assistentes do usuário atual
+        const userAssistants = vapiAssistants.filter(assistant => 
+          assistant.metadata?.user_id === userId
+        );
+        
+        if (userAssistants && userAssistants.length > 0) {
+          console.log(`Encontrados ${userAssistants.length} assistentes para o usuário ${userId}`);
+          return userAssistants;
         }
         
         // Fallback para assistentes locais se necessário
@@ -47,7 +70,7 @@ const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssi
         return [];
       }
     },
-    enabled: isOpen,
+    enabled: isOpen && userId !== null,
   });
 
   // Usar o assistente do localStorage como valor padrão
