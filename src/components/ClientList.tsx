@@ -516,16 +516,16 @@ export default function ClientList() {
                 onValueChange={setNewClientGroupId}
               >
                 <SelectTrigger className="w-full">
-                  <div className="flex items-center">
+                  <div className="flex items-center text-left">
                     {newClientGroupId === 'none' 
                       ? 'Sem grupo' 
-                      : clientGroups?.find(group => group.id === newClientGroupId)?.name || 'Selecione um grupo (opcional)'}
+                      : clientGroups.find(g => g.id.toString() === newClientGroupId)?.name || 'Selecione um grupo'}
                   </div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem grupo</SelectItem>
                   {clientGroups?.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
+                    <SelectItem key={group.id} value={group.id.toString()}>
                       {group.name}
                     </SelectItem>
                   ))}

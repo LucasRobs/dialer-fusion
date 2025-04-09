@@ -97,11 +97,16 @@ export const clientService = {
       
       // Se um grupo foi especificado, adiciona o cliente ao grupo
       if (groupId && groupId !== 'none') {
+        // Converter o groupId para number se necessário
+        const numericGroupId = typeof groupId === 'string' && !isNaN(parseInt(groupId)) 
+          ? parseInt(groupId) 
+          : groupId;
+          
         const { error: groupError } = await supabase
           .from('client_group_members')
           .insert({
             client_id: newClient.id,
-            group_id: groupId
+            group_id: numericGroupId
           });
           
         if (groupError) {
@@ -116,6 +121,7 @@ export const clientService = {
       throw error;
     }
   },
+
 
   // Atualizar um cliente existente
   async updateClient(id: number, client: Partial<Client>) {
@@ -177,13 +183,18 @@ export const clientService = {
 
   // Buscar clientes por grupo
   async getClientsByGroupId(groupId: string) {
+    // Converter o groupId para number se necessário
+    const numericGroupId = typeof groupId === 'string' && !isNaN(parseInt(groupId)) 
+      ? parseInt(groupId) 
+      : groupId;
+      
     const { data, error } = await supabase
       .from('client_group_members')
       .select(`
         client_id,
         clients(*)
       `)
-      .eq('group_id', groupId);
+      .eq('group_id', numericGroupId);
 
     if (error) {
       throw new Error(`Erro ao buscar clientes por grupo: ${error.message}`);
@@ -200,7 +211,6 @@ export const clientService = {
 
     return clients;
   },
-
   // Importar clientes de uma planilha
   async importClients(clients: Omit<Client, 'id' | 'created_at' | 'updated_at'>[]) {
     const { data: userData, error: userError } = await supabase.auth.getUser();
