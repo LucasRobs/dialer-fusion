@@ -510,22 +510,27 @@ export default function ClientList() {
               />
             </div>
             <div>
-              <Select
-                value={newClientGroupId}
-                onValueChange={setNewClientGroupId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione um grupo (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem grupo</SelectItem>
-                  {clientGroups?.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+  <Select
+    value={newClientGroupId}
+    onValueChange={setNewClientGroupId}
+  >
+    <SelectTrigger className="w-full">
+      <div className="flex items-center">
+        {newClientGroupId === 'none' 
+          ? 'Sem grupo' 
+          : clientGroups?.find(group => group.id === newClientGroupId)?.name || 'Selecione um grupo (opcional)'}
+      </div>
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="none">Sem grupo</SelectItem>
+      {clientGroups?.map((group) => (
+        <SelectItem key={group.id} value={group.id}>
+          {group.name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <UserPlus className="h-4 w-4 mr-2" />
@@ -584,25 +589,27 @@ export default function ClientList() {
               </select>
             </div>
             <div>
-              <Select
-                value={accountId}
-                onValueChange={setAccountId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione uma conta (opcional)">
-                    {accountId === 'none' ? 'Sem conta' : 
-                      accounts?.find(a => a.id === accountId)?.name || 'Selecione uma conta'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem conta</SelectItem>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>            
+  <Select
+    value={accountId}
+    onValueChange={setAccountId}
+  >
+    <SelectTrigger className="w-full">
+      <div className="flex items-center">
+        {accountId === 'none' || !accountId
+          ? 'Sem conta' 
+          : accounts?.find(account => account.id === accountId)?.name || 'Selecione uma conta (opcional)'}
+      </div>
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="none">Sem conta</SelectItem>
+      {accounts.map((account) => (
+        <SelectItem key={account.id} value={account.id}>
+          {account.name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>          
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Pencil className="h-4 w-4 mr-2" />
