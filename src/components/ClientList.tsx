@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Table, 
@@ -48,6 +47,7 @@ import {
 import { clientGroupService } from '@/services/clientGroupService';
 import ImportClientsSheet from './ImportClientsSheet';
 import SelectAssistantDialog from './SelectAssistantDialog';
+import { formatPhoneNumber, isValidBrazilianPhoneNumber } from '@/lib/utils';
 
 export default function ClientList() {
   const [showNewClientDialog, setShowNewClientDialog] = useState(false);
@@ -116,13 +116,23 @@ export default function ClientList() {
       return clientService.getClients();
     },
   });
+
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
   
   const addClientMutation = useMutation({
     mutationFn: ({ clientData, groupId }: { clientData: any, groupId?: string }) => {
-      if (groupId && groupId !== 'none') {
-        return clientService.addClientWithGroup(clientData, groupId);
+      try {
+        if (groupId && groupId !== 'none') {
+          return clientService.addClientWithGroup(clientData, groupId);
+        }
+        return clientService.addClient(clientData);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('telefone')) {
+          setPhoneError(error.message);
+        }
+        throw error;
       }
-      return clientService.addClient(clientData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
@@ -132,24 +142,42 @@ export default function ClientList() {
       toast.success("Cliente adicionado com sucesso.");
       setShowNewClientDialog(false);
       clearForm();
+      setPhoneError(null);
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao adicionar cliente: ${error.message}`);
+      if (error.message.includes('telefone')) {
+        setPhoneError(error.message);
+      } else {
+        toast.error(`Erro ao adicionar cliente: ${error.message}`);
+      }
     },
   });
   
   
   const updateClientMutation = useMutation({
-    mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => 
-      clientService.updateClient(data.id, data.client),
+    mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => {
+      try {
+        return clientService.updateClient(data.id, data.client);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('telefone')) {
+          setPhoneError(error.message);
+        }
+        throw error;
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       toast.success("Cliente atualizado com sucesso");
       setShowEditClientDialog(false);
       clearForm();
+      setPhoneError(null);
     },
     onError: (error: Error) => {
-      toast.error(`Erro ao atualizar cliente: ${error.message || "Ocorreu um erro ao atualizar o cliente."}`);
+      if (error.message.includes('telefone')) {
+        setPhoneError(error.message);
+      } else {
+        toast.error(`Erro ao atualizar cliente: ${error.message || "Ocorreu um erro ao atualizar o cliente."}`);
+      }
     },
   });
   
@@ -195,39 +223,78 @@ export default function ClientList() {
     setSelectedClient(client);
     setShowDeleteClientDialog(true);
   };
-  
-  const handleSubmitNew = async (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const clientData = { 
-      name, 
-      phone, 
-      status: 'Active'  // Simplificado para sempre 'Active'
+
+    // Validate phone field
+    const validatePhone = (value: string): boolean => {
+      try {
+        formatPhoneNumber(value);
+        setPhoneError(null);
+        return true;
+      } catch (error) {
+        if (error instanceof Error) {
+          setPhoneError(error.message);
+        } else {
+          setPhoneError('Número de telefone inválido');
+        }
+        return false;
+      }
     };
-    
-    addClientMutation.mutate({ 
-      clientData, 
-      groupId: newClientGroupId
-    });
-  };
   
-  const handleSubmitEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (selectedClient) {
-      const clientData = { name, phone, email, status };
+    const handleSubmitNew = async (e: React.FormEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
       
-      // Adicionar account_id se selecionado
-      if (accountId) {
-        Object.assign(clientData, { account_id: accountId });
+      // Format and validate phone number
+      const formattedPhone = formatPhoneNumber(phone);
+      
+      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+        toast.error("Número de telefone inválido. Por favor, digite um número válido com DDD.");
+        return;
       }
       
-      updateClientMutation.mutate({ 
-        id: selectedClient.id, 
-        client: clientData
+      const clientData = { 
+        name, 
+        phone: formattedPhone, 
+        status: 'Active'  // Simplificado para sempre 'Active'
+      };
+      
+      addClientMutation.mutate({ 
+        clientData, 
+        groupId: newClientGroupId
       });
-    }
-  };
+    };
+    
+    const handleSubmitEdit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Format and validate phone number
+      const formattedPhone = formatPhoneNumber(phone);
+      
+      if (!isValidBrazilianPhoneNumber(formattedPhone)) {
+        toast.error("Número de telefone inválido. Por favor, digite um número válido com DDD.");
+        return;
+      }
+      
+      if (selectedClient) {
+        const clientData = { 
+          name, 
+          phone: formattedPhone, 
+          email, 
+          status 
+        };
+        
+        // Adicionar account_id se selecionado
+        if (accountId) {
+          Object.assign(clientData, { account_id: accountId });
+        }
+        
+        updateClientMutation.mutate({ 
+          id: selectedClient.id, 
+          client: clientData
+        });
+      }
+    };
   
   const confirmDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -245,6 +312,7 @@ export default function ClientList() {
     setAccountId('');
     setNewClientGroupId('none');
     setSelectedClient(null);
+    setPhoneError(null);
   };
 
   const handleCallWithAssistant = (client: any) => {
@@ -530,142 +598,162 @@ export default function ClientList() {
       )}
       
       <Dialog open={showNewClientDialog} onOpenChange={(open) => {
-        if (!open) clearForm();
-        setShowNewClientDialog(open);
-      }}>
-        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
-          <DialogHeader>
-            <DialogTitle>Adicionar Novo Cliente</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmitNew} className="space-y-4">
-            <div>
-              <Input 
-                placeholder="Nome" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <Input 
-                placeholder="Telefone" 
-                value={phone} 
-                onChange={(e) => setPhone(e.target.value)} 
-                required 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <Select
-                value={newClientGroupId}
-                onValueChange={setNewClientGroupId}
-              >
-                <SelectTrigger className="w-full">
-                  <div className="flex items-center text-left">
-                    {newClientGroupId === 'none' 
-                      ? 'Sem grupo' 
-                      : clientGroups.find(g => g.id.toString() === newClientGroupId)?.name || 'Selecione um grupo'}
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem grupo</SelectItem>
-                  {clientGroups?.map((group) => (
-                    <SelectItem key={group.id} value={group.id.toString()}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button type="submit" onClick={(e) => e.stopPropagation()}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Adicionar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      if (!open) clearForm();
+      setShowNewClientDialog(open);
+    }}>
+      <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>Adicionar Novo Cliente</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmitNew} className="space-y-4">
+          <div>
+            <Input 
+              placeholder="Nome" 
+              value={name} 
+              onChange={(e) => setName(e.target.value)} 
+              required 
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div>
+            <Input 
+              placeholder="Telefone (DDD + número)" 
+              value={phone} 
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (phoneError) validatePhone(e.target.value);
+              }} 
+              required 
+              onClick={(e) => e.stopPropagation()}
+              className={phoneError ? "border-red-500" : ""}
+            />
+            {phoneError && (
+              <p className="text-red-500 text-sm mt-1">{phoneError}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Formato: DDD + número (ex: 85997484924)
+            </p>
+          </div>
+          <div>
+            <Select
+              value={newClientGroupId}
+              onValueChange={setNewClientGroupId}
+            >
+              <SelectTrigger className="w-full">
+                <div className="flex items-center text-left">
+                  {newClientGroupId === 'none' 
+                    ? 'Sem grupo' 
+                    : clientGroups.find(g => g.id.toString() === newClientGroupId)?.name || 'Selecione um grupo'}
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem grupo</SelectItem>
+                {clientGroups?.map((group) => (
+                  <SelectItem key={group.id} value={group.id.toString()}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="submit" onClick={(e) => e.stopPropagation()}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Adicionar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
       
-      <Dialog open={showEditClientDialog} onOpenChange={(open) => {
-        if (!open) clearForm();
-        setShowEditClientDialog(open);
-      }}>
-        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
-          <DialogHeader>
-            <DialogTitle>Editar Cliente</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmitEdit} className="space-y-4">
-            <div>
-              <Input 
-                placeholder="Nome" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <Input 
-                placeholder="Telefone" 
-                value={phone} 
-                onChange={(e) => setPhone(e.target.value)} 
-                required 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <Input 
-                placeholder="Email" 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              <select 
-                className="w-full border rounded-md py-2 px-3"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <option value="Active">Ativo</option>
-                <option value="Inactive">Inativo</option>
-              </select>
-            </div>
-            <div>
-  <Select
-    value={accountId}
-    onValueChange={setAccountId}
-  >
-    <SelectTrigger className="w-full">
-      <div className="flex items-center">
-        {accountId === 'none' || !accountId
-          ? 'Sem conta' 
-          : accounts?.find(account => account.id === accountId)?.name || 'Selecione uma conta (opcional)'}
-      </div>
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="none">Sem conta</SelectItem>
-      {accounts.map((account) => (
-        <SelectItem key={account.id} value={account.id}>
-          {account.name}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>          
-            <DialogFooter>
-              <Button type="submit" onClick={(e) => e.stopPropagation()}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Salvar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+    <Dialog open={showEditClientDialog} onOpenChange={(open) => {
+      if (!open) clearForm();
+      setShowEditClientDialog(open);
+    }}>
+      <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>Editar Cliente</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmitEdit} className="space-y-4">
+          <div>
+            <Input 
+              placeholder="Nome" 
+              value={name} 
+              onChange={(e) => setName(e.target.value)} 
+              required 
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div>
+            <Input 
+              placeholder="Telefone (DDD + número)" 
+              value={phone} 
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (phoneError) validatePhone(e.target.value);
+              }} 
+              required 
+              onClick={(e) => e.stopPropagation()}
+              className={phoneError ? "border-red-500" : ""}
+            />
+            {phoneError && (
+              <p className="text-red-500 text-sm mt-1">{phoneError}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Formato: DDD + número (ex: 85997484924)
+            </p>
+          </div>
+          <div>
+            <Input 
+              placeholder="Email" 
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div>
+            <select 
+              className="w-full border rounded-md py-2 px-3"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <option value="Active">Ativo</option>
+              <option value="Inactive">Inativo</option>
+            </select>
+          </div>
+          <div>
+            <Select
+              value={accountId}
+              onValueChange={setAccountId}
+            >
+              <SelectTrigger className="w-full">
+                <div className="flex items-center">
+                  {accountId === 'none' || !accountId
+                    ? 'Sem conta' 
+                    : accounts?.find(account => account.id === accountId)?.name || 'Selecione uma conta (opcional)'}
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem conta</SelectItem>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="submit" onClick={(e) => e.stopPropagation()}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Salvar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
       
       <Dialog open={showDeleteClientDialog} onOpenChange={(open) => {
         if (!open) setSelectedClient(null);

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Dialog, 
@@ -25,6 +24,8 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientService } from '@/services/clientService';
 import { useToast } from '@/components/ui/use-toast';
+import { formatPhoneNumber } from '@/lib/utils';
+
 
 interface ImportClientsSheetProps {
   isOpen: boolean;
@@ -96,6 +97,14 @@ const ImportClientsSheet = ({ isOpen, onClose }: ImportClientsSheetProps) => {
       
       if (!obj.phone) {
         errors.push(`Linha ${i+1}: telefone é obrigatório`);
+      } else {
+        // Validar formato do telefone
+        try {
+          obj.phone = formatPhoneNumber(obj.phone);
+        } catch (e) {
+          errors.push(`Linha ${i+1}: ${(e as Error).message}`);
+          continue;
+        }
       }
       
       // Se validar corretamente, adiciona ao resultado
@@ -103,7 +112,7 @@ const ImportClientsSheet = ({ isOpen, onClose }: ImportClientsSheetProps) => {
         // Preparar objeto para importação
         results.push({
           name: obj.name,
-          phone: obj.phone,
+          phone: obj.phone, // Já formatado pela função formatPhoneNumber
           email: obj.email || '',
           status: obj.status || 'Active'
         });

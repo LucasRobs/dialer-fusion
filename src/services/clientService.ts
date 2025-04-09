@@ -1,5 +1,5 @@
-
 import { supabase } from '@/lib/supabase';
+import { formatPhoneNumber } from '@/lib/utils';
 
 export type Client = {
   id: number;
@@ -65,25 +65,45 @@ export const clientService = {
 
   // Adicionar um novo cliente
   async addClient(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) {
-    const { data, error } = await supabase
-      .from('clients')
-      .insert(client)
-      .select();
+    try {
+      // Formatar o telefone antes de salvar
+      const formattedClient = {
+        ...client,
+        phone: formatPhoneNumber(client.phone)
+      };
 
-    if (error) {
-      throw new Error(`Erro ao adicionar cliente: ${error.message}`);
+      const { data, error } = await supabase
+        .from('clients')
+        .insert(formattedClient)
+        .select();
+
+      if (error) {
+        throw new Error(`Erro ao adicionar cliente: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Erro ao adicionar cliente: ${String(error)}`);
     }
-
-    return data;
   },
+
 
   // Adicionar um cliente e associá-lo a um grupo
   async addClientWithGroup(client: Omit<Client, 'id' | 'created_at' | 'updated_at'>, groupId: string) {
     try {
+      // Formatar o telefone antes de salvar
+      const formattedClient = {
+        ...client,
+        phone: formatPhoneNumber(client.phone)
+      };
+      
       // Primeiro adiciona o cliente
       const { data, error } = await supabase
         .from('clients')
-        .insert(client)
+        .insert(formattedClient)
         .select();
 
       if (error) {
@@ -126,18 +146,33 @@ export const clientService = {
 
   // Atualizar um cliente existente
   async updateClient(id: number, client: Partial<Client>) {
-    const { data, error } = await supabase
-      .from('clients')
-      .update(client)
-      .eq('id', id)
-      .select();
+    try {
+      const updatedClient = { ...client };
+      
+      // Se telefone estiver sendo atualizado, formatá-lo
+      if (updatedClient.phone) {
+        updatedClient.phone = formatPhoneNumber(updatedClient.phone);
+      }
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .update(updatedClient)
+        .eq('id', id)
+        .select();
 
-    if (error) {
-      throw new Error(`Erro ao atualizar cliente: ${error.message}`);
+      if (error) {
+        throw new Error(`Erro ao atualizar cliente: ${error.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Erro ao atualizar cliente: ${String(error)}`);
     }
-
-    return data;
   },
+
 
   // Excluir um cliente
   async deleteClient(id: number) {
@@ -183,6 +218,7 @@ export const clientService = {
   },
 
   // Buscar clientes por grupo
+  // Buscar clientes por grupo
   async getClientsByGroupId(groupId: string) {
     // Converter o groupId para number se necessário
     const numericGroupId = typeof groupId === 'string' && !isNaN(parseInt(groupId)) 
@@ -212,27 +248,37 @@ export const clientService = {
 
     return clients;
   },
+
   // Importar clientes de uma planilha
   async importClients(clients: Omit<Client, 'id' | 'created_at' | 'updated_at'>[]) {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) throw new Error(`Erro ao obter usuário: ${userError.message}`);
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw new Error(`Erro ao obter usuário: ${userError.message}`);
 
-    const userId = userData?.user?.id;
+      const userId = userData?.user?.id;
 
-    const clientsWithUserId = clients.map(client => ({
-      ...client,
-      user_id: userId,
-    }));
+      // Formatar o telefone de cada cliente antes de salvar
+      const formattedClients = clients.map(client => ({
+        ...client,
+        phone: formatPhoneNumber(client.phone),
+        user_id: userId,
+      }));
 
-    const { data, error } = await supabase
-      .from('clients')
-      .insert(clientsWithUserId)
-      .select();
+      const { data, error } = await supabase
+        .from('clients')
+        .insert(formattedClients)
+        .select();
 
-    if (error) {
-      throw new Error(`Erro ao importar clientes: ${error.message}`);
+      if (error) {
+        throw new Error(`Erro ao importar clientes: ${error.message}`);
+      }
+
+      return data as Client[];
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Erro ao importar clientes: ${String(error)}`);
     }
-
-    return data as Client[];
   },
 };
