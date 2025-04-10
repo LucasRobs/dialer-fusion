@@ -1,0 +1,9 @@
+{
+    "rewrites": [
+      {
+        "source": "/(.*)",
+        "destination": "dialer-fusion/index.html"
+      }
+    ]
+  }
+  
