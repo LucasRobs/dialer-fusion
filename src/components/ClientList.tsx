@@ -63,11 +63,8 @@ export default function ClientList() {
   const [status, setStatus] = useState('Active');
   const [accountId, setAccountId] = useState('');
   const [newClientGroupId, setNewClientGroupId] = useState<string>('none');
-  const [selectedAccountId, setSelectedAccountId] = useState<string>(''); // Added state for selectedAccountId
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-
-// Removed duplicate export default function ClientList and its associated state declarations
   
   const queryClient = useQueryClient();
 
@@ -175,7 +172,6 @@ export default function ClientList() {
       }
     },
   });
-  
   
   const updateClientMutation = useMutation({
     mutationFn: (data: { id: number; client: { name: string; phone: string; email: string; status: string; account_id?: string } }) => {
@@ -408,7 +404,6 @@ export default function ClientList() {
     setPhoneError(null);
   };
 
-  // Melhorar a função para lidar com assistentes
   const handleCallWithAssistant = (client: any) => {
     console.log("Selecionando cliente para chamada com assistente:", client);
     setSelectedClient(client);
@@ -494,15 +489,6 @@ export default function ClientList() {
 
   const handleGroupFilterChange = (value: string) => {
     setSelectedGroupId(value);
-  };
-
-  const handleAccountFilterChange = (value: string) => {
-    console.log('Filtro de conta alterado para:', value);
-    setSelectedAccountId(value);
-    // Limpar o filtro de grupo se uma conta for selecionada
-    if (value && value !== 'all-accounts') {
-      setSelectedGroupId('');
-    }
   };
 
   const handleRefresh = () => {
@@ -615,7 +601,6 @@ export default function ClientList() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Conta</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -626,7 +611,6 @@ export default function ClientList() {
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>{client.phone}</TableCell>
                   <TableCell>{client.email || '-'}</TableCell>
-                  <TableCell>{client.account_id ? getAccountName(client.account_id) : '-'}</TableCell>
                   <TableCell>
                     <Badge variant={client.status === 'Active' ? 'default' : 'secondary'}>
                       {client.status}
@@ -806,28 +790,6 @@ export default function ClientList() {
                 <option value="Inactive">Inativo</option>
               </select>
             </div>
-            <div>
-              <Select
-                value={accountId}
-                onValueChange={setAccountId}
-              >
-                <SelectTrigger className="w-full">
-                  <div className="flex items-center">
-                    {accountId === 'none' || !accountId
-                      ? 'Sem conta' 
-                      : accounts?.find(account => account.id === accountId)?.name || 'Selecione uma conta (opcional)'}
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem conta</SelectItem>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <DialogFooter>
               <Button type="submit" onClick={(e) => e.stopPropagation()}>
                 <Pencil className="h-4 w-4 mr-2" />
@@ -863,18 +825,18 @@ export default function ClientList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+  
       <ImportClientsSheet 
         isOpen={showImportDialog}
         onClose={() => setShowImportDialog(false)}
       />
-
-<SelectAssistantDialog
+  
+      <SelectAssistantDialog
         isOpen={showAssistantDialog}
         onClose={() => setShowAssistantDialog(false)}
         onSelect={handleMakeCall}
         client={selectedClient}
       />
     </div>
-  );
-}
+    );
+  }
