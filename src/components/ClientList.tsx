@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Table, 
@@ -29,7 +28,6 @@ import {
   Filter,
   FileUp,
   RefreshCw,
-  Building,
   UserPlus,
   Bot
 } from 'lucide-react';
@@ -59,15 +57,17 @@ export default function ClientList() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('Active');
   const [accountId, setAccountId] = useState('');
   const [newClientGroupId, setNewClientGroupId] = useState<string>('none');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(''); // Added state for selectedAccountId
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+
+// Removed duplicate export default function ClientList and its associated state declarations
   
   const queryClient = useQueryClient();
 
@@ -121,9 +121,9 @@ export default function ClientList() {
     error, 
     refetch 
   } = useQuery({
-    queryKey: ['clients', selectedGroupId, selectedAccountId, userId],
+    queryKey: ['clients', selectedGroupId, userId],
     queryFn: async () => {
-      console.log('Buscando clientes com filtros - Grupo:', selectedGroupId, 'Conta:', selectedAccountId, 'UserID:', userId);
+      console.log('Buscando clientes com filtros - Grupo:', selectedGroupId, 'UserID:', userId);
       
       // Garantir que o usuário esteja autenticado
       if (!userId) {
@@ -134,11 +134,6 @@ export default function ClientList() {
       if (selectedGroupId && selectedGroupId !== 'all-clients') {
         console.log('Buscando por grupo:', selectedGroupId);
         return clientService.getClientsByGroupId(selectedGroupId);
-      }
-      
-      if (selectedAccountId && selectedAccountId !== 'all-accounts') {
-        console.log('Buscando por conta:', selectedAccountId);
-        return clientService.getClientsByAccount(selectedAccountId);
       }
       
       console.log('Buscando todos os clientes para o usuário:', userId);
@@ -499,10 +494,6 @@ export default function ClientList() {
 
   const handleGroupFilterChange = (value: string) => {
     setSelectedGroupId(value);
-    // Limpar o filtro de conta se um grupo for selecionado
-    if (value && value !== 'all-clients') {
-      setSelectedAccountId('');
-    }
   };
 
   const handleAccountFilterChange = (value: string) => {
@@ -514,95 +505,79 @@ export default function ClientList() {
     }
   };
 
-  // Encontrar o nome da conta para exibição
-  const getAccountName = (accountId: string) => {
-    if (!accountId) return '-';
-    const account = accounts.find(acc => acc.id === accountId);
-    return account ? account.name : accountId;
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+    queryClient.invalidateQueries({ queryKey: ['clientGroups'] });
+    toast.success("Lista de dados atualizada");
   };
 
-  return (
-    <div className="container mx-auto p-4 max-w-6xl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Clientes</h1>
-        <div className="flex gap-2">
-          <Button onClick={handleImportClients}>
-            <FileUp className="h-4 w-4 mr-2" />
-            Importar Clientes
-          </Button>
-          <Button onClick={handleNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Cliente
-          </Button>
-        </div>
-      </div>
-      
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input 
-            placeholder="Buscar clientes..." 
-            className="pl-10" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+    // Encontrar o nome da conta para exibição
+    const getAccountName = (accountId: string) => {
+      if (!accountId) return '-';
+      const account = accounts.find(acc => acc.id === accountId);
+      return account ? account.name : accountId;
+    };
+
+    return (
+      <div className="container mx-auto p-4 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Clientes</h1>
+          <div className="flex gap-2">
+            <Button onClick={handleImportClients}>
+              <FileUp className="h-4 w-4 mr-2" />
+              Importar Clientes
+            </Button>
+            <Button onClick={handleNew}>
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Cliente
+            </Button>
+          </div>
         </div>
         
-        <div className="w-full md:w-64">
-          <Select
-            value={selectedGroupId}
-            onValueChange={handleGroupFilterChange}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input 
+              placeholder="Buscar clientes..." 
+              className="pl-10" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="w-full md:w-64">
+            <Select
+              value={selectedGroupId}
+              onValueChange={handleGroupFilterChange}
+            >
+              <SelectTrigger className="w-full">
+                <div className="flex items-center">
+                  <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Filtrar por grupo" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-clients">Todos os clientes</SelectItem>
+                {clientGroups.map((group) => (
+                  <SelectItem key={group.id} value={group.id}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={handleRefresh}
+            title="Atualizar lista"
           >
-            <SelectTrigger className="w-full">
-              <div className="flex items-center">
-                <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Filtrar por grupo" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-clients">Todos os clientes</SelectItem>
-              {clientGroups.map((group) => (
-                <SelectItem key={group.id} value={group.id}>
-                  {group.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
-        
-        <div className="w-full md:w-64">
-          <Select
-            value={selectedAccountId}
-            onValueChange={handleAccountFilterChange}
-          >
-            <SelectTrigger className="w-full">
-              <div className="flex items-center">
-                <Building className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Filtrar por conta" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-accounts">Todas as contas</SelectItem>
-              {accounts.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <Button 
-          variant="outline" 
-          size="icon"
-          onClick={() => refetch()}
-          title="Atualizar lista"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
       
-      {isLoading ? (
+        {isLoading ? (
         <div className="flex justify-center p-8">
           <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div>
         </div>
@@ -618,12 +593,10 @@ export default function ClientList() {
           <p className="text-lg text-muted-foreground mb-4">
             {selectedGroupId 
               ? "Este grupo não possui clientes" 
-              : selectedAccountId
-                ? "Esta conta não possui clientes"
-                : "Nenhum cliente encontrado"
+              : "Nenhum cliente encontrado"
             }
           </p>
-          {!selectedGroupId && !selectedAccountId && (
+          {!selectedGroupId && (
             <Button onClick={handleNew}>
               <Plus className="h-4 w-4 mr-2" />
               Adicionar seu primeiro cliente
@@ -896,7 +869,7 @@ export default function ClientList() {
         onClose={() => setShowImportDialog(false)}
       />
 
-      <SelectAssistantDialog
+<SelectAssistantDialog
         isOpen={showAssistantDialog}
         onClose={() => setShowAssistantDialog(false)}
         onSelect={handleMakeCall}
