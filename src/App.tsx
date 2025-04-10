@@ -17,7 +17,6 @@ import Training from "./pages/Training";
 import Campaigns from "./pages/Campaigns";
 import NotFound from "./pages/NotFound";
 import VapiAssistant from './pages/VapiAssistant';
-import Index from './pages/Index';
 
 const App = () => {
   // Create a client instance that persists across renders
@@ -49,7 +48,7 @@ const App = () => {
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/dashboard" element={

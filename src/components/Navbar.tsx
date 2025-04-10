@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
@@ -6,6 +5,7 @@ import Logo from './Logo';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { NavLink } from 'react-router-dom';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -14,8 +14,10 @@ const Navbar = () => {
   const { toast } = useToast();
   const { user, signOut } = useAuth();
   
-  const isAuthenticated = !!user;
-  const isHomePage = location.pathname === '/';
+  const isAuthenticated = !!user || location.pathname.includes('/dashboard') || 
+                         location.pathname.includes('/clients') || 
+                         location.pathname.includes('/training') || 
+                         location.pathname.includes('/campaigns');
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -47,11 +49,6 @@ const Navbar = () => {
         <nav className="hidden md:flex items-center space-x-6">
           {!isAuthenticated ? (
             <>
-              {!isHomePage && (
-                <Link to="/" className="text-foreground/80 hover:text-foreground transition-colors">
-                  Página Inicial
-                </Link>
-              )}
               <Link to="/login">
                 <Button variant="outline" size="sm" className="mr-2">
                   Entrar
@@ -100,11 +97,6 @@ const Navbar = () => {
           <div className="container mx-auto px-4 py-4 flex flex-col space-y-4">
             {!isAuthenticated ? (
               <>
-                {!isHomePage && (
-                  <Link to="/" className="text-foreground py-2 px-4 hover:bg-muted rounded-md" onClick={toggleMenu}>
-                    Página Inicial
-                  </Link>
-                )}
                 <div className="flex flex-col space-y-2 pt-2">
                   <Link to="/login" onClick={toggleMenu}>
                     <Button variant="outline" className="w-full">Entrar</Button>
