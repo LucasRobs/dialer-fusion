@@ -137,8 +137,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     try {
       let assistantName = "Default Assistant";
       let assistantId = vapiSettings.assistantId;
-      let systemPrompt = "";
-      let firstMessage = "";
+      let assistantDetails = null;
       
       // Find a valid assistant ID
       if (!assistantId) {
@@ -148,13 +147,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
             const firstAssistant = assistants[0];
             assistantName = firstAssistant.name || "Default Assistant";
             assistantId = firstAssistant.id;
-            systemPrompt = firstAssistant.system_prompt || "";
-            firstMessage = firstAssistant.first_message || "Olá, como posso ajudar?";
             console.log('Using Vapi API assistant for test call:', {
               name: assistantName,
-              id: assistantId,
-              system_prompt: systemPrompt,
-              first_message: firstMessage
+              id: assistantId
             });
           } else {
             // If we don't have a list of assistants, fetch them directly from Vapi
@@ -162,13 +157,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
             if (vapiAssistants && vapiAssistants.length > 0) {
               assistantName = vapiAssistants[0].name || "Default Assistant";
               assistantId = vapiAssistants[0].id;
-              systemPrompt = vapiAssistants[0].system_prompt || "";
-              firstMessage = vapiAssistants[0].first_message || "Olá, como posso ajudar?";
               console.log('Fetched and using first Vapi assistant for test call:', {
                 name: assistantName,
-                id: assistantId,
-                system_prompt: systemPrompt,
-                first_message: firstMessage
+                id: assistantId
               });
             } else {
               // Try localStorage as last resort
@@ -179,39 +170,23 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
                   assistantName = assistantData.name || "Default Assistant";
                   // Prioritize assistant_id over id if available
                   assistantId = assistantData.assistant_id || assistantData.id;
-                  systemPrompt = assistantData.system_prompt || "";
-                  firstMessage = assistantData.first_message || "Olá, como posso ajudar?";
                   
                   // Verify this ID with Vapi API
                   const confirmedId = await assistantService.ensureVapiAssistantId(assistantId);
                   if (confirmedId) {
                     assistantId = confirmedId;
-                    // Try to get system_prompt and first_message from Vapi API
-                    const assistantDetails = await assistantService.getVapiAssistantById(assistantId);
-                    if (assistantDetails) {
-                      systemPrompt = assistantDetails.system_prompt || systemPrompt;
-                      firstMessage = assistantDetails.first_message || firstMessage;
-                    }
                   } else if (assistantData.name) {
                     // Try to find by name if ID verification failed
                     const idByName = await assistantService.getVapiAssistantIdByName(assistantData.name);
                     if (idByName) {
                       assistantId = idByName;
-                      // Try to get system_prompt and first_message from Vapi API
-                      const assistantDetails = await assistantService.getVapiAssistantById(idByName);
-                      if (assistantDetails) {
-                        systemPrompt = assistantDetails.system_prompt || systemPrompt;
-                        firstMessage = assistantDetails.first_message || firstMessage;
-                      }
                       console.log('Found assistant ID by name:', idByName);
                     }
                   }
                   
                   console.log('Using stored assistant for test call:', {
                     name: assistantName,
-                    id: assistantId,
-                    system_prompt: systemPrompt,
-                    first_message: firstMessage
+                    id: assistantId
                   });
                 }
               }
@@ -227,29 +202,21 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           const assistantDetails = await assistantService.getVapiAssistantById(assistantId);
           if (assistantDetails) {
             assistantName = assistantDetails.name || "Selected Assistant";
-            systemPrompt = assistantDetails.system_prompt || "";
-            firstMessage = assistantDetails.first_message || "Olá, como posso ajudar?";
             console.log('Validated assistant ID with Vapi API:', {
               name: assistantName,
-              id: assistantId,
-              system_prompt: systemPrompt,
-              first_message: firstMessage
+              id: assistantId
             });
           } else {
             // If direct validation fails, look in our local list
             const matchingAssistant = assistants.find(a => a.id === assistantId);
             if (matchingAssistant) {
               assistantName = matchingAssistant.name || "Selected Assistant";
-              systemPrompt = matchingAssistant.system_prompt || "";
-              firstMessage = matchingAssistant.first_message || "Olá, como posso ajudar?";
             } else {
               // Try to fetch all assistants and find a match
               const allAssistants = await assistantService.getVapiAssistants();
               const matchingAssistant = allAssistants.find(a => a.id === assistantId);
               if (matchingAssistant) {
                 assistantName = matchingAssistant.name || "Selected Assistant";
-                systemPrompt = matchingAssistant.system_prompt || "";
-                firstMessage = matchingAssistant.first_message || "Olá, como posso ajudar?";
               }
             }
           }
@@ -259,9 +226,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         
         console.log('Using configured assistant for test call:', {
           name: assistantName,
-          id: assistantId,
-          system_prompt: systemPrompt,
-          first_message: firstMessage
+          id: assistantId
         });
       }
       
@@ -274,12 +239,6 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
             const idByName = await assistantService.getVapiAssistantIdByName(assistantName);
             if (idByName) {
               assistantId = idByName;
-              // Try to get system_prompt and first_message from Vapi API
-              const assistantDetails = await assistantService.getVapiAssistantById(idByName);
-              if (assistantDetails) {
-                systemPrompt = assistantDetails.system_prompt || "";
-                firstMessage = assistantDetails.first_message || "Olá, como posso ajudar?";
-              }
               console.log('Found assistant ID by name as last resort:', idByName);
             }
           } catch (e) {
@@ -296,19 +255,12 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         }
       }
       
-      // Sempre tentar obter os detalhes mais recentes do assistente antes de enviar
+      // Get assistant details to include first_message and system_prompt
       try {
-        const latestDetails = await assistantService.getVapiAssistantById(assistantId);
-        if (latestDetails) {
-          systemPrompt = latestDetails.system_prompt || systemPrompt;
-          firstMessage = latestDetails.first_message || firstMessage;
-          console.log('Using latest assistant details:', {
-            system_prompt: systemPrompt,
-            first_message: firstMessage
-          });
-        }
+        assistantDetails = await assistantService.getVapiAssistantById(assistantId);
+        console.log('Retrieved assistant details:', assistantDetails);
       } catch (error) {
-        console.error('Error fetching latest assistant details:', error);
+        console.error('Error fetching assistant details:', error);
       }
       
       const testData: WebhookPayload = {
@@ -320,9 +272,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         call: {
           model: vapiSettings.model,
           voice: vapiSettings.voice,
-          language: vapiSettings.language,
-          first_message: firstMessage,
-          system_prompt: systemPrompt
+          language: vapiSettings.language
         },
         additional_data: {
           source: 'manual_test',
@@ -332,8 +282,8 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           api_key: vapiSettings.apiKey, // Add API key
           assistant_id: null, // We don't use Supabase ID anymore
           vapi_assistant_id: assistantId, // We use Vapi ID directly
-          first_message: firstMessage,
-          system_prompt: systemPrompt,
+          first_message: assistantDetails?.first_message || "Olá, como posso ajudar?",
+          system_prompt: assistantDetails?.system_prompt || "",
           model_name: vapiSettings.model
         }
       };
