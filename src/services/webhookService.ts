@@ -852,7 +852,8 @@ export const webhookService = {
 
   async triggerCallWebhook(payload: { 
     action: string; 
-    account_id?: string; 
+    account_id?: string;
+    clients?: Array<{phone: string, name: string, id?: number}>;  // Novo campo para array de clientes
     additional_data?: Record<string, any>; 
     [key: string]: any; 
   }): Promise<{ success: boolean }> {
@@ -1024,8 +1025,16 @@ export const webhookService = {
       
       // Definir provider como "vapi"
       payload.provider = "vapi";
-
-      if (firstMessage) {
+  
+      // Se temos uma lista de clientes no payload, aplicar as variáveis de template ao first_message
+      // para o primeiro cliente na lista apenas para propósitos de log
+      if (payload.clients && payload.clients.length > 0 && firstMessage) {
+        const sampleClient = payload.clients[0];
+        const sampleFirstMessage = this.replaceTemplateVariables(firstMessage, {
+          client_name: sampleClient.name
+        });
+        console.log('First message after variable replacement (sample):', sampleFirstMessage);
+      } else if (firstMessage) {
         firstMessage = this.replaceTemplateVariables(firstMessage, payload);
         console.log('First message after variable replacement:', firstMessage);
       }
@@ -1085,7 +1094,7 @@ export const webhookService = {
             temperature: (typeof payload.call.model === 'object' && payload.call.model?.temperature) || 0.5,
             systemPrompt: systemPrompt
           };
-
+  
         const voiceConfig = typeof payload.call.voice === 'string' ?
           {
             provider: "11labs",
@@ -1098,7 +1107,7 @@ export const webhookService = {
             voiceId: (typeof payload.call.voice === 'object' && payload.call.voice?.voiceId) || voice,
             model: (typeof payload.call.voice === 'object' && payload.call.voice?.model) || DEFAULT_MODEL
           };
-
+  
           payload.call = {
             model: modelConfig,
             voice: voiceConfig,
@@ -1141,6 +1150,7 @@ export const webhookService = {
       
       console.log('Enviando payload final para webhook:', {
         ...payload,
+        clients: payload.clients ? `Array com ${payload.clients.length} cliente(s)` : undefined,
         additional_data: {
           ...payload.additional_data,
           api_key: '***REDACTED***' // Don't log the actual API key
@@ -1164,14 +1174,14 @@ export const webhookService = {
         });
         
         clearTimeout(timeoutId);
-
+  
         if (!response.ok) {
           const errorText = await response.text();
           console.error('Erro ao disparar webhook de chamada:', response.status, response.statusText, errorText);
           toast.error(`Erro ao realizar chamada (${response.status}): ${response.statusText}`);
           return { success: false };
         }
-
+  
         console.log('Webhook de chamada disparado com sucesso');
         toast.success('Chamada iniciada com sucesso');
         return { success: true };
@@ -1195,8 +1205,7 @@ export const webhookService = {
       return { success: false };
     }
   },
-
-
+  
   /**
    * Fazer uma chamada para um cliente
    */
@@ -1234,13 +1243,11 @@ export const webhookService = {
         console.error('Erro ao obter assistente do localStorage:', e);
       }
       
-      // Prepara o payload para o webhook
+      // Prepara o payload para o webhook com cliente como um array
       const payload: {
         action: string;
         campaign_id: number;
-        client_id: number;
-        client_phone: string;
-        client_name?: string;
+        clients: Array<{id: number, phone: string, name: string}>;  // Novo formato de array
         account_id?: string;
         additional_data?: {
           timestamp: string;
@@ -1252,8 +1259,11 @@ export const webhookService = {
       } = {
         action: 'initiate_call',
         campaign_id: campaignId,
-        client_id: clientId,
-        client_phone: phoneNumber,
+        clients: [{  // Cliente como objeto em um array
+          id: clientId,
+          phone: phoneNumber,
+          name: clientName || "Cliente"  // Usar "Cliente" como fallback se não tiver nome
+        }],
         account_id: accountId, // Incluir account_id se fornecido
         additional_data: {
           timestamp: new Date().toISOString(),
@@ -1261,11 +1271,6 @@ export const webhookService = {
           source: 'manual_call'
         }
       };
-      
-      // Adiciona nome do cliente se disponível
-      if (clientName) {
-        payload.client_name = clientName;
-      }
       
       // Adiciona informações do assistente se disponíveis
       if (assistant) {
@@ -1287,10 +1292,86 @@ export const webhookService = {
       return { success: false };
     }
   },
-
-  /**
-   * Métodos auxiliares
-   */
+  
+  // Adicionando função para realizar chamadas em massa
+  async makeBulkCalls(clients: Array<{id: number, phone: string, name: string}>, campaignId: number, accountId?: string): Promise<{ success: boolean, message?: string, data?: any }> {
+    try {
+      console.log(`Iniciando chamadas em massa para ${clients.length} clientes na campanha ${campaignId}${accountId ? `, conta ${accountId}` : ''}`);
+      
+      // Validar dados dos clientes
+      if (!clients || clients.length === 0) {
+        console.error('Nenhum cliente fornecido para chamadas em massa');
+        return { success: false, message: 'Nenhum cliente selecionado para chamada' };
+      }
+      
+      // Log os primeiros 5 clientes (ou todos se forem menos que 5)
+      const sampleClients = clients.slice(0, 5);
+      console.log('Amostra de clientes para disparo em massa:', sampleClients);
+      
+      // Obtém o assistente atual do localStorage
+      let assistant = null;
+      try {
+        const storedAssistant = localStorage.getItem('selected_assistant');
+        if (storedAssistant) {
+          assistant = JSON.parse(storedAssistant);
+        }
+      } catch (e) {
+        console.error('Erro ao obter assistente do localStorage:', e);
+      }
+      
+      // Prepara o payload para o webhook com todos os clientes no array
+      const payload: {
+        action: string;
+        campaign_id: number;
+        clients: Array<{id: number, phone: string, name: string}>;
+        account_id?: string;
+        additional_data?: {
+          timestamp: string;
+          client_version: string;
+          source: string;
+          assistant_id?: string;
+          assistant_name?: string;
+          bulk_call: boolean;
+        };
+      } = {
+        action: 'initiate_bulk_calls',
+        campaign_id: campaignId,
+        clients: clients,  // Array completo de clientes
+        account_id: accountId, // Incluir account_id se fornecido
+        additional_data: {
+          timestamp: new Date().toISOString(),
+          client_version: CLIENT_VERSION,
+          source: 'bulk_call',
+          bulk_call: true  // Flag para indicar que é um disparo em massa
+        }
+      };
+      
+      // Adiciona informações do assistente se disponíveis
+      if (assistant) {
+        payload.additional_data!.assistant_id = assistant.assistant_id || assistant.id;
+        payload.additional_data!.assistant_name = assistant.name;
+      }
+      
+      // Envia para o webhook
+      const result = await this.triggerCallWebhook(payload);
+      
+      if (result.success) {
+        return { 
+          success: true, 
+          message: `Chamadas em massa iniciadas com sucesso para ${clients.length} clientes`, 
+          data: { clientCount: clients.length, campaignId, accountId } 
+        };
+      } else {
+        return { success: false, message: 'Falha ao iniciar chamadas em massa', data: null };
+      }
+    } catch (error) {
+      console.error('Erro geral ao disparar webhook de chamadas em massa:', error);
+      toast.error(`Erro ao realizar chamadas em massa: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      return { success: false };
+    }
+  },
+  
+  
   async cacheAssistants(assistants: any[], userId: string): Promise<void> {
     try {
       await Promise.all(
