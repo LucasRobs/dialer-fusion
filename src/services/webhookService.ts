@@ -605,30 +605,53 @@ export const webhookService = {
       
       // Variables to store assistant information
       let selectedAssistant = null;
-      let firstMessage = "Olá {nome}, como posso ajudar?";
+      let firstMessage = "";
       let systemPrompt = "";
       let assistantName = "Assistente";
       
       // Try to get assistant details directly from Supabase
       if (assistantId) {
         try {
-          // First, get assistant details from Supabase
-          const { data: assistantData, error } = await supabase
+          console.log(`Looking for assistant with ID ${assistantId} in Supabase...`);
+          // First, get assistant details from Supabase by assistant_id
+          const { data: assistantByVapiId, error: vapiIdError } = await supabase
             .from('assistants')
             .select('*')
             .eq('assistant_id', assistantId)
             .single();
             
-          if (error) {
-            console.error('Error fetching assistant from Supabase:', error);
+          if (vapiIdError) {
+            console.log('Assistant not found by assistant_id, trying with id field...');
+            // Try finding by the id field if not found by assistant_id
+            const { data: assistantById, error: idError } = await supabase
+              .from('assistants')
+              .select('*')
+              .eq('id', assistantId)
+              .single();
+              
+            if (idError) {
+              console.error('Error fetching assistant from Supabase by both IDs:', {vapiIdError, idError});
+            } else if (assistantById) {
+              console.log('Assistant found in Supabase by id field:', assistantById);
+              selectedAssistant = assistantById;
+            }
+          } else if (assistantByVapiId) {
+            console.log('Assistant found in Supabase by assistant_id:', assistantByVapiId);
+            selectedAssistant = assistantByVapiId;
           }
           
-          if (assistantData) {
-            console.log('Assistant found in Supabase:', assistantData);
-            assistantName = assistantData.name || "Assistente";
-            firstMessage = assistantData.first_message || firstMessage;
-            systemPrompt = assistantData.system_prompt || "";
-            selectedAssistant = assistantData;
+          if (selectedAssistant) {
+            assistantName = selectedAssistant.name || "Assistente";
+            // Ensure we're getting the first_message, with detailed logging
+            if (selectedAssistant.first_message) {
+              firstMessage = selectedAssistant.first_message;
+              console.log(`Found first_message in Supabase: "${firstMessage}"`);
+            } else {
+              console.warn('No first_message found in the assistant record:', selectedAssistant);
+              // Setting a default if none found
+              firstMessage = "Olá {nome}, como posso ajudar?";
+            }
+            systemPrompt = selectedAssistant.system_prompt || "";
           } else {
             console.log('Assistant not found in Supabase, trying Vapi API');
             // If not found in Supabase, try Vapi API as fallback
@@ -636,7 +659,7 @@ export const webhookService = {
             
             if (selectedAssistant) {
               assistantName = selectedAssistant.name || assistantName;
-              firstMessage = selectedAssistant.first_message || firstMessage;
+              firstMessage = selectedAssistant.first_message || "Olá {nome}, como posso ajudar?";
               systemPrompt = selectedAssistant.system_prompt || systemPrompt;
               console.log('Assistant found in Vapi API:', {
                 name: assistantName,
@@ -646,6 +669,8 @@ export const webhookService = {
           }
         } catch (error) {
           console.error('Error fetching assistant details:', error);
+          // Set default first message as fallback
+          firstMessage = "Olá {nome}, como posso ajudar?";
         }
       }
       
@@ -666,20 +691,37 @@ export const webhookService = {
           if (assistants && assistants.length > 0) {
             selectedAssistant = assistants[0];
             assistantName = selectedAssistant.name || assistantName;
-            firstMessage = selectedAssistant.first_message || firstMessage;
+            
+            if (selectedAssistant.first_message) {
+              firstMessage = selectedAssistant.first_message;
+              console.log(`Found first_message from assistant in Supabase: "${firstMessage}"`);
+            } else {
+              console.warn('No first_message found in the latest assistant record');
+              firstMessage = "Olá {nome}, como posso ajudar?";
+            }
+            
             systemPrompt = selectedAssistant.system_prompt || systemPrompt;
             console.log('Found assistant in Supabase:', {
               name: assistantName,
               first_message: firstMessage
             });
+          } else {
+            console.warn('No assistants found in Supabase, using default first_message');
+            firstMessage = "Olá {nome}, como posso ajudar?";
           }
         } catch (error) {
           console.error('Error fetching assistants from Supabase:', error);
+          firstMessage = "Olá {nome}, como posso ajudar?";
         }
       }
       
       // Log the first message we're going to use
-      console.log('Using first message for webhook:', firstMessage);
+      console.log('Using first message for webhook:', firstMessage || "EMPTY - THIS IS AN ERROR");
+      
+      if (!firstMessage) {
+        console.error('WARNING: first_message is empty, using default fallback message');
+        firstMessage = "Olá {nome}, como posso ajudar?";
+      }
       
       // Get configuration from localStorage
       let model = DEFAULT_MODEL;

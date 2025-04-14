@@ -740,6 +740,7 @@ const assistantService = {
       }
       
       console.log('Assistente encontrado no banco local:', data);
+      console.log('First message do assistente:', data.first_message || 'NÃO ENCONTRADA');
       
       // Verificar se o ID da Vapi está correto
       const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
