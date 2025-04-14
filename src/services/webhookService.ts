@@ -167,7 +167,16 @@ export const webhookService = {
   },
 
   replaceTemplateVariables(message: string, clientData: any): string {
-    if (!message) return message;
+    if (!message) {
+      console.warn('Warning: Empty message provided to replaceTemplateVariables', {
+        message,
+        clientData: clientData ? { 
+          client_name: clientData.client_name,
+          campaign_id: clientData.campaign_id
+        } : 'No client data'
+      });
+      return message || '';
+    }
     
     try {
       console.log('Substituindo variáveis de template na mensagem:', { 
@@ -198,9 +207,10 @@ export const webhookService = {
     } catch (error) {
       console.error('Erro ao substituir variáveis de template:', error);
       // Retorna a mensagem original em caso de erro
-      return message;
+      return message || '';
     }
   },
+
 
   /**
    * Busca assistentes diretamente da API Vapi usando a API key 
@@ -602,22 +612,35 @@ export const webhookService = {
       // Tentar obter assistente por ID fornecido
       if (assistantId) {
         try {
-          console.log('Buscando detalhes do assistente pelo ID fornecido');
+          console.log('Buscando detalhes do assistente pelo ID fornecido:', assistantId);
           selectedAssistant = await this.getVapiAssistantById(assistantId);
           
           if (selectedAssistant) {
             console.log('Assistente encontrado pelo ID:', selectedAssistant.name);
             assistantName = selectedAssistant.name;
-            firstMessage = selectedAssistant.first_message || firstMessage;
-            systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+            
+            // Verificar explicitamente se first_message existe e não está vazio
+            if (selectedAssistant.first_message) {
+              firstMessage = selectedAssistant.first_message;
+              console.log('First message do assistente:', firstMessage);
+            } else {
+              console.warn('First message do assistente está vazio, usando padrão');
+            }
+            
+            // Verificar explicitamente se system_prompt existe e não está vazio
+            if (selectedAssistant.system_prompt) {
+              systemPrompt = selectedAssistant.system_prompt;
+            } else {
+              console.warn('System prompt do assistente está vazio, usando padrão');
+            }
           }
         } catch (error) {
           console.error('Erro ao buscar assistente pelo ID:', error);
         }
       }
       
-      // Tentar obter do localStorage se ainda não temos assistente
-      if (!selectedAssistant) {
+      // Tentar obter do localStorage se ainda não temos assistente ou first_message
+      if (!selectedAssistant || !firstMessage) {
         try {
           console.log('Tentando obter assistente do localStorage');
           const storedAssistant = localStorage.getItem('selected_assistant');
@@ -626,8 +649,17 @@ export const webhookService = {
             if (assistant) {
               assistantName = assistant.name || assistantName;
               assistantId = assistant.assistant_id || assistant.id || assistantId;
-              firstMessage = assistant.first_message || firstMessage;
-              systemPrompt = assistant.system_prompt || systemPrompt;
+              
+              // Só substituir se o assistente tiver uma mensagem definida
+              if (assistant.first_message) {
+                firstMessage = assistant.first_message;
+                console.log('First message do localStorage:', firstMessage);
+              }
+              
+              if (assistant.system_prompt) {
+                systemPrompt = assistant.system_prompt;
+              }
+              
               console.log('Assistente encontrado no localStorage:', assistantName);
             }
           }
@@ -645,13 +677,28 @@ export const webhookService = {
             selectedAssistant = assistants[0];
             assistantId = selectedAssistant.id;
             assistantName = selectedAssistant.name;
-            firstMessage = selectedAssistant.first_message || firstMessage;
-            systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+            
+            // Verificar explicitamente se first_message existe
+            if (selectedAssistant.first_message) {
+              firstMessage = selectedAssistant.first_message;
+              console.log('First message do primeiro assistente disponível:', firstMessage);
+            }
+            
+            if (selectedAssistant.system_prompt) {
+              systemPrompt = selectedAssistant.system_prompt;
+            }
+            
             console.log('Selecionado primeiro assistente disponível:', assistantName);
           }
         } catch (error) {
           console.error('Erro ao buscar assistentes disponíveis:', error);
         }
+      }
+      
+      // Verificar se temos uma first_message antes de continuar
+      if (!firstMessage) {
+        console.warn('Nenhuma first_message encontrada em qualquer fonte, usando mensagem padrão');
+        firstMessage = "Olá {nome}, como posso ajudar?";
       }
       
       // Obter configurações de voz e modelo 
@@ -714,6 +761,11 @@ export const webhookService = {
       
       console.log('Payload preparado para envio (informações sensíveis omitidas):', {
         ...payload,
+        call: {
+          ...payload.call,
+          first_message: payload.call.first_message,
+          system_prompt: payload.call.system_prompt ? '***' : 'vazio'
+        },
         additional_data: {
           ...payload.additional_data,
           api_key: '***REDACTED***'
