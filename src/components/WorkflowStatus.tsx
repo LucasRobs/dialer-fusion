@@ -137,7 +137,9 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     try {
       let assistantName = "Default Assistant";
       let assistantId = vapiSettings.assistantId;
+      let assistantDetails = null;
       
+      // Find a valid assistant ID
       if (!assistantId) {
         try {
           // First, try to use the Vapi API assistant
@@ -253,6 +255,14 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         }
       }
       
+      // Get assistant details to include first_message and system_prompt
+      try {
+        assistantDetails = await assistantService.getVapiAssistantById(assistantId);
+        console.log('Retrieved assistant details:', assistantDetails);
+      } catch (error) {
+        console.error('Error fetching assistant details:', error);
+      }
+      
       const testData: WebhookPayload = {
         action: 'test_call',
         campaign_id: campaignId || 0,
@@ -271,7 +281,10 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           caller_id: vapiSettings.callerId, // Add caller ID explicitly
           api_key: vapiSettings.apiKey, // Add API key
           assistant_id: null, // We don't use Supabase ID anymore
-          vapi_assistant_id: assistantId // We use Vapi ID directly
+          vapi_assistant_id: assistantId, // We use Vapi ID directly
+          first_message: assistantDetails?.first_message || "Olá, como posso ajudar?",
+          system_prompt: assistantDetails?.system_prompt || "",
+          model_name: vapiSettings.model
         }
       };
       

@@ -327,10 +327,18 @@ const CampaignControls = () => {
           client_name: client.name,
           client_phone: client.phone,
           client_id: client.id,
+          call: {
+            model: selectedAssistant.model || "gpt-4o-turbo",
+            voice: selectedAssistant.voice || "33B4UnXyTNbgLmdEDh5P",
+            language: "pt-BR"
+          },
           additional_data: {
             assistant_id: assistantId,
             source: 'campaign_control',
-            assistant_name: selectedAssistant.name
+            assistant_name: selectedAssistant.name,
+            first_message: selectedAssistant.first_message || "Olá, como posso ajudar?",
+            system_prompt: selectedAssistant.system_prompt || "",
+            model_name: selectedAssistant.model || "gpt-4o-turbo"
           }
         };
         
