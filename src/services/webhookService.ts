@@ -211,7 +211,6 @@ export const webhookService = {
     }
   },
 
-
   /**
    * Busca assistentes diretamente da API Vapi usando a API key 
    * sem filtragem por usuário
@@ -850,6 +849,7 @@ export const webhookService = {
       };
     }
   },
+
   async triggerCallWebhook(payload: { 
     action: string; 
     account_id?: string; 
@@ -1204,6 +1204,25 @@ export const webhookService = {
     try {
       console.log(`Iniciando chamada para cliente ${clientId} com número ${phoneNumber} na campanha ${campaignId}${accountId ? `, conta ${accountId}` : ''}`);
       
+      // Obtém informações do cliente para personalização da mensagem
+      let clientName = "";
+      try {
+        const { data: clientData, error: clientError } = await supabase
+          .from('clients')
+          .select('name')
+          .eq('id', clientId)
+          .single();
+          
+        if (!clientError && clientData) {
+          clientName = clientData.name;
+          console.log(`Cliente encontrado: ${clientName}`);
+        } else {
+          console.warn(`Cliente não encontrado no banco de dados: ${clientId}`);
+        }
+      } catch (e) {
+        console.error('Erro ao buscar informações do cliente:', e);
+      }
+      
       // Obtém o assistente atual do localStorage
       let assistant = null;
       try {
@@ -1221,6 +1240,7 @@ export const webhookService = {
         campaign_id: number;
         client_id: number;
         client_phone: string;
+        client_name?: string;
         account_id?: string;
         additional_data?: {
           timestamp: string;
@@ -1241,6 +1261,11 @@ export const webhookService = {
           source: 'manual_call'
         }
       };
+      
+      // Adiciona nome do cliente se disponível
+      if (clientName) {
+        payload.client_name = clientName;
+      }
       
       // Adiciona informações do assistente se disponíveis
       if (assistant) {
