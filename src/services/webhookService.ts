@@ -15,6 +15,8 @@ export interface WebhookPayload {
     model?: string;
     voice?: string;
     language?: string;
+    first_message?: string;
+    system_prompt?: string;
   };
   additional_data?: {
     source?: string;
