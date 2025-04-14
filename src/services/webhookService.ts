@@ -69,6 +69,7 @@ export interface VapiAssistant {
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
 const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook';
+const WEBHOOK_COLLOWOP_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
 const FETCH_TIMEOUT = 8000; // 8 segundos de timeout para melhor confiabilidade
 const CLIENT_VERSION = '1.3.0';
 const DEFAULT_MODEL = "eleven_multilingual_v2"; // Modelo atualizado para eleven_multilingual_v2
@@ -168,12 +169,37 @@ export const webhookService = {
   replaceTemplateVariables(message: string, clientData: any): string {
     if (!message) return message;
     
-    // Replace {nome} with client_name if available
-    if (clientData && clientData.client_name) {
-      message = message.replace(/\{nome\}/gi, clientData.client_name);
+    try {
+      console.log('Substituindo variáveis de template na mensagem:', { 
+        originalMessage: message, 
+        clientData: clientData ? {
+          client_name: clientData.client_name,
+          campaign_id: clientData.campaign_id
+        } : 'Dados do cliente não disponíveis'
+      });
+      
+      // Replace {nome} with client_name if available
+      if (clientData && clientData.client_name) {
+        message = message.replace(/\{nome\}/gi, clientData.client_name);
+        console.log(`Substituiu {nome} por "${clientData.client_name}"`);
+      } else {
+        console.log('Nome do cliente não disponível para substituição, removendo {nome}');
+        message = message.replace(/\{nome\}/gi, '');
+      }
+      
+      // Adicional: substitui {campaign} pelo ID da campanha se disponível
+      if (clientData && clientData.campaign_id) {
+        message = message.replace(/\{campaign\}/gi, clientData.campaign_id.toString());
+        console.log(`Substituiu {campaign} por "${clientData.campaign_id}"`);
+      }
+      
+      console.log('Mensagem final após substituições:', message);
+      return message;
+    } catch (error) {
+      console.error('Erro ao substituir variáveis de template:', error);
+      // Retorna a mensagem original em caso de erro
+      return message;
     }
-    
-    return message;
   },
 
   /**
@@ -563,6 +589,195 @@ export const webhookService = {
     }
   },
 
+  async sendFirstMessageToWebhook(assistantId?: string): Promise<{success: boolean, message?: string}> {
+    try {
+      console.log('Enviando first message para o webhook collowop, assistantId:', assistantId);
+      
+      // 1. Obter informações do assistente atual
+      let selectedAssistant = null;
+      let firstMessage = "Olá {nome}, como posso ajudar?";
+      let systemPrompt = "";
+      let assistantName = "Assistente";
+      
+      // Tentar obter assistente por ID fornecido
+      if (assistantId) {
+        try {
+          console.log('Buscando detalhes do assistente pelo ID fornecido');
+          selectedAssistant = await this.getVapiAssistantById(assistantId);
+          
+          if (selectedAssistant) {
+            console.log('Assistente encontrado pelo ID:', selectedAssistant.name);
+            assistantName = selectedAssistant.name;
+            firstMessage = selectedAssistant.first_message || firstMessage;
+            systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+          }
+        } catch (error) {
+          console.error('Erro ao buscar assistente pelo ID:', error);
+        }
+      }
+      
+      // Tentar obter do localStorage se ainda não temos assistente
+      if (!selectedAssistant) {
+        try {
+          console.log('Tentando obter assistente do localStorage');
+          const storedAssistant = localStorage.getItem('selected_assistant');
+          if (storedAssistant) {
+            const assistant = JSON.parse(storedAssistant);
+            if (assistant) {
+              assistantName = assistant.name || assistantName;
+              assistantId = assistant.assistant_id || assistant.id || assistantId;
+              firstMessage = assistant.first_message || firstMessage;
+              systemPrompt = assistant.system_prompt || systemPrompt;
+              console.log('Assistente encontrado no localStorage:', assistantName);
+            }
+          }
+        } catch (e) {
+          console.error('Erro ao obter assistente do localStorage:', e);
+        }
+      }
+      
+      // Se não temos um assistente, buscar os disponíveis e selecionar o primeiro
+      if (!selectedAssistant && !assistantId) {
+        try {
+          console.log('Buscando assistentes disponíveis');
+          const assistants = await this.getAssistantsFromVapiApi();
+          if (assistants && assistants.length > 0) {
+            selectedAssistant = assistants[0];
+            assistantId = selectedAssistant.id;
+            assistantName = selectedAssistant.name;
+            firstMessage = selectedAssistant.first_message || firstMessage;
+            systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+            console.log('Selecionado primeiro assistente disponível:', assistantName);
+          }
+        } catch (error) {
+          console.error('Erro ao buscar assistentes disponíveis:', error);
+        }
+      }
+      
+      // Obter configurações de voz e modelo 
+      let model = DEFAULT_MODEL;
+      let voice = DEFAULT_VOICE_ID;
+      let language = DEFAULT_LANGUAGE;
+      let apiKey = VAPI_API_KEY;
+      let callerId = DEFAULT_CALLER_ID;
+      
+      try {
+        // Verificar se temos configurações salvas
+        const savedSettings = localStorage.getItem('vapi_settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          if (settings.model) model = settings.model;
+          if (settings.voice) voice = settings.voice;
+          if (settings.language) language = settings.language || DEFAULT_LANGUAGE;
+          if (settings.apiKey) apiKey = settings.apiKey;
+          if (settings.callerId) callerId = settings.callerId;
+          console.log('Usando configurações da localStorage');
+        }
+      } catch (e) {
+        console.error('Erro ao obter configurações:', e);
+      }
+      
+      // 2. Preparar payload para o webhook
+      const payload = {
+        action: 'send_first_message',
+        client_name: "Cliente Exemplo",
+        client_phone: "+5511999999999",
+        provider: "vapi",
+        call: {
+          model: {
+            provider: "openai",
+            model: model,
+            temperature: 0.5,
+            systemPrompt: systemPrompt
+          },
+          voice: {
+            provider: "11labs",
+            model: DEFAULT_MODEL,
+            voiceId: voice
+          },
+          language: language,
+          first_message: firstMessage,
+          system_prompt: systemPrompt
+        },
+        additional_data: {
+          source: 'first_message_sync',
+          user_interface: 'webhookService',
+          assistant_name: assistantName,
+          caller_id: callerId,
+          api_key: apiKey,
+          assistant_id: null,
+          vapi_assistant_id: assistantId,
+          timestamp: new Date().toISOString(),
+          client_version: CLIENT_VERSION
+        }
+      };
+      
+      console.log('Payload preparado para envio (informações sensíveis omitidas):', {
+        ...payload,
+        additional_data: {
+          ...payload.additional_data,
+          api_key: '***REDACTED***'
+        }
+      });
+      
+      // 3. Enviar para o webhook específico de collowop
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      
+      try {
+        const response = await fetch(WEBHOOK_COLLOWOP_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'X-Caller-Id': callerId
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Erro ao enviar first message para webhook:', response.status, response.statusText, errorText);
+          return { 
+            success: false, 
+            message: `Erro ao enviar mensagem: ${response.status} - ${response.statusText}` 
+          };
+        }
+        
+        console.log('First message enviada com sucesso para o webhook');
+        return { 
+          success: true, 
+          message: 'First message enviada com sucesso para o webhook' 
+        };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          console.error('Timeout ao enviar first message para webhook');
+          return { 
+            success: false, 
+            message: 'Tempo esgotado ao tentar enviar a mensagem' 
+          };
+        } else {
+          console.error('Erro ao enviar first message para webhook:', fetchError);
+          return { 
+            success: false, 
+            message: `Erro de conexão: ${fetchError.message || 'Falha na conexão'}` 
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Erro geral ao enviar first message para webhook:', error);
+      return { 
+        success: false, 
+        message: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}` 
+      };
+    }
+  },
+
   async triggerCallWebhook(payload: { 
     action: string; 
     account_id?: string; 
@@ -865,7 +1080,7 @@ export const webhookService = {
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
       
       try {
-        const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+        const response = await fetch(WEBHOOK_COLLOWOP_URL, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
