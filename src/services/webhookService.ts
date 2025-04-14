@@ -15,6 +15,8 @@ export interface WebhookPayload {
     model?: string;
     voice?: string;
     language?: string;
+    first_message?: string;
+    system_prompt?: string;
   };
   additional_data?: {
     source?: string;
@@ -27,10 +29,13 @@ export interface WebhookPayload {
     timestamp?: string;
     client_version?: string;
     account_id?: string;
+    first_message?: string;
+    system_prompt?: string;
     [key: string]: any;
   };
   [key: string]: any;
 }
+
 
 export interface VapiAssistant {
   id: string;
@@ -563,6 +568,8 @@ export const webhookService = {
       // Escolher o assistente apropriado
       let selectedAssistant = null;
       let assistantId: string | null = null;
+      let firstMessage: string = payload.call?.first_message || '';
+      let systemPrompt: string = payload.call?.system_prompt || '';
       
       // 1. Tentar por ID no payload se disponível
       if (payload.additional_data?.vapi_assistant_id && 
@@ -571,7 +578,13 @@ export const webhookService = {
         selectedAssistant = vapiAssistants.find(a => a.id === payload.additional_data?.vapi_assistant_id);
         if (selectedAssistant) {
           assistantId = selectedAssistant.id;
-          console.log('ID do assistente no payload validado na Vapi API:', assistantId);
+          // Obter first_message e system_prompt do assistente selecionado
+          firstMessage = selectedAssistant.first_message || firstMessage;
+          systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+          console.log('ID do assistente no payload validado na Vapi API:', assistantId, {
+            firstMessage,
+            systemPrompt
+          });
         } else {
           console.log('ID do assistente no payload não encontrado na Vapi API, buscando alternativas');
         }
@@ -589,7 +602,13 @@ export const webhookService = {
         
         if (selectedAssistant) {
           assistantId = selectedAssistant.id;
-          console.log(`Assistente encontrado por nome "${assistantName}":`, assistantId);
+          // Obter first_message e system_prompt do assistente selecionado
+          firstMessage = selectedAssistant.first_message || firstMessage;
+          systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+          console.log(`Assistente encontrado por nome "${assistantName}":`, assistantId, {
+            firstMessage,
+            systemPrompt
+          });
         }
       }
       
@@ -605,7 +624,13 @@ export const webhookService = {
                 selectedAssistant = vapiAssistants.find(a => a.id === assistant.assistant_id);
                 if (selectedAssistant) {
                   assistantId = selectedAssistant.id;
-                  console.log('ID do assistente do localStorage validado na Vapi API:', assistantId);
+                  // Obter first_message e system_prompt do assistente selecionado
+                  firstMessage = selectedAssistant.first_message || firstMessage || assistant.first_message || '';
+                  systemPrompt = selectedAssistant.system_prompt || systemPrompt || assistant.system_prompt || '';
+                  console.log('ID do assistente do localStorage validado na Vapi API:', assistantId, {
+                    firstMessage,
+                    systemPrompt
+                  });
                 }
               }
               
@@ -619,8 +644,22 @@ export const webhookService = {
                 
                 if (selectedAssistant) {
                   assistantId = selectedAssistant.id;
-                  console.log(`Assistente encontrado por nome do localStorage "${assistant.name}":`, assistantId);
+                  // Obter first_message e system_prompt do assistente selecionado
+                  firstMessage = selectedAssistant.first_message || firstMessage || assistant.first_message || '';
+                  systemPrompt = selectedAssistant.system_prompt || systemPrompt || assistant.system_prompt || '';
+                  console.log(`Assistente encontrado por nome do localStorage "${assistant.name}":`, assistantId, {
+                    firstMessage,
+                    systemPrompt
+                  });
                 }
+              }
+              
+              // Se ainda não temos first_message ou system_prompt, usar do localStorage
+              if (!firstMessage && assistant.first_message) {
+                firstMessage = assistant.first_message;
+              }
+              if (!systemPrompt && assistant.system_prompt) {
+                systemPrompt = assistant.system_prompt;
               }
             }
           }
@@ -633,7 +672,13 @@ export const webhookService = {
       if (!assistantId && vapiAssistants.length > 0) {
         selectedAssistant = vapiAssistants[0];
         assistantId = selectedAssistant.id;
-        console.log('Usando o primeiro assistente disponível na Vapi API:', assistantId);
+        // Obter first_message e system_prompt do assistente selecionado
+        firstMessage = selectedAssistant.first_message || firstMessage;
+        systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+        console.log('Usando o primeiro assistente disponível na Vapi API:', assistantId, {
+          firstMessage,
+          systemPrompt
+        });
       }
       
       // 5. Se ainda assim não temos um ID, usar o fallback
@@ -642,7 +687,13 @@ export const webhookService = {
         selectedAssistant = vapiAssistants.find(a => a.id === FALLBACK_VAPI_ASSISTANT_ID);
         if (selectedAssistant) {
           assistantId = FALLBACK_VAPI_ASSISTANT_ID;
-          console.log('Usando ID de fallback validado na Vapi API:', assistantId);
+          // Obter first_message e system_prompt do assistente selecionado
+          firstMessage = selectedAssistant.first_message || firstMessage;
+          systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+          console.log('Usando ID de fallback validado na Vapi API:', assistantId, {
+            firstMessage,
+            systemPrompt
+          });
         } else {
           // Se mesmo o fallback não for válido, não temos opção
           console.error('Nenhum assistente válido encontrado na Vapi API, incluindo o fallback');
@@ -710,12 +761,18 @@ export const webhookService = {
       payload.call = {
         model: model,
         voice: voice,
-        language: DEFAULT_LANGUAGE
+        language: DEFAULT_LANGUAGE,
+        first_message: firstMessage,
+        system_prompt: systemPrompt
       };
       
       // Adicionar informações de autenticação
       payload.additional_data.caller_id = callerId;
       payload.additional_data.api_key = apiKey;
+      
+      // Adicionar informações de prompt
+      payload.additional_data.first_message = firstMessage;
+      payload.additional_data.system_prompt = systemPrompt;
       
       // Adicionar informações de debug
       payload.additional_data.timestamp = new Date().toISOString();
