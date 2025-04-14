@@ -12,8 +12,18 @@ export interface WebhookPayload {
   account_id?: string;
   provider?: string;
   call?: {
-    model?: string;
-    voice?: string;
+    model?: string | {
+      model?: string;
+      provider?: string;
+      temperature?: number;
+      systemPrompt?: string;
+    };
+    voice?: string | {
+      model?: string;
+      voiceId?: string;
+      provider?: string;
+      voiceName?: string;
+    };
     language?: string;
     first_message?: string;
     system_prompt?: string;
@@ -54,7 +64,6 @@ export interface VapiAssistant {
     [key: string]: any;
   };
 }
-
 
 
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -757,20 +766,68 @@ export const webhookService = {
         console.error('Erro ao obter configurações:', e);
       }
       
-      // Definir configurações da chamada
-      payload.call = {
-        model: model,
-        voice: voice,
-        language: DEFAULT_LANGUAGE,
-        first_message: firstMessage,
-        system_prompt: systemPrompt
-      };
+      // Definir configurações da chamada com os valores corretos de first_message e system_prompt
+      if (typeof payload.call === 'object') {
+        const modelConfig = typeof payload.call.model === 'string' ? 
+          { 
+            provider: "openai", 
+            model: payload.call.model || model, 
+            temperature: 0.5,
+            systemPrompt: systemPrompt 
+          } : 
+          {
+            ...(typeof payload.call.model === 'object' ? payload.call.model : {}),
+            provider: "openai",
+            model: (typeof payload.call.model === 'object' && payload.call.model?.model) || model,
+            temperature: (typeof payload.call.model === 'object' && payload.call.model?.temperature) || 0.5,
+            systemPrompt: systemPrompt
+          };
+
+        const voiceConfig = typeof payload.call.voice === 'string' ?
+          {
+            provider: "11labs",
+            voiceId: payload.call.voice || voice,
+            model: DEFAULT_MODEL
+          } :
+          {
+            ...(typeof payload.call.voice === 'object' ? payload.call.voice : {}),
+            provider: "11labs",
+            voiceId: (typeof payload.call.voice === 'object' && payload.call.voice?.voiceId) || voice,
+            model: (typeof payload.call.voice === 'object' && payload.call.voice?.model) || DEFAULT_MODEL
+          };
+
+        payload.call = {
+          model: modelConfig,
+          voice: voiceConfig,
+          language: payload.call.language || DEFAULT_LANGUAGE,
+          first_message: firstMessage,  // Garantir que first_message seja definido
+          system_prompt: systemPrompt   // Garantir que system_prompt seja definido
+        };
+      } else {
+        // Se não existe um objeto call, criar um
+        payload.call = {
+          model: {
+            provider: "openai",
+            model: model,
+            temperature: 0.5,
+            systemPrompt: systemPrompt
+          },
+          voice: {
+            provider: "11labs",
+            voiceId: voice,
+            model: DEFAULT_MODEL
+          },
+          language: DEFAULT_LANGUAGE,
+          first_message: firstMessage,
+          system_prompt: systemPrompt
+        };
+      }
       
       // Adicionar informações de autenticação
       payload.additional_data.caller_id = callerId;
       payload.additional_data.api_key = apiKey;
       
-      // Adicionar informações de prompt
+      // Adicionar informações de prompt para additional_data também
       payload.additional_data.first_message = firstMessage;
       payload.additional_data.system_prompt = systemPrompt;
       

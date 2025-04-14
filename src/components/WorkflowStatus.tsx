@@ -296,12 +296,11 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         }
       }
       
-      // Sempre tentar obter os detalhes mais recentes do assistente antes de enviar
       try {
         const latestDetails = await assistantService.getVapiAssistantById(assistantId);
         if (latestDetails) {
           systemPrompt = latestDetails.system_prompt || systemPrompt;
-          firstMessage = latestDetails.first_message || firstMessage;
+          firstMessage = latestDetails.first_message || firstMessage || "Olá, como posso ajudar?";
           console.log('Using latest assistant details:', {
             system_prompt: systemPrompt,
             first_message: firstMessage
@@ -311,6 +310,11 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         console.error('Error fetching latest assistant details:', error);
       }
       
+      // Garantir que temos um valor padrão para first_message se ainda estiver vazio
+      if (!firstMessage) {
+        firstMessage = "Olá, como posso ajudar?";
+      }
+      
       const testData: WebhookPayload = {
         action: 'test_call',
         campaign_id: campaignId || 0,
@@ -318,8 +322,17 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
         client_phone: "+5511999999999",
         provider: "vapi",
         call: {
-          model: vapiSettings.model,
-          voice: vapiSettings.voice,
+          model: {
+            provider: "openai",
+            model: vapiSettings.model,
+            temperature: 0.5,
+            systemPrompt: systemPrompt
+          },
+          voice: {
+            provider: "11labs",
+            model: "eleven_multilingual_v2",
+            voiceId: vapiSettings.voice
+          },
           language: vapiSettings.language,
           first_message: firstMessage,
           system_prompt: systemPrompt
@@ -328,17 +341,23 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
           source: 'manual_test',
           user_interface: 'WorkflowStatus',
           assistant_name: assistantName,
-          caller_id: vapiSettings.callerId, // Add caller ID explicitly
-          api_key: vapiSettings.apiKey, // Add API key
-          assistant_id: null, // We don't use Supabase ID anymore
-          vapi_assistant_id: assistantId, // We use Vapi ID directly
+          caller_id: vapiSettings.callerId,
+          api_key: vapiSettings.apiKey,
+          assistant_id: null,
+          vapi_assistant_id: assistantId,
           first_message: firstMessage,
           system_prompt: systemPrompt,
           model_name: vapiSettings.model
         }
       };
       
-      console.log("Sending test webhook payload:", testData);
+      console.log("Sending test webhook payload:", {
+        ...testData,
+        additional_data: {
+          ...testData.additional_data,
+          api_key: "***REDACTED***"
+        }
+      });
       
       const result = await webhookService.triggerCallWebhook(testData);
       
