@@ -312,7 +312,10 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       
       // Garantir que temos um valor padrão para first_message se ainda estiver vazio
       if (!firstMessage) {
-        firstMessage = "Olá, como posso ajudar?";
+        firstMessage = "Olá {nome}, como posso ajudar?";
+      } else if (!firstMessage.includes("{nome}")) {
+        // Adicionar a variável {nome} somente se ela já não estiver presente
+        firstMessage = `Olá {nome}, ${firstMessage}`;
       }
       
       const testData: WebhookPayload = {
@@ -459,40 +462,40 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
     : 0;
   
-  return (
-    <Card className="shadow-md">
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle className="text-xl">Status de Automação</CardTitle>
-            <CardDescription>Status das automações em andamento</CardDescription>
+    return (
+      <Card className="shadow-md">
+        <CardHeader className="pb-2">
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle className="text-xl">Status de Automação</CardTitle>
+              <CardDescription>Status das automações em andamento</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setSettingsOpen(!settingsOpen)}
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                Configurações
+              </Button>
+              <Button 
+                size="sm" 
+                onClick={testWebhook}
+                disabled={loading}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Phone className="h-4 w-4 mr-1" />
+                Testar Ligação
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => setSettingsOpen(!settingsOpen)}
-            >
-              <Settings className="h-4 w-4 mr-1" />
-              Configurações
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={testWebhook}
-              disabled={loading}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <Phone className="h-4 w-4 mr-1" />
-              Testar Ligação
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {settingsOpen && (
-          <div className="bg-muted/30 p-3 rounded-md space-y-3">
-            <h3 className="font-medium mb-2">Configurações da Vapi</h3>
+        </CardHeader>
+        
+        <CardContent className="space-y-4">
+          {settingsOpen && (
+            <div className="bg-muted/30 p-3 rounded-md space-y-3">
+              <h3 className="font-medium mb-2">Configurações da Vapi</h3>
             
             <div className="space-y-2">
               <Label htmlFor="callerId">Número de Telefone (ID do Chamador)</Label>
@@ -594,6 +597,12 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            
+            <div className="p-2 bg-blue-50 border border-blue-100 rounded-md text-sm text-blue-700">
+              <p className="font-medium">Dica:</p>
+              <p>Use a variável <code className="bg-blue-100 px-1 rounded">{"{nome}"}</code> na primeira mensagem para personalizar o atendimento com o nome do cliente.</p>
+              <p className="mt-1">Exemplo: "Olá {"{nome}"}, como posso ajudar hoje?"</p>
             </div>
             
             <Button size="sm" onClick={saveVapiSettings}>Salvar Configurações</Button>

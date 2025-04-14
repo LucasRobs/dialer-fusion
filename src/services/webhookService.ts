@@ -165,6 +165,17 @@ export const webhookService = {
     }
   },
 
+  replaceTemplateVariables(message: string, clientData: any): string {
+    if (!message) return message;
+    
+    // Replace {nome} with client_name if available
+    if (clientData && clientData.client_name) {
+      message = message.replace(/\{nome\}/gi, clientData.client_name);
+    }
+    
+    return message;
+  },
+
   /**
    * Busca assistentes diretamente da API Vapi usando a API key 
    * sem filtragem por usuário
@@ -726,6 +737,11 @@ export const webhookService = {
       
       // Definir provider como "vapi"
       payload.provider = "vapi";
+
+      if (firstMessage) {
+        firstMessage = this.replaceTemplateVariables(firstMessage, payload);
+        console.log('First message after variable replacement:', firstMessage);
+      }
       
       // Obter configurações de modelo e voz
       let model = DEFAULT_MODEL;
@@ -796,13 +812,13 @@ export const webhookService = {
             model: (typeof payload.call.voice === 'object' && payload.call.voice?.model) || DEFAULT_MODEL
           };
 
-        payload.call = {
-          model: modelConfig,
-          voice: voiceConfig,
-          language: payload.call.language || DEFAULT_LANGUAGE,
-          first_message: firstMessage,  // Garantir que first_message seja definido
-          system_prompt: systemPrompt   // Garantir que system_prompt seja definido
-        };
+          payload.call = {
+            model: modelConfig,
+            voice: voiceConfig,
+            language: payload.call.language || DEFAULT_LANGUAGE,
+            first_message: firstMessage,  // Garantir que first_message seja definido
+            system_prompt: systemPrompt   // Garantir que system_prompt seja definido
+          };
       } else {
         // Se não existe um objeto call, criar um
         payload.call = {
