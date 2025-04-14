@@ -603,105 +603,85 @@ export const webhookService = {
     try {
       console.log('Enviando first message para o webhook collowop, assistantId:', assistantId);
       
-      // 1. Obter informações do assistente atual
+      // Variables to store assistant information
       let selectedAssistant = null;
       let firstMessage = "Olá {nome}, como posso ajudar?";
       let systemPrompt = "";
       let assistantName = "Assistente";
       
-      // Tentar obter assistente por ID fornecido
+      // Try to get assistant details directly from Supabase
       if (assistantId) {
         try {
-          console.log('Buscando detalhes do assistente pelo ID fornecido:', assistantId);
-          selectedAssistant = await this.getVapiAssistantById(assistantId);
+          // First, get assistant details from Supabase
+          const { data: assistantData, error } = await supabase
+            .from('assistants')
+            .select('*')
+            .eq('assistant_id', assistantId)
+            .single();
+            
+          if (error) {
+            console.error('Error fetching assistant from Supabase:', error);
+          }
           
-          if (selectedAssistant) {
-            console.log('Assistente encontrado pelo ID:', selectedAssistant.name);
-            assistantName = selectedAssistant.name;
+          if (assistantData) {
+            console.log('Assistant found in Supabase:', assistantData);
+            assistantName = assistantData.name || "Assistente";
+            firstMessage = assistantData.first_message || firstMessage;
+            systemPrompt = assistantData.system_prompt || "";
+            selectedAssistant = assistantData;
+          } else {
+            console.log('Assistant not found in Supabase, trying Vapi API');
+            // If not found in Supabase, try Vapi API as fallback
+            selectedAssistant = await this.getVapiAssistantById(assistantId);
             
-            // Verificar explicitamente se first_message existe e não está vazio
-            if (selectedAssistant.first_message) {
-              firstMessage = selectedAssistant.first_message;
-              console.log('First message do assistente:', firstMessage);
-            } else {
-              console.warn('First message do assistente está vazio, usando padrão');
-            }
-            
-            // Verificar explicitamente se system_prompt existe e não está vazio
-            if (selectedAssistant.system_prompt) {
-              systemPrompt = selectedAssistant.system_prompt;
-            } else {
-              console.warn('System prompt do assistente está vazio, usando padrão');
+            if (selectedAssistant) {
+              assistantName = selectedAssistant.name || assistantName;
+              firstMessage = selectedAssistant.first_message || firstMessage;
+              systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+              console.log('Assistant found in Vapi API:', {
+                name: assistantName,
+                first_message: firstMessage
+              });
             }
           }
         } catch (error) {
-          console.error('Erro ao buscar assistente pelo ID:', error);
+          console.error('Error fetching assistant details:', error);
         }
       }
       
-      // Tentar obter do localStorage se ainda não temos assistente ou first_message
-      if (!selectedAssistant || !firstMessage) {
+      // If no assistant found by ID, try to get from Supabase
+      if (!selectedAssistant) {
         try {
-          console.log('Tentando obter assistente do localStorage');
-          const storedAssistant = localStorage.getItem('selected_assistant');
-          if (storedAssistant) {
-            const assistant = JSON.parse(storedAssistant);
-            if (assistant) {
-              assistantName = assistant.name || assistantName;
-              assistantId = assistant.assistant_id || assistant.id || assistantId;
-              
-              // Só substituir se o assistente tiver uma mensagem definida
-              if (assistant.first_message) {
-                firstMessage = assistant.first_message;
-                console.log('First message do localStorage:', firstMessage);
-              }
-              
-              if (assistant.system_prompt) {
-                systemPrompt = assistant.system_prompt;
-              }
-              
-              console.log('Assistente encontrado no localStorage:', assistantName);
-            }
+          console.log('Trying to get any assistant from Supabase');
+          const { data: assistants, error } = await supabase
+            .from('assistants')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+          if (error) {
+            console.error('Error fetching assistants from Supabase:', error);
           }
-        } catch (e) {
-          console.error('Erro ao obter assistente do localStorage:', e);
-        }
-      }
-      
-      // Se não temos um assistente, buscar os disponíveis e selecionar o primeiro
-      if (!selectedAssistant && !assistantId) {
-        try {
-          console.log('Buscando assistentes disponíveis');
-          const assistants = await this.getAssistantsFromVapiApi();
+          
           if (assistants && assistants.length > 0) {
             selectedAssistant = assistants[0];
-            assistantId = selectedAssistant.id;
-            assistantName = selectedAssistant.name;
-            
-            // Verificar explicitamente se first_message existe
-            if (selectedAssistant.first_message) {
-              firstMessage = selectedAssistant.first_message;
-              console.log('First message do primeiro assistente disponível:', firstMessage);
-            }
-            
-            if (selectedAssistant.system_prompt) {
-              systemPrompt = selectedAssistant.system_prompt;
-            }
-            
-            console.log('Selecionado primeiro assistente disponível:', assistantName);
+            assistantName = selectedAssistant.name || assistantName;
+            firstMessage = selectedAssistant.first_message || firstMessage;
+            systemPrompt = selectedAssistant.system_prompt || systemPrompt;
+            console.log('Found assistant in Supabase:', {
+              name: assistantName,
+              first_message: firstMessage
+            });
           }
         } catch (error) {
-          console.error('Erro ao buscar assistentes disponíveis:', error);
+          console.error('Error fetching assistants from Supabase:', error);
         }
       }
       
-      // Verificar se temos uma first_message antes de continuar
-      if (!firstMessage) {
-        console.warn('Nenhuma first_message encontrada em qualquer fonte, usando mensagem padrão');
-        firstMessage = "Olá {nome}, como posso ajudar?";
-      }
+      // Log the first message we're going to use
+      console.log('Using first message for webhook:', firstMessage);
       
-      // Obter configurações de voz e modelo 
+      // Get configuration from localStorage
       let model = DEFAULT_MODEL;
       let voice = DEFAULT_VOICE_ID;
       let language = DEFAULT_LANGUAGE;
@@ -709,7 +689,6 @@ export const webhookService = {
       let callerId = DEFAULT_CALLER_ID;
       
       try {
-        // Verificar se temos configurações salvas
         const savedSettings = localStorage.getItem('vapi_settings');
         if (savedSettings) {
           const settings = JSON.parse(savedSettings);
@@ -718,13 +697,13 @@ export const webhookService = {
           if (settings.language) language = settings.language || DEFAULT_LANGUAGE;
           if (settings.apiKey) apiKey = settings.apiKey;
           if (settings.callerId) callerId = settings.callerId;
-          console.log('Usando configurações da localStorage');
+          console.log('Using settings from localStorage');
         }
       } catch (e) {
-        console.error('Erro ao obter configurações:', e);
+        console.error('Error getting settings:', e);
       }
       
-      // 2. Preparar payload para o webhook
+      // Prepare payload for webhook
       const payload = {
         action: 'send_first_message',
         client_name: "Cliente Exemplo",
@@ -753,13 +732,13 @@ export const webhookService = {
           caller_id: callerId,
           api_key: apiKey,
           assistant_id: null,
-          vapi_assistant_id: assistantId,
+          vapi_assistant_id: assistantId || (selectedAssistant?.assistant_id || selectedAssistant?.id),
           timestamp: new Date().toISOString(),
           client_version: CLIENT_VERSION
         }
       };
       
-      console.log('Payload preparado para envio (informações sensíveis omitidas):', {
+      console.log('Payload prepared for webhook (sensitive info redacted):', {
         ...payload,
         call: {
           ...payload.call,
@@ -772,7 +751,7 @@ export const webhookService = {
         }
       });
       
-      // 3. Enviar para o webhook específico de collowop
+      // Send to webhook
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
       
@@ -792,44 +771,43 @@ export const webhookService = {
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Erro ao enviar first message para webhook:', response.status, response.statusText, errorText);
+          console.error('Error sending first message to webhook:', response.status, response.statusText, errorText);
           return { 
             success: false, 
-            message: `Erro ao enviar mensagem: ${response.status} - ${response.statusText}` 
+            message: `Error sending message: ${response.status} - ${response.statusText}` 
           };
         }
         
-        console.log('First message enviada com sucesso para o webhook');
+        console.log('First message sent successfully to webhook');
         return { 
           success: true, 
-          message: 'First message enviada com sucesso para o webhook' 
+          message: 'First message sent successfully to webhook' 
         };
       } catch (fetchError) {
         clearTimeout(timeoutId);
         
         if (fetchError.name === 'AbortError') {
-          console.error('Timeout ao enviar first message para webhook');
+          console.error('Timeout sending first message to webhook');
           return { 
             success: false, 
-            message: 'Tempo esgotado ao tentar enviar a mensagem' 
+            message: 'Timeout trying to send the message' 
           };
         } else {
-          console.error('Erro ao enviar first message para webhook:', fetchError);
+          console.error('Error sending first message to webhook:', fetchError);
           return { 
             success: false, 
-            message: `Erro de conexão: ${fetchError.message || 'Falha na conexão'}` 
+            message: `Connection error: ${fetchError.message || 'Connection failed'}` 
           };
         }
       }
     } catch (error) {
-      console.error('Erro geral ao enviar first message para webhook:', error);
+      console.error('General error sending first message to webhook:', error);
       return { 
         success: false, 
-        message: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}` 
+        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
       };
     }
   },
-
   async triggerCallWebhook(payload: { 
     action: string; 
     account_id?: string; 

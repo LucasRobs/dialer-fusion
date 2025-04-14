@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { RotateCw, CheckCircle, AlertCircle, Phone, Settings, Info } from 'lucide-react';
+import { RotateCw, CheckCircle, AlertCircle, Phone, Settings, Info, MessageSquare } from 'lucide-react';
 import webhookService from '@/services/webhookService';
 import type { WebhookPayload } from '@/services/webhookService';
 import { Input } from '@/components/ui/input';
@@ -385,6 +385,34 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
       });
     }
   };
+
+  const sendFirstMessageFromSupabase = async () => {
+    try {
+      toast({
+        description: "Enviando first message da Supabase para o webhook...",
+      });
+      
+      const result = await webhookService.sendFirstMessageToWebhook(vapiSettings.assistantId);
+      
+      if (result.success) {
+        toast({
+          description: "First message enviada com sucesso da Supabase!",
+          variant: "default"
+        });
+      } else {
+        toast({
+          description: `Erro ao enviar: ${result.message}`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao enviar first message:', error);
+      toast({
+        description: "Erro ao enviar first message da Supabase.",
+        variant: "destructive"
+      });
+    }
+  };
   
   const saveVapiSettings = () => {
     localStorage.setItem('vapi_settings', JSON.stringify(vapiSettings));
@@ -462,35 +490,45 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({
     ? Math.round((workflowStatus.completedTasks / workflowStatus.totalTasks) * 100)
     : 0;
   
-    return (
-      <Card className="shadow-md">
-        <CardHeader className="pb-2">
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="text-xl">Status de Automação</CardTitle>
-              <CardDescription>Status das automações em andamento</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={() => setSettingsOpen(!settingsOpen)}
-              >
-                <Settings className="h-4 w-4 mr-1" />
-                Configurações
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={testWebhook}
-                disabled={loading}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Phone className="h-4 w-4 mr-1" />
-                Testar Ligação
-              </Button>
-            </div>
+  return (
+    <Card className="shadow-md">
+      <CardHeader className="pb-2">
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="text-xl">Status de Automação</CardTitle>
+            <CardDescription>Status das automações em andamento</CardDescription>
           </div>
-        </CardHeader>
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={() => setSettingsOpen(!settingsOpen)}
+            >
+              <Settings className="h-4 w-4 mr-1" />
+              Configurações
+            </Button>
+            <Button 
+              size="sm"
+              variant="outline"
+              onClick={sendFirstMessageFromSupabase}
+              disabled={loading}
+              className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300"
+            >
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Testar First Message
+            </Button>
+            <Button 
+              size="sm" 
+              onClick={testWebhook}
+              disabled={loading}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Phone className="h-4 w-4 mr-1" />
+              Testar Ligação
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
         
         <CardContent className="space-y-4">
           {settingsOpen && (
