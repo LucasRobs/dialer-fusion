@@ -9,6 +9,7 @@ import { webhookService } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
 import assistantService from '@/services/assistantService';
 import { campaignService } from '@/services/campaignService';
+import { n8nWebhookService } from '@/services/n8nWebhookService';
 
 interface CampaignStatus {
   id: number;
@@ -140,13 +141,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
 
     try {
-      await campaignService.registerCallCompletion({
-        client_id: clientId,
-        campaign_id: campaign.id,
-        call_status: 'completed',
-        call_duration: Math.floor(Math.random() * 300) + 60,
-        assistant_id: validatedVapiId || campaign.assistantId
-      });
+      await n8nWebhookService.simulateCallCompletion(clientId, campaign.id);
       
       queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
       queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
