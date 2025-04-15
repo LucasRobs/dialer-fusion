@@ -36,12 +36,10 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
   const [isValidatingId, setIsValidatingId] = React.useState(false);
   const [validatedVapiId, setValidatedVapiId] = React.useState<string | null>(null);
 
-  // UUID validation regex
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const formatAssistantId = (id?: string) => {
     if (!id) return '';
-    // Format the ID to show just the first part like in the screenshot
     return id.length > 12 ? `${id.slice(0, 12)}...` : id;
   };
 
@@ -65,17 +63,14 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
   };
 
-  // Validate and get proper assistant ID when component loads
   React.useEffect(() => {
     const validateVapiAssistantId = async () => {
       if (isValidatingId) return;
       
       setIsValidatingId(true);
       try {
-        // First try the explicit Vapi assistant ID if available
         if (campaign.vapiAssistantId && UUID_REGEX.test(campaign.vapiAssistantId)) {
           try {
-            // Verify this ID exists in Vapi
             const exists = await assistantService.validateVapiAssistantId(campaign.vapiAssistantId);
             if (exists) {
               console.log('Using validated vapiAssistantId:', campaign.vapiAssistantId);
@@ -88,10 +83,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           }
         }
 
-        // Try other approaches
         let foundVapiId = null;
         
-        // Check if assistantId is a valid UUID and try it directly
         if (campaign.assistantId && UUID_REGEX.test(campaign.assistantId)) {
           try {
             const exists = await assistantService.validateVapiAssistantId(campaign.assistantId);
@@ -107,7 +100,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           }
         }
         
-        // Get Vapi ID from assistant name
         if (campaign.assistantName && !foundVapiId) {
           try {
             const idByName = await assistantService.getVapiAssistantIdByName(campaign.assistantName);
@@ -123,7 +115,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           }
         }
         
-        // Try to get from local storage
         if (!foundVapiId) {
           try {
             const storedAssistant = localStorage.getItem('selected_assistant');
@@ -148,7 +139,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           }
         }
         
-        // Use fallback ID as last resort
         if (!foundVapiId) {
           const FALLBACK_VAPI_ASSISTANT_ID = "01646bac-c486-455b-b1f7-1c8e15ba4cbf";
           console.log('Using fallback Vapi assistant ID:', FALLBACK_VAPI_ASSISTANT_ID);
@@ -164,6 +154,25 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     validateVapiAssistantId();
   }, [campaign]);
 
+  const handleCallCompletion = async (clientId: number) => {
+    if (!campaign.id) {
+      toast.error("ID da campanha não encontrado. Não é possível registrar a ligação.");
+      return;
+    }
+
+    try {
+      await n8nWebhookService.simulateCallCompletion(clientId, campaign.id);
+      
+      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
+      
+      toast.success("Ligação marcada como concluída com sucesso");
+    } catch (error) {
+      console.error('Erro ao registrar conclusão da ligação:', error);
+      toast.error("Erro ao registrar a conclusão da ligação. Por favor, tente novamente.");
+    }
+  };
+
   const handleStopCampaign = async () => {
     if (!campaign.id) {
       toast.error("ID da campanha não encontrado. Não é possível interromper a campanha.");
@@ -173,7 +182,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     try {
       setIsStoppingCampaign(true);
       
-      // Use the validated Vapi assistant ID
       const finalVapiAssistantId = validatedVapiId;
       
       if (!finalVapiAssistantId) {
@@ -182,7 +190,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         console.log('Using validated Vapi assistant ID for stopping campaign:', finalVapiAssistantId);
       }
       
-      // Send data to webhook with the IDs
       const result = await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
@@ -191,8 +198,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           campaign_name: campaign.name,
           progress: campaign.progress,
           completed_calls: campaign.callsMade,
-          assistant_id: campaign.assistantId, // Supabase ID
-          vapi_assistant_id: finalVapiAssistantId, // Validated Vapi API ID
+          assistant_id: campaign.assistantId,
+          vapi_assistant_id: finalVapiAssistantId,
           assistant_name: campaign.assistantName
         }
       });
@@ -202,13 +209,11 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
           onCampaignStopped();
         }
         
-        // Invalidate queries to force data reload
         queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
         queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
         
         toast.success("Campanha interrompida com sucesso");
       } else {
-        // Even if the webhook call fails, we still want to allow the user to stop the campaign
         if (onCampaignStopped) {
           onCampaignStopped();
         }
@@ -219,7 +224,6 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
       console.error('Erro ao interromper campanha:', error);
       toast.error("Erro ao interromper a campanha. Por favor, tente novamente.");
       
-      // Even on error, allow the campaign to be stopped in the UI
       if (onCampaignStopped) {
         onCampaignStopped();
       }

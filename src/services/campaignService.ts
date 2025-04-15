@@ -61,7 +61,7 @@ export const campaignService = {
   },
 
 
-  async registerCallCompletion(data: {
+    async registerCallCompletion(data: {
     client_id: number;
     campaign_id: number;
     call_status?: string;
