@@ -1,1 +1,14 @@
-project_id = "ovanntvqwzifxjrnnalr"
+
+project_id = "wwzlfjoiuoocbatfizac"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+
+[functions.call-completed]
+verify_jwt = false
+
+[db]
+port = 54322
+shadow_port = 54320
