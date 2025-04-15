@@ -8,18 +8,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { webhookService } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
 import assistantService from '@/services/assistantService';
-<<<<<<< HEAD
-import { campaignService } from '@/services/campaignService';
-<<<<<<< HEAD
-<<<<<<< HEAD
-import { n8nWebhookService } from '@/services/n8nWebhookService';
-=======
->>>>>>> 2d80d75 (Add webhook for call completion)
-=======
-import { n8nWebhookService } from '@/services/n8nWebhookService';
->>>>>>> 1b6b978 (Refactor: Remove Deno function call)
-=======
->>>>>>> 97fb752 (teste)
 
 interface CampaignStatus {
   id: number;
@@ -55,34 +43,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     return id.length > 12 ? `${id.slice(0, 12)}...` : id;
   };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  const handleCallCompletion = async (clientId: number) => {
-    if (!campaign.id) {
-      toast.error("ID da campanha não encontrado. Não é possível registrar a ligação.");
-      return;
-    }
-
-    try {
-      // Usando o novo método que não depende do Deno
-      await n8nWebhookService.simulateCallCompletion(clientId, campaign.id);
-      
-      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
-      queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
-      
-      toast.success("Ligação marcada como concluída com sucesso");
-    } catch (error) {
-      console.error('Erro ao registrar conclusão da ligação:', error);
-      toast.error("Erro ao registrar a conclusão da ligação. Por favor, tente novamente.");
-    }
-  };
-
   // Validate and get proper assistant ID when component loads
-=======
->>>>>>> 2d80d75 (Add webhook for call completion)
-=======
-  // Validate and get proper assistant ID when component loads
->>>>>>> 97fb752 (teste)
   React.useEffect(() => {
     const validateVapiAssistantId = async () => {
       if (isValidatingId) return;
@@ -214,9 +175,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
         }
       });
       
-      if (Array.isArray(result)) {
-        console.error('Unexpected array response:', result);
-      } else if (result.success) {
+      if (result.success) {
         if (onCampaignStopped) {
           onCampaignStopped();
         }
