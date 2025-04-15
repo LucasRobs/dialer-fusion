@@ -13,7 +13,7 @@ interface Campaign {
   average_duration?: number;
   user_id?: string;
   client_group_id?: string | null;
-  assistant_id?: string;  // Adicionada esta propriedade para resolver o erro
+  assistant_id?: string;
 }
 
 interface AnalyticsData {
@@ -33,7 +33,6 @@ interface AnalyticsData {
     value: number;
   }[];
 }
-
 
 export const campaignService = {
   async getCampaigns() {
@@ -60,8 +59,7 @@ export const campaignService = {
     }
   },
 
-
-    async registerCallCompletion(data: {
+  async registerCallCompletion(data: {
     client_id: number;
     campaign_id: number;
     call_status?: string;
@@ -75,18 +73,15 @@ export const campaignService = {
     try {
       console.log('Registering call completion for client:', data.client_id, 'in campaign:', data.campaign_id);
       
-      // Verificar se deve usar a abordagem baseada em Deno ou a nova abordagem direta
       const useN8n = localStorage.getItem('use_n8n_approach') === 'true';
       
       if (useN8n) {
-        // Usar a nova abordagem sem Deno
         return await n8nWebhookService.simulateCallCompletion(
           data.client_id, 
           data.campaign_id, 
           data.call_duration
         );
       } else {
-        // Usar a abordagem original com Deno Edge Function
         const functionUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co/functions/v1/call-completed';
         
         const response = await fetch(functionUrl, {
@@ -114,14 +109,10 @@ export const campaignService = {
     }
   },
 
-
-  // Adicionando a função solicitada
   async getClientGroupsWithCounts() {
     try {
-      // Buscar grupos de clientes
       const groups = await clientGroupService.getClientGroups();
 
-      // Contar os clientes em cada grupo
       const groupsWithCounts = await Promise.all(
         groups.map(async (group) => {
           const { count, error } = await supabase
@@ -145,88 +136,85 @@ export const campaignService = {
     }
   },
 
-    // Outras funções existentes no serviço...
-    async createCampaign(campaign: Campaign) {
-      try {
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id;
+  async createCampaign(campaign: Campaign) {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
   
-        if (!userId) {
-          throw new Error('No authenticated user found');
-        }
-  
-        const campaignWithUserId = {
-          ...campaign,
-          user_id: userId,
-        };
-  
-        const { data, error } = await supabase
-          .from('campaigns')
-          .insert([campaignWithUserId])
-          .select()
-          .single();
-  
-        if (error) throw error;
-  
-        if (data && data.id && campaign.client_group_id && campaign.client_group_id !== 'all') {
-          await this.prepareCampaignClientsFromGroup(data.id, campaign.client_group_id);
-        }
-  
-        return data;
-      } catch (error) {
-        console.error('Error creating campaign:', error);
-        throw error;
+      if (!userId) {
+        throw new Error('No authenticated user found');
       }
-    },
-
-
-    async prepareCampaignClientsFromGroup(campaignId: number, groupId: string) {
-      try {
-        const { data: groupMembers, error: groupError } = await supabase
-          .from('client_group_members')
-          .select('client_id')
-          .eq('group_id', groupId);
   
-        if (groupError) {
-          console.error('Erro ao buscar membros do grupo:', groupError);
-          throw groupError;
-        }
+      const campaignWithUserId = {
+        ...campaign,
+        user_id: userId,
+      };
   
-        if (!groupMembers || groupMembers.length === 0) {
-          console.log('Nenhum cliente encontrado neste grupo.');
-          return;
-        }
+      const { data, error } = await supabase
+        .from('campaigns')
+        .insert([campaignWithUserId])
+        .select()
+        .single();
   
-        const clientIds = groupMembers.map((member) => member.client_id);
+      if (error) throw error;
   
-        const campaignClients = clientIds.map((clientId) => ({
-          campaign_id: campaignId,
-          client_id: clientId,
-          status: 'pending',
-        }));
-  
-        const { error: insertError } = await supabase
-          .from('campaign_clients')
-          .insert(campaignClients);
-  
-        if (insertError) {
-          console.error('Erro ao inserir clientes na campanha:', insertError);
-          throw insertError;
-        }
-  
-        await supabase
-          .from('campaigns')
-          .update({ total_calls: clientIds.length })
-          .eq('id', campaignId);
-  
-        console.log(`Clientes do grupo ${groupId} associados à campanha ${campaignId}.`);
-      } catch (error) {
-        console.error('Erro ao preparar clientes da campanha a partir do grupo:', error);
-        throw error;
+      if (data && data.id && campaign.client_group_id && campaign.client_group_id !== 'all') {
+        await this.prepareCampaignClientsFromGroup(data.id, campaign.client_group_id);
       }
-    },
   
-  // Get active campaigns (status = 'active') for current user only
+      return data;
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      throw error;
+    }
+  },
+
+  async prepareCampaignClientsFromGroup(campaignId: number, groupId: string) {
+    try {
+      const { data: groupMembers, error: groupError } = await supabase
+        .from('client_group_members')
+        .select('client_id')
+        .eq('group_id', groupId);
+  
+      if (groupError) {
+        console.error('Erro ao buscar membros do grupo:', groupError);
+        throw groupError;
+      }
+  
+      if (!groupMembers || groupMembers.length === 0) {
+        console.log('Nenhum cliente encontrado neste grupo.');
+        return;
+      }
+  
+      const clientIds = groupMembers.map((member) => member.client_id);
+  
+      const campaignClients = clientIds.map((clientId) => ({
+        campaign_id: campaignId,
+        client_id: clientId,
+        status: 'pending',
+      }));
+  
+      const { error: insertError } = await supabase
+        .from('campaign_clients')
+        .insert(campaignClients);
+  
+      if (insertError) {
+        console.error('Erro ao inserir clientes na campanha:', insertError);
+        throw insertError;
+      }
+  
+      await supabase
+        .from('campaigns')
+        .update({ total_calls: clientIds.length })
+        .eq('id', campaignId);
+  
+      console.log(`Clientes do grupo ${groupId} associados à campanha ${campaignId}.`);
+    } catch (error) {
+      console.error('Erro ao preparar clientes da campanha a partir do grupo:', error);
+      throw error;
+    }
+  },
+
   async getActiveCampaigns() {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -251,8 +239,7 @@ export const campaignService = {
       return [];
     }
   },
-  
-  // Get campaign statistics for current user only
+
   async getCampaignStats() {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -268,12 +255,10 @@ export const campaignService = {
         };
       }
       
-      // Fetch recent calls for the current user
       const now = new Date();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(now.getDate() - 30);
       
-      // Fixed: Join calls with campaigns to filter by user_id
       const { data: campaigns } = await supabase
         .from('campaigns')
         .select('id')
@@ -285,7 +270,6 @@ export const campaignService = {
       if (campaigns && campaigns.length > 0) {
         const campaignIds = campaigns.map(c => c.id);
         
-        // Fetch calls associated with user's campaigns
         const { data: callsData, error: callsError } = await supabase
           .from('calls')
           .select('*')
@@ -298,7 +282,6 @@ export const campaignService = {
           recentCallsData = callsData || [];
         }
         
-        // Fetch today's calls
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
@@ -315,7 +298,6 @@ export const campaignService = {
         }
       }
       
-      // Calculate average call duration
       const completedCalls = recentCallsData.filter(call => 
         call.status === 'completed' || call.status === 'answered'
       ) || [];
@@ -331,7 +313,6 @@ export const campaignService = {
       const minutes = Math.floor(avgDuration / 60);
       const seconds = Math.floor(avgDuration % 60);
       
-      // Calculate completion rate
       const completionRate = recentCallsData.length > 0
         ? Math.round((completedCalls.length / recentCallsData.length) * 100)
         : 0;
@@ -352,7 +333,7 @@ export const campaignService = {
       };
     }
   },
-  
+
   async getCampaignById(id: number) {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -377,7 +358,7 @@ export const campaignService = {
       return null;
     }
   },
-  
+
   async updateCampaign(id: number, updates: Partial<Campaign>) {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -387,7 +368,6 @@ export const campaignService = {
         throw new Error('No authenticated user found');
       }
       
-      // First check if the campaign exists and belongs to the current user
       const { data: existingCampaign, error: checkError } = await supabase
         .from('campaigns')
         .select('id')
@@ -404,7 +384,6 @@ export const campaignService = {
         throw new Error(`Campaign with ID ${id} not found or not owned by current user`);
       }
       
-      // Now update the campaign
       const { data, error } = await supabase
         .from('campaigns')
         .update(updates)
@@ -424,7 +403,7 @@ export const campaignService = {
       throw error;
     }
   },
-  
+
   async deleteCampaign(id: number) {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -434,7 +413,6 @@ export const campaignService = {
         throw new Error('No authenticated user found');
       }
       
-      // Only delete if campaign belongs to current user
       const { error } = await supabase
         .from('campaigns')
         .delete()
@@ -448,7 +426,7 @@ export const campaignService = {
       throw error;
     }
   },
-  
+
   async getAnalyticsData(): Promise<AnalyticsData> {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -458,10 +436,8 @@ export const campaignService = {
         throw new Error('No authenticated user found');
       }
       
-      // Fixed: Fetch calls data using a different approach
       let callsData: any[] = [];
       
-      // First get all campaigns for the user
       const { data: campaigns } = await supabase
         .from('campaigns')
         .select('id')
@@ -470,7 +446,6 @@ export const campaignService = {
       if (campaigns && campaigns.length > 0) {
         const campaignIds = campaigns.map(c => c.id);
         
-        // Then get calls associated with those campaigns
         const { data: calls, error: callsError } = await supabase
           .from('calls')
           .select('*')
@@ -484,7 +459,6 @@ export const campaignService = {
         }
       }
       
-      // Process the data
       const completedCalls = callsData.filter(call => 
         call.status === 'completed' || call.status === 'answered'
       ) || [];
@@ -500,7 +474,6 @@ export const campaignService = {
       const minutes = Math.floor(avgDuration / 60);
       const seconds = Math.floor(avgDuration % 60);
       
-      // Generate sample data if real data is insufficient
       const sampleMonthlyData = [
         { name: 'Jan 2023', calls: 15, cost: 45.00 },
         { name: 'Feb 2023', calls: 20, cost: 62.50 },
@@ -514,7 +487,6 @@ export const campaignService = {
         { name: 'New Product', value: 25 }
       ];
       
-      // Return analytics data
       return {
         totalCalls: callsData.length || 0,
         callsChangePercentage: 10,
@@ -534,7 +506,6 @@ export const campaignService = {
     } catch (error) {
       console.error('Error getting analytics data:', error);
       
-      // Return default data if there's an error
       return {
         totalCalls: 0,
         callsChangePercentage: 0,
@@ -547,8 +518,7 @@ export const campaignService = {
       };
     }
   },
-  
-  // Helper to process calls data by month
+
   processCallsDataByMonth(callsData: any[]) {
     const callsByMonth: Record<string, { calls: number, cost: number }> = {};
     
@@ -576,15 +546,13 @@ export const campaignService = {
       cost: parseFloat(data.cost.toFixed(2))
     }));
   },
-  
-  // Helper to process calls data by campaign
+
   processCallsDataByCampaign(callsData: any[]) {
     const callsByCampaign: Record<string, number> = {};
     
     callsData.forEach(call => {
       if (!call.campaign_id) return;
       
-      // Use campaign ID as fallback
       const campaignName = `Campaign ${call.campaign_id}`;
       
       if (!callsByCampaign[campaignName]) {
@@ -594,7 +562,6 @@ export const campaignService = {
       callsByCampaign[campaignName] += 1;
     });
     
-    // If we don't have enough data, add some sample data
     if (Object.keys(callsByCampaign).length < 3) {
       callsByCampaign['Follow-up'] = callsByCampaign['Follow-up'] || 12;
       callsByCampaign['New Customers'] = callsByCampaign['New Customers'] || 8;
