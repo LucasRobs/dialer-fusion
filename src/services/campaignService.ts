@@ -13,7 +13,7 @@ interface Campaign {
   average_duration?: number;
   user_id?: string;
   client_group_id?: string | null;
-  assistant_id?: string;  // Adicionada esta propriedade para resolver o erro
+  assistant_id?: string;
 }
 
 interface AnalyticsData {
@@ -33,7 +33,6 @@ interface AnalyticsData {
     value: number;
   }[];
 }
-
 
 export const campaignService = {
   async getCampaigns() {
@@ -543,26 +542,36 @@ export const campaignService = {
     try {
       console.log('Registering call completion for client:', data.client_id, 'in campaign:', data.campaign_id);
       
-      const functionUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co/functions/v1/call-completed';
+      const useN8n = localStorage.getItem('use_n8n_approach') === 'true';
       
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response from call-completed function:', errorData);
-        throw new Error(`Failed to register call completion: ${errorData.error || response.statusText}`);
+      if (useN8n) {
+        return await n8nWebhookService.simulateCallCompletion(
+          data.client_id, 
+          data.campaign_id, 
+          data.call_duration
+        );
+      } else {
+        const functionUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co/functions/v1/call-completed';
+        
+        const response = await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Error response from call-completed function:', errorData);
+          throw new Error(`Failed to register call completion: ${errorData.error || response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Call completion registered successfully:', result);
+        
+        return result;
       }
-      
-      const result = await response.json();
-      console.log('Call completion registered successfully:', result);
-      
-      return result;
     } catch (error) {
       console.error('Error registering call completion:', error);
       throw error;

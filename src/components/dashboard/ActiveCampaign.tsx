@@ -10,9 +10,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import assistantService from '@/services/assistantService';
 import { campaignService } from '@/services/campaignService';
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { n8nWebhookService } from '@/services/n8nWebhookService';
 =======
 >>>>>>> 2d80d75 (Add webhook for call completion)
+=======
+import { n8nWebhookService } from '@/services/n8nWebhookService';
+>>>>>>> 1b6b978 (Refactor: Remove Deno function call)
 
 interface CampaignStatus {
   id: number;
@@ -168,13 +172,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
 
     try {
-      await campaignService.registerCallCompletion({
-        client_id: clientId,
-        campaign_id: campaign.id,
-        call_status: 'completed',
-        call_duration: Math.floor(Math.random() * 300) + 60,
-        assistant_id: validatedVapiId || campaign.assistantId
-      });
+      await n8nWebhookService.simulateCallCompletion(clientId, campaign.id);
       
       queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
       queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
