@@ -1,4 +1,5 @@
 
+import { webhookService } from '@/services/webhookService';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -30,49 +31,18 @@ export const n8nWebhookService = {
         success: true
       }]);
       
-      // Atualizar a campanha incrementando o contador de chamadas respondidas
-      const { data: campaignData, error: campaignError } = await supabase
-        .from('campaigns')
-        .select('answered_calls, total_calls')
-        .eq('id', data.campaign_id)
-        .single();
-      
-      if (campaignError) {
-        console.error('Erro ao buscar dados da campanha:', campaignError);
-        throw campaignError;
-      }
-      
-      const updatedAnsweredCalls = (campaignData.answered_calls || 0) + 1;
-      
-      await supabase
-        .from('campaigns')
-        .update({ 
-          answered_calls: updatedAnsweredCalls,
-          average_duration: data.call_duration || 0
-        })
-        .eq('id', data.campaign_id);
-      
-      // Registrar a chamada na tabela de chamadas
-      const { data: callData, error: callError } = await supabase
-        .from('calls')
-        .insert([{
-          campaign_id: data.campaign_id,
-          client_id: data.client_id,
-          status: data.call_status || 'completed',
-          duration: data.call_duration || 0,
-          call_start: data.call_start || new Date().toISOString(),
-          call_end: data.call_end || new Date().toISOString(),
-          summary: data.call_summary || '',
-          recording_url: data.recording_url || '',
-          assistant_id: data.assistant_id || null
-        }])
-        .select()
-        .single();
-      
-      if (callError) {
-        console.error('Erro ao registrar chamada:', callError);
-        throw callError;
-      }
+      // Processar os dados usando o serviço de webhook
+      const result = await webhookService.processCallCompletionFromN8N({
+        client_id: data.client_id,
+        campaign_id: data.campaign_id,
+        call_status: data.call_status,
+        call_duration: data.call_duration,
+        call_start: data.call_start,
+        call_end: data.call_end,
+        call_summary: data.call_summary,
+        recording_url: data.recording_url,
+        assistant_id: data.assistant_id
+      });
       
       // Notificar o usuário do sucesso (se estiver em um contexto de UI)
       toast.success("Dados de chamada processados com sucesso");
@@ -80,9 +50,9 @@ export const n8nWebhookService = {
       return {
         success: true,
         message: 'Dados de chamada processados com sucesso',
-        result: callData
+        result
       };
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao processar dados do webhook:', error);
       
       // Notificar o usuário do erro (se estiver em um contexto de UI)
@@ -98,23 +68,16 @@ export const n8nWebhookService = {
   // Esta função pode ser usada para testes ou chamadas manuais
   async simulateCallCompletion(clientId: number, campaignId: number, callDuration?: number) {
     try {
-      const result = await this.processWebhookData({
+      const result = await webhookService.processCallCompletionFromN8N({
         client_id: clientId,
         campaign_id: campaignId,
         call_status: 'completed',
-        call_duration: callDuration || Math.floor(Math.random() * 300) + 60,
-        call_start: new Date().toISOString(),
-        call_end: new Date().toISOString()
+        call_duration: callDuration || Math.floor(Math.random() * 300) + 60
       });
       
-      if (result.success) {
-        toast.success("Simulação de chamada completada com sucesso");
-      } else {
-        toast.error(`Erro na simulação: ${result.error}`);
-      }
-      
+      toast.success("Simulação de chamada completada com sucesso");
       return result;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro na simulação de chamada:', error);
       toast.error("Erro na simulação de chamada");
       throw error;
