@@ -60,7 +60,10 @@ export const campaignService = {
   },
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
+=======
+>>>>>>> db352151e7b50a04a738acf98a412a2e136b9a72
   async registerCallCompletion(data: {
     client_id: number;
     campaign_id: number;
@@ -75,18 +78,15 @@ export const campaignService = {
     try {
       console.log('Registering call completion for client:', data.client_id, 'in campaign:', data.campaign_id);
       
-      // Verificar se deve usar a abordagem baseada em Deno ou a nova abordagem direta
       const useN8n = localStorage.getItem('use_n8n_approach') === 'true';
       
       if (useN8n) {
-        // Usar a nova abordagem sem Deno
         return await n8nWebhookService.simulateCallCompletion(
           data.client_id, 
           data.campaign_id, 
           data.call_duration
         );
       } else {
-        // Usar a abordagem original com Deno Edge Function
         const functionUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co/functions/v1/call-completed';
         
         const response = await fetch(functionUrl, {
@@ -114,10 +114,13 @@ export const campaignService = {
     }
   },
 
+<<<<<<< HEAD
 
   // Adicionando a função solicitada
 =======
 >>>>>>> 2d80d75 (Add webhook for call completion)
+=======
+>>>>>>> db352151e7b50a04a738acf98a412a2e136b9a72
   async getClientGroupsWithCounts() {
     try {
       const groups = await clientGroupService.getClientGroups();
@@ -528,6 +531,7 @@ export const campaignService = {
     }
   },
 
+<<<<<<< HEAD
   async registerCallCompletion(data: {
     client_id: number;
     campaign_id: number;
@@ -578,6 +582,8 @@ export const campaignService = {
     }
   },
 
+=======
+>>>>>>> db352151e7b50a04a738acf98a412a2e136b9a72
   processCallsDataByMonth(callsData: any[]) {
     const callsByMonth: Record<string, { calls: number, cost: number }> = {};
     

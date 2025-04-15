@@ -9,6 +9,7 @@ import { webhookService } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
 import assistantService from '@/services/assistantService';
 <<<<<<< HEAD
+<<<<<<< HEAD
 import { campaignService } from '@/services/campaignService';
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -20,6 +21,8 @@ import { n8nWebhookService } from '@/services/n8nWebhookService';
 >>>>>>> 1b6b978 (Refactor: Remove Deno function call)
 =======
 >>>>>>> 97fb752 (teste)
+=======
+>>>>>>> db352151e7b50a04a738acf98a412a2e136b9a72
 
 interface CampaignStatus {
   id: number;
@@ -57,6 +60,7 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   const handleCallCompletion = async (clientId: number) => {
     if (!campaign.id) {
       toast.error("ID da campanha não encontrado. Não é possível registrar a ligação.");
@@ -77,6 +81,8 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     }
   };
 
+=======
+>>>>>>> db352151e7b50a04a738acf98a412a2e136b9a72
   // Validate and get proper assistant ID when component loads
 =======
 >>>>>>> 2d80d75 (Add webhook for call completion)
