@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { clientGroupService } from '@/services/clientGroupService';
+import { n8nWebhookService } from '@/services/n8nWebhookService';
 
 interface Campaign {
   id?: number;
@@ -56,6 +57,60 @@ export const campaignService = {
     } catch (error) {
       console.error('Error fetching campaigns:', error);
       return [];
+    }
+  },
+
+
+  async registerCallCompletion(data: {
+    client_id: number;
+    campaign_id: number;
+    call_status?: string;
+    call_duration?: number;
+    call_start?: string;
+    call_end?: string;
+    call_summary?: string;
+    recording_url?: string;
+    assistant_id?: string;
+  }) {
+    try {
+      console.log('Registering call completion for client:', data.client_id, 'in campaign:', data.campaign_id);
+      
+      // Verificar se deve usar a abordagem baseada em Deno ou a nova abordagem direta
+      const useN8n = localStorage.getItem('use_n8n_approach') === 'true';
+      
+      if (useN8n) {
+        // Usar a nova abordagem sem Deno
+        return await n8nWebhookService.simulateCallCompletion(
+          data.client_id, 
+          data.campaign_id, 
+          data.call_duration
+        );
+      } else {
+        // Usar a abordagem original com Deno Edge Function
+        const functionUrl = 'https://wwzlfjoiuoocbatfizac.supabase.co/functions/v1/call-completed';
+        
+        const response = await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Error response from call-completed function:', errorData);
+          throw new Error(`Failed to register call completion: ${errorData.error || response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Call completion registered successfully:', result);
+        
+        return result;
+      }
+    } catch (error) {
+      console.error('Error registering call completion:', error);
+      throw error;
     }
   },
 

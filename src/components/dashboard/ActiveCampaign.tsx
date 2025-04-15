@@ -8,6 +8,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { webhookService } from '@/services/webhookService';
 import { useAuth } from '@/contexts/AuthContext';
 import assistantService from '@/services/assistantService';
+import { campaignService } from '@/services/campaignService';
+import { n8nWebhookService } from '@/services/n8nWebhookService';
 
 interface CampaignStatus {
   id: number;
@@ -19,7 +21,7 @@ interface CampaignStatus {
   active: boolean;
   assistantName?: string;
   assistantId?: string;
-  vapiAssistantId?: string;  // Explicit field for Vapi assistant ID
+  vapiAssistantId?: string;
 }
 
 interface ActiveCampaignProps {
@@ -41,6 +43,26 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
     if (!id) return '';
     // Format the ID to show just the first part like in the screenshot
     return id.length > 12 ? `${id.slice(0, 12)}...` : id;
+  };
+
+  const handleCallCompletion = async (clientId: number) => {
+    if (!campaign.id) {
+      toast.error("ID da campanha não encontrado. Não é possível registrar a ligação.");
+      return;
+    }
+
+    try {
+      // Usando o novo método que não depende do Deno
+      await n8nWebhookService.simulateCallCompletion(clientId, campaign.id);
+      
+      queryClient.invalidateQueries({ queryKey: ['activeCampaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['campaignStats'] });
+      
+      toast.success("Ligação marcada como concluída com sucesso");
+    } catch (error) {
+      console.error('Erro ao registrar conclusão da ligação:', error);
+      toast.error("Erro ao registrar a conclusão da ligação. Por favor, tente novamente.");
+    }
   };
 
   // Validate and get proper assistant ID when component loads
