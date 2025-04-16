@@ -70,15 +70,11 @@ const CampaignControls = () => {
     aiProfile: '',
   });
 
-  // Buscar grupos de clientes e contar os clientes em cada grupo
   const { data: userClientGroups = [], isLoading: isLoadingGroups } = useQuery({
     queryKey: ['userClientGroups'],
     queryFn: async () => {
       try {
-        // Buscar grupos de clientes
         const groups = await clientGroupService.getClientGroups();
-
-        // Contar os clientes em cada grupo
         const groupsWithCounts = await Promise.all(
           groups.map(async (group) => {
             const { count, error } = await supabase
@@ -104,14 +100,12 @@ const CampaignControls = () => {
     enabled: !!user?.id,
   });
 
-  // Fetch campaigns
   const { data: supabaseCampaignsData, refetch: refetchCampaigns } = useQuery({
     queryKey: ['campaigns'],
     queryFn: async () => await campaignService.getCampaigns(),
     staleTime: 0,
   });
 
-  // Fetch assistants
   const { data: assistants = [], isLoading: isLoadingAssistants, refetch: refetchAssistants } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
@@ -121,7 +115,6 @@ const CampaignControls = () => {
     enabled: !!user?.id,
   });
 
-  // Fetch clients for selected group
   const [selectedGroupClients, setSelectedGroupClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
 
@@ -130,7 +123,6 @@ const CampaignControls = () => {
     
     setIsLoadingClients(true);
     try {
-      // Get the client group members
       const { data: memberData, error: memberError } = await supabase
         .from('client_group_members')
         .select('client_id')
@@ -141,7 +133,6 @@ const CampaignControls = () => {
       if (memberData && memberData.length > 0) {
         const clientIds = memberData.map(item => item.client_id);
         
-        // Get the actual client data
         const { data: clientData, error: clientError } = await supabase
           .from('clients')
           .select('*')
@@ -177,10 +168,6 @@ const CampaignControls = () => {
         id: campaign.id,
         name: campaign.name || 'Untitled Campaign',
         status: campaign.status || 'draft',
-        progress:
-          campaign.total_calls > 0
-            ? Math.round((campaign.answered_calls / campaign.total_calls) * 100)
-            : 0,
         clientGroup: campaign.client_group_id,
         clientCount: campaign.total_calls || 0,
         completedCalls: campaign.answered_calls || 0,
@@ -226,7 +213,6 @@ const CampaignControls = () => {
     }
 
     try {
-      // Salvar o assistente selecionado no localStorage
       localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistant));
       console.log('Assistente selecionado para campanha:', selectedAssistant);
 
@@ -268,18 +254,14 @@ const CampaignControls = () => {
     }
   };
 
-  // Função para iniciar a campanha e enviar o webhook
-  // Função para iniciar a campanha e enviar o webhook
   const handleStartCampaign = async (campaign) => {
     setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     
     try {
-      // Buscar o assistente pelo ID
       let selectedAssistant = assistants.find(
         (assistant) => assistant.id === campaign.aiProfile || assistant.assistant_id === campaign.aiProfile
       );
       
-      // Fallback: verificar no localStorage
       if (!selectedAssistant) {
         try {
           const storedAssistant = localStorage.getItem('selected_assistant');
@@ -299,27 +281,22 @@ const CampaignControls = () => {
       
       console.log("Selected assistant for campaign:", selectedAssistant);
       
-      // Store selected assistant in localStorage for future reference
       localStorage.setItem('selected_assistant', JSON.stringify(selectedAssistant));
       
-      // Get the correct assistant ID to use - preferindo assistant_id se disponível
       const assistantId = selectedAssistant.assistant_id || selectedAssistant.id;
       console.log("Using assistant ID for campaign:", assistantId);
       
-      // Buscar os clientes do grupo
       await fetchClientsForGroup(campaign.clientGroup);
       
       if (selectedGroupClients.length === 0) {
         throw new Error("Nenhum cliente encontrado neste grupo");
       }
       
-      // Atualizar o status da campanha para 'active'
       await campaignService.updateCampaign(campaign.id, {
         status: 'active',
         start_date: new Date().toISOString(),
       });
       
-      // Para cada cliente no grupo, enviar um webhook
       for (const client of selectedGroupClients) {
         const webhookData = {
           action: 'make_call',
@@ -344,7 +321,6 @@ const CampaignControls = () => {
         
         console.log(`Enviando webhook para cliente ${client.name}:`, webhookData);
         
-        // Enviar o webhook
         await webhookService.triggerCallWebhook(webhookData);
       }
       
@@ -353,9 +329,7 @@ const CampaignControls = () => {
         description: `A campanha "${campaign.name}" foi iniciada com sucesso para ${selectedGroupClients.length} clientes usando o assistente "${selectedAssistant.name}".`,
       });
       
-      // Atualizar a lista de campanhas
       await refetchCampaigns();
-      
     } catch (error) {
       console.error("Erro ao iniciar campanha:", error);
       toast({
@@ -368,7 +342,6 @@ const CampaignControls = () => {
     }
   };
 
-  // Função para pausar a campanha
   const handlePauseCampaign = async (campaign) => {
     setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     try {
@@ -394,7 +367,6 @@ const CampaignControls = () => {
     }
   };
 
-  // Função para encerrar a campanha
   const handleStopCampaign = async (campaign) => {
     setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     try {
@@ -421,7 +393,6 @@ const CampaignControls = () => {
     }
   };
 
-  // Função para deletar a campanha
   const handleDeleteCampaign = async (campaign) => {
     setIsActionLoading(prev => ({ ...prev, [campaign.id]: true }));
     try {
@@ -494,15 +465,6 @@ const CampaignControls = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between mb-1 text-sm">
-                          <span>Progresso: {campaign.completedCalls} de {campaign.clientCount} chamadas concluídas</span>
-                          <span>{campaign.progress}%</span>
-                        </div>
-                        <Progress value={campaign.progress} className="h-2" />
-                      </div>
-                      
-                      {/* Controles da campanha */}
                       <div className="flex flex-wrap gap-2 pt-2">
                         {campaign.status === 'draft' && (
                           <>
