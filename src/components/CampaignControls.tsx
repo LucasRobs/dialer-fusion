@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   PauseCircle,
@@ -24,7 +25,6 @@ import {
   CardDescription, 
   CardFooter 
 } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -298,12 +298,16 @@ const CampaignControls = () => {
       });
       
       for (const client of selectedGroupClients) {
+        // Generate a unique call ID using timestamp + random string
+        const callId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        
         const webhookData = {
           action: 'make_call',
           campaign_id: campaign.id,
           client_name: client.name,
           client_phone: client.phone,
           client_id: client.id,
+          call_id: callId, // Adding the call ID here
           call: {
             model: selectedAssistant.model || "gpt-4o-turbo",
             voice: selectedAssistant.voice || "33B4UnXyTNbgLmdEDh5P",
@@ -316,11 +320,12 @@ const CampaignControls = () => {
             first_message: selectedAssistant.first_message || "Olá, como posso ajudar?",
             system_prompt: selectedAssistant.system_prompt || "",
             model_name: selectedAssistant.model || "gpt-4o-turbo",
-            collowop_webhook: "https://primary-production-31de.up.railway.app/webhook/collowop"
+            collowop_webhook: "https://primary-production-31de.up.railway.app/webhook/collowop",
+            call_id: callId // Adding call ID in additional_data as well for redundancy
           }
         };
         
-        console.log(`Enviando webhook para cliente ${client.name}:`, webhookData);
+        console.log(`Enviando webhook para cliente ${client.name} com call_id ${callId}:`, webhookData);
         
         await webhookService.triggerCallWebhook(webhookData);
       }
