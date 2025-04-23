@@ -315,7 +315,8 @@ const CampaignControls = () => {
             assistant_name: selectedAssistant.name,
             first_message: selectedAssistant.first_message || "Olá, como posso ajudar?",
             system_prompt: selectedAssistant.system_prompt || "",
-            model_name: selectedAssistant.model || "gpt-4o-turbo"
+            model_name: selectedAssistant.model || "gpt-4o-turbo",
+            collowop_webhook: "https://primary-production-31de.up.railway.app/webhook/collowop"
           }
         };
         
