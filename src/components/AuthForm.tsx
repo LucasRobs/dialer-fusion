@@ -30,7 +30,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
     // Reset network error
     setNetworkError(null);
     
-    // Validation
+    // Validação
     if (!email || !password) {
       toast({
         title: "Erro",
@@ -81,13 +81,13 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
           description: "Sua conta foi criada com sucesso"
         });
         
-        // Redirect to dashboard or login
+        // Redirecionar para dashboard
         navigate('/dashboard');
       }
     } catch (error: any) {
-      console.error('Auth error:', error);
+      console.error('Erro de autenticação:', error);
       
-      // Check if it's a network error
+      // Verificar se é um erro de rede
       if (error.message && 
           (error.message.includes('Failed to fetch') || 
            error.message.includes('NetworkError') || 
@@ -98,10 +98,26 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
         
         setNetworkError("Não foi possível conectar ao servidor. Verifique sua conexão de internet e tente novamente.");
       } else {
-        // Handle other auth errors
+        // Tratar erros específicos de autenticação
+        let errorMessage = "Ocorreu um erro durante a autenticação";
+        
+        if (error.message) {
+          if (error.message.includes('Invalid login credentials')) {
+            errorMessage = "Email ou senha inválidos";
+          } else if (error.message.includes('Email not confirmed')) {
+            errorMessage = "Por favor, confirme seu email antes de fazer login";
+          } else if (error.message.includes('User already registered')) {
+            errorMessage = "Este email já está cadastrado";
+          } else if (error.message.includes('weak-password')) {
+            errorMessage = "A senha é muito fraca. Use pelo menos 6 caracteres";
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        
         toast({
           title: "Erro",
-          description: error.message || "Ocorreu um erro durante a autenticação",
+          description: errorMessage,
           variant: "destructive"
         });
       }
@@ -221,7 +237,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type }) => {
         )}
       </div>
       
-      {/* Offline mode hint */}
+      {/* Dicas para modo offline */}
       {networkError && (
         <div className="mt-4 px-4 py-3 bg-muted rounded-lg text-sm text-center">
           <p className="font-medium mb-1">Se estiver com problemas de conexão:</p>
