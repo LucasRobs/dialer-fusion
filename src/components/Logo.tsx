@@ -16,10 +16,12 @@ const Logo = ({ size = 'md', withText = true }: LogoProps) => {
 
   return (
     <Link to="/" className="flex items-center">
-      <div className="relative group">
-        <div className={`${sizeClasses[size]} aspect-square rounded-xl flex items-center justify-center bg-gradient-to-br from-secondary to-secondary/80 text-white transition-all duration-300 hover:shadow-lg hover:shadow-secondary/20`}>
-          <span className="text-xl font-bold">C</span>
-        </div>
+      <div className="relative">
+        <img 
+          src="/lovable-uploads/1782f7a5-bdca-4e2d-bc30-444b2b443305.png" 
+          alt="Collowop Logo" 
+          className={`${sizeClasses[size]} aspect-square transition-all duration-300`} 
+        />
       </div>
       {withText && (
         <span className="ml-2 font-bold text-primary text-xl tracking-tight">
@@ -31,4 +33,3 @@ const Logo = ({ size = 'md', withText = true }: LogoProps) => {
 };
 
 export default Logo;
-
