@@ -35,11 +35,19 @@ const VapiAssistantTransfer = () => {
       // Ensure all assistants have a metadata property
       return fetchedAssistants.map(assistant => ({
         ...assistant,
-        metadata: assistant.metadata || { user_id: assistant.user_id || user.id }
+        metadata: assistant.metadata || { 
+          user_id: assistant.user_id || user.id,
+          assistant_type: assistant.metadata?.assistant_type || 'individual'
+        }
       }));
     },
     enabled: !!user?.id,
   });
+
+  // Filter individual assistants only
+  const individualAssistants = assistants?.filter(assistant => 
+    assistant.metadata?.assistant_type === 'individual' || !assistant.metadata?.assistant_type
+  ) || [];
 
   // Fetch clients when component mounts
   useEffect(() => {
@@ -81,16 +89,19 @@ const VapiAssistantTransfer = () => {
       if (storedAssistant) {
         const assistant = JSON.parse(storedAssistant);
         if (assistant && assistant.assistant_id) {
-          setSelectedAssistantId(assistant.assistant_id);
-          
-          // If the assistant has a first message, use it
-          if (assistant.first_message) {
-            setFirstMessage(assistant.first_message);
+          // Only select if it's an individual assistant
+          if (!assistant.metadata?.assistant_type || assistant.metadata?.assistant_type === 'individual') {
+            setSelectedAssistantId(assistant.assistant_id);
+            
+            // If the assistant has a first message, use it
+            if (assistant.first_message) {
+              setFirstMessage(assistant.first_message);
+            }
           }
         }
-      } else if (assistants && assistants.length > 0) {
-        // Select first assistant
-        const firstAssistant = assistants[0];
+      } else if (individualAssistants && individualAssistants.length > 0) {
+        // Select first individual assistant
+        const firstAssistant = individualAssistants[0];
         setSelectedAssistantId(firstAssistant.assistant_id);
         
         // If the assistant has a first message, use it
@@ -101,7 +112,7 @@ const VapiAssistantTransfer = () => {
     } catch (error) {
       console.error('Error loading selected assistant from localStorage:', error);
     }
-  }, [assistants]);
+  }, [individualAssistants]);
 
   const handleClientChange = (clientId: string) => {
     const id = parseInt(clientId, 10);
@@ -188,7 +199,7 @@ const VapiAssistantTransfer = () => {
               <SelectValue placeholder={isLoadingAssistants ? "Loading assistants..." : "Select an assistant"} />
             </SelectTrigger>
             <SelectContent>
-              {assistants?.map((assistant: VapiAssistant) => (
+              {individualAssistants?.map((assistant: VapiAssistant) => (
                 <SelectItem key={assistant.assistant_id} value={assistant.assistant_id}>
                   {assistant.name}
                 </SelectItem>

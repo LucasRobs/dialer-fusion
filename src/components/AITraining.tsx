@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Bot, Plus, Loader2, AlertCircle, RefreshCcw, Trash2 } from 'lucide-react';
+import { Bot, Plus, Loader2, AlertCircle, RefreshCcw, Trash2, Phone, Users } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const AITraining = () => {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ const AITraining = () => {
   const [isSyncingWithVapi, setIsSyncingWithVapi] = useState(false);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'failed'>('checking');
+  const [assistantType, setAssistantType] = useState<'individual' | 'campaign'>('individual');
 
   // Check Supabase connection on component mount
   useEffect(() => {
@@ -85,7 +87,10 @@ const AITraining = () => {
         // Always ensure each assistant has a metadata property
         const assistantsWithMetadata = (supabaseAssistants || []).map(assistant => ({
           ...assistant,
-          metadata: assistant.metadata || { user_id: assistant.user_id || user.id }
+          metadata: assistant.metadata || { 
+            user_id: assistant.user_id || user.id,
+            assistant_type: assistant.metadata?.assistant_type || 'individual'
+          }
         }));
         
         // If we don't have any assistants in Supabase or this is the first load,
@@ -104,7 +109,10 @@ const AITraining = () => {
             
           const refreshedWithMetadata = (refreshedAssistants || []).map(assistant => ({
             ...assistant,
-            metadata: assistant.metadata || { user_id: assistant.user_id || user.id }
+            metadata: assistant.metadata || { 
+              user_id: assistant.user_id || user.id,
+              assistant_type: assistant.metadata?.assistant_type || 'individual' 
+            }
           }));
           
           return refreshedWithMetadata || [];
@@ -122,6 +130,15 @@ const AITraining = () => {
     staleTime: 2000, // Consider data stale sooner
   });
 
+  // Filter assistants by type
+  const individualAssistants = assistants?.filter(assistant => 
+    assistant.metadata?.assistant_type === 'individual' || !assistant.metadata?.assistant_type
+  ) || [];
+  
+  const campaignAssistants = assistants?.filter(assistant => 
+    assistant.metadata?.assistant_type === 'campaign'
+  ) || [];
+
   // Load selected assistant from localStorage
   useEffect(() => {
     try {
@@ -133,7 +150,10 @@ const AITraining = () => {
           // Always ensure metadata exists
           const assistantWithMetadata = {
             ...parsed,
-            metadata: parsed.metadata || { user_id: parsed.user_id || user?.id || '' }
+            metadata: parsed.metadata || { 
+              user_id: parsed.user_id || user?.id || '',
+              assistant_type: parsed.metadata?.assistant_type || 'individual'
+            }
           };
           setSelectedAssistant(assistantWithMetadata as VapiAssistant);
         }
@@ -145,7 +165,10 @@ const AITraining = () => {
           // Always ensure metadata exists
           const assistantWithMetadata = {
             ...first,
-            metadata: first.metadata || { user_id: first.user_id || user?.id || '' }
+            metadata: first.metadata || { 
+              user_id: first.user_id || user?.id || '',
+              assistant_type: first.metadata?.assistant_type || 'individual'
+            }
           };
           setSelectedAssistant(assistantWithMetadata as VapiAssistant);
           localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
@@ -203,7 +226,10 @@ const AITraining = () => {
               voice: (asst.voice && asst.voice.voiceId) || asst.voice || '33B4UnXyTNbgLmdEDh5P',
               voice_id: (asst.voice && asst.voice.voiceId) || asst.voice_id || '33B4UnXyTNbgLmdEDh5P',
               created_at: asst.createdAt || new Date().toISOString(),
-              metadata: asst.metadata || { user_id: user.id }
+              metadata: asst.metadata || { 
+                user_id: user.id,
+                assistant_type: asst.metadata?.assistant_type || 'individual'
+              }
             };
             
             // Check if assistant already exists by assistant_id
@@ -299,16 +325,24 @@ const AITraining = () => {
     
     try {
       // Create the assistant
-      console.log('Creating assistant with params:', { name, firstMessage, systemPrompt, userId: user.id });
+      console.log('Creating assistant with params:', { name, firstMessage, systemPrompt, userId: user.id, assistantType });
       
       // First show loading toast
       toast.loading('Criando assistente...', { id: 'creating-assistant' });
+      
+      // Create metadata with type
+      const metadata = {
+        user_id: user.id,
+        assistant_type: assistantType,
+        created_at: new Date().toISOString()
+      };
       
       const newAssistant = await webhookService.createAssistant({
         name,
         first_message: firstMessage,
         system_prompt: systemPrompt,
-        userId: user.id
+        userId: user.id,
+        metadata
       });
       
       console.log('Assistant created successfully:', newAssistant);
@@ -333,7 +367,7 @@ const AITraining = () => {
             voice: '33B4UnXyTNbgLmdEDh5P',
             voice_id: '33B4UnXyTNbgLmdEDh5P',
             created_at: new Date().toISOString(),
-            metadata: { user_id: user.id }
+            metadata: metadata
           };
           
           // Check if assistant already exists by assistant_id
@@ -376,7 +410,7 @@ const AITraining = () => {
         // Ensure newAssistant has the required metadata property
         const assistantWithMetadata = {
           ...newAssistant,
-          metadata: newAssistant.metadata || { user_id: user.id }
+          metadata: metadata
         } as VapiAssistant;
         
         if (assistants) {
@@ -420,7 +454,10 @@ const AITraining = () => {
     // Ensure metadata property exists for type safety
     const assistantWithMetadata = {
       ...assistant,
-      metadata: assistant.metadata || { user_id: assistant.user_id || user?.id || '' }
+      metadata: assistant.metadata || { 
+        user_id: assistant.user_id || user?.id || '',
+        assistant_type: assistant.metadata?.assistant_type || 'individual'
+      }
     } as VapiAssistant;
     
     setSelectedAssistant(assistantWithMetadata);
@@ -500,7 +537,10 @@ const AITraining = () => {
             const firstAssistant = remainingAssistants[0];
             const assistantWithMetadata = {
               ...firstAssistant,
-              metadata: firstAssistant.metadata || { user_id: firstAssistant.user_id || user?.id || '' }
+              metadata: firstAssistant.metadata || { 
+                user_id: firstAssistant.user_id || user?.id || '',
+                assistant_type: firstAssistant.metadata?.assistant_type || 'individual'
+              }
             };
             setSelectedAssistant(assistantWithMetadata as VapiAssistant);
             localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
@@ -521,6 +561,77 @@ const AITraining = () => {
       setAssistantToDelete(null);
     }
   };
+
+  // Render assistant list based on type
+  const renderAssistantList = (assistantList: VapiAssistant[], title: string, icon: React.ReactNode) => (
+    <div>
+      <div className="flex items-center mb-2">
+        {icon}
+        <h3 className="ml-2 text-lg font-medium">{title}</h3>
+      </div>
+      {assistantList.length > 0 ? (
+        <div className="space-y-2">
+          {assistantList.map((assistant) => (
+            <div 
+              key={assistant.id} 
+              className="flex items-center gap-2"
+            >
+              <Button
+                variant={selectedAssistant?.id === assistant.id ? "default" : "outline"}
+                className="w-full justify-start text-left group"
+                onClick={() => handleSelectAssistant(assistant)}
+              >
+                <Bot className="mr-2 h-4 w-4" />
+                <span className="truncate flex-1">{assistant.name}</span>
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    className="h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setAssistantToDelete(assistant)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir Assistente</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tem certeza que deseja excluir o assistente "{assistantToDelete?.name}"? 
+                      Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={handleDeleteAssistant}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Excluindo...
+                        </>
+                      ) : (
+                        'Excluir'
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-center py-3 text-sm text-muted-foreground">
+          Nenhum assistente encontrado nesta categoria
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
@@ -584,67 +695,28 @@ const AITraining = () => {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               {isLoading ? (
                 <div className="flex justify-center py-4">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : assistants && assistants.length > 0 ? (
-                <div className="space-y-2">
-                  {assistants.map((assistant) => (
-                    <div 
-                      key={assistant.id} 
-                      className="flex items-center gap-2"
-                    >
-                      <Button
-                        variant={selectedAssistant?.id === assistant.id ? "default" : "outline"}
-                        className="w-full justify-start text-left group"
-                        onClick={() => handleSelectAssistant(assistant)}
-                      >
-                        <Bot className="mr-2 h-4 w-4" />
-                        <span className="truncate flex-1">{assistant.name}</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="icon"
-                            className="h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => setAssistantToDelete(assistant)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir Assistente</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Tem certeza que deseja excluir o assistente "{assistantToDelete?.name}"? 
-                              Esta ação não pode ser desfeita.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              onClick={handleDeleteAssistant}
-                              disabled={isDeleting}
-                            >
-                              {isDeleting ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Excluindo...
-                                </>
-                              ) : (
-                                'Excluir'
-                              )}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  ))}
-                </div>
+                <Tabs defaultValue="individual" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="individual" className="flex items-center gap-1">
+                      <Phone className="h-4 w-4" /> Individual
+                    </TabsTrigger>
+                    <TabsTrigger value="campaign" className="flex items-center gap-1">
+                      <Users className="h-4 w-4" /> Campanhas
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="individual" className="space-y-4">
+                    {renderAssistantList(individualAssistants, "Assistentes para Atendimento Individual", <Phone className="h-4 w-4 text-primary" />)}
+                  </TabsContent>
+                  <TabsContent value="campaign" className="space-y-4">
+                    {renderAssistantList(campaignAssistants, "Assistentes para Campanhas", <Users className="h-4 w-4 text-primary" />)}
+                  </TabsContent>
+                </Tabs>
               ) : (
                 <div className="text-center py-6 text-muted-foreground">
                   {user ? (
@@ -680,6 +752,42 @@ const AITraining = () => {
             )}
             <form onSubmit={handleCreateAssistant}>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="assistantType" className="text-sm font-medium">
+                    Tipo de Assistente
+                  </label>
+                  <div className="flex gap-4">
+                    <div className="flex items-center">
+                      <input 
+                        type="radio" 
+                        id="individual" 
+                        name="assistantType" 
+                        value="individual"
+                        checked={assistantType === 'individual'}
+                        onChange={() => setAssistantType('individual')}
+                        className="mr-2"
+                      />
+                      <label htmlFor="individual" className="flex items-center text-sm">
+                        <Phone className="mr-1 h-4 w-4" /> Atendimento Individual
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input 
+                        type="radio" 
+                        id="campaign" 
+                        name="assistantType" 
+                        value="campaign"
+                        checked={assistantType === 'campaign'}
+                        onChange={() => setAssistantType('campaign')}
+                        className="mr-2"
+                      />
+                      <label htmlFor="campaign" className="flex items-center text-sm">
+                        <Users className="mr-1 h-4 w-4" /> Campanhas
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="space-y-2">
                   <label htmlFor="name" className="text-sm font-medium">
                     Nome do Assistente

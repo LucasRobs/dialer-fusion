@@ -13,7 +13,11 @@ export type VapiAssistant = {
   voice: string;
   voice_id: string;
   created_at: string;
-  metadata: { user_id: string; [key: string]: any }; // Required property with at least user_id
+  metadata: { 
+    user_id: string;
+    assistant_type?: 'individual' | 'campaign';
+    [key: string]: any;
+  }; // Required property with at least user_id
   published?: boolean;
   updated_at?: string;
 };
@@ -62,7 +66,10 @@ export const webhookService = {
       // Ensure all assistants have a metadata property with at least user_id
       return assistants.map((assistant: any) => ({
         ...assistant,
-        metadata: assistant.metadata || { user_id: assistant.user_id || '' }
+        metadata: assistant.metadata || { 
+          user_id: assistant.user_id || '',
+          assistant_type: assistant.metadata?.assistant_type || 'individual'
+        }
       }));
     } catch (error) {
       console.error('Error fetching assistants from Vapi API:', error);
@@ -95,7 +102,10 @@ export const webhookService = {
           // Format the data to match VapiAssistant type
           return data.map(assistant => ({
             ...assistant,
-            metadata: assistant.metadata || { user_id: assistant.user_id || userId || '' }
+            metadata: assistant.metadata || { 
+              user_id: assistant.user_id || userId || '',
+              assistant_type: assistant.metadata?.assistant_type || 'individual'
+            }
           })) as VapiAssistant[];
         }
       }
@@ -109,14 +119,20 @@ export const webhookService = {
           .filter(assist => assist.metadata?.user_id === userId)
           .map(assistant => ({
             ...assistant,
-            metadata: assistant.metadata || { user_id: userId }
+            metadata: assistant.metadata || { 
+              user_id: userId,
+              assistant_type: assistant.metadata?.assistant_type || 'individual'
+            }
           })) as VapiAssistant[];
       }
       
       // Ensure all assistants have metadata
       return vapiAssistants.map(assistant => ({
         ...assistant,
-        metadata: assistant.metadata || { user_id: assistant.user_id || '' }
+        metadata: assistant.metadata || { 
+          user_id: assistant.user_id || '',
+          assistant_type: assistant.metadata?.assistant_type || 'individual'
+        }
       })) as VapiAssistant[];
     } catch (error) {
       console.error('Error in getAllAssistants:', error);
@@ -151,7 +167,10 @@ export const webhookService = {
       // Format the data to match VapiAssistant type, ensure metadata exists
       return data.map(assistant => ({
         ...assistant,
-        metadata: assistant.metadata || { user_id: assistant.user_id }
+        metadata: assistant.metadata || { 
+          user_id: assistant.user_id,
+          assistant_type: assistant.metadata?.assistant_type || 'individual'
+        }
       })) as VapiAssistant[];
     } catch (error) {
       console.error('Error in getLocalAssistants:', error);
@@ -333,13 +352,15 @@ export const webhookService = {
     first_message: string;
     system_prompt: string;
     userId: string;
+    metadata?: any;
   }): Promise<VapiAssistant | null> {
     try {
       console.log('Creating assistant with webhook:', data);
       
       // Ensure we have valid metadata with user_id
-      const metadata = {
+      const metadata = data.metadata || {
         user_id: data.userId,
+        assistant_type: 'individual',
         created_at: new Date().toISOString()
       };
 
