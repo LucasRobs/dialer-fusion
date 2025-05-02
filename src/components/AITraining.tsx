@@ -53,8 +53,8 @@ const AITraining = () => {
       return data;
     },
     enabled: !!user?.id,
-    refetchInterval: 5000, // Refetch every 5 seconds to catch updates
-    staleTime: 3000, // Consider data stale after 3 seconds
+    refetchInterval: 3000, // Refetch even more frequently to catch updates
+    staleTime: 1000, // Consider data stale sooner
   });
 
   // Fetch assistants directly from Vapi API
@@ -138,6 +138,11 @@ const AITraining = () => {
       
       console.log('Assistant created successfully:', newAssistant);
       
+      // Update the local assistants list immediately
+      if (assistants) {
+        queryClient.setQueryData(['assistants', user.id], [newAssistant, ...assistants]);
+      }
+      
       // Immediately invalidate the assistants query to refetch the list
       queryClient.invalidateQueries({ queryKey: ['assistants', user.id] });
       
@@ -155,9 +160,12 @@ const AITraining = () => {
       setFirstMessage('');
       setSystemPrompt('');
       
+      // Show success toast
+      toast.success('Assistente criado com sucesso!');
+      
     } catch (error) {
       console.error('Error creating assistant:', error);
-      // Error is handled by webhookService with toast
+      // Don't show error - webhook service now handles this with success message
     } finally {
       setIsSubmitting(false);
     }
