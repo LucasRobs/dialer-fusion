@@ -69,18 +69,19 @@ const SelectAssistantDialog = ({ isOpen, onClose, onSelect, client }: SelectAssi
         console.log("Assistentes filtrados para o usuário:", userAssistants);
         
         if (userAssistants && userAssistants.length > 0) {
+          await webhookService.syncVapiAssistantsToSupabase(userAssistants);
           return userAssistants;
         }
         
         // Se não encontrar na API, buscar localmente como fallback
-        const localAssistants = await webhookService.getLocalAssistants(userId);
+        const localAssistants = await webhookService.getAllAssistants(userId);
         console.log("Assistentes locais:", localAssistants);
         return localAssistants;
       } catch (error) {
         console.error('Erro ao buscar assistentes:', error);
         // Tentar buscar localmente em caso de erro na API
         try {
-          const localAssistants = await webhookService.getLocalAssistants(userId || '');
+          const localAssistants = await webhookService.getAllAssistants(userId || '');
           return localAssistants;
         } catch (err) {
           console.error('Erro ao buscar assistentes localmente:', err);

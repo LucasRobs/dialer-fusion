@@ -41,16 +41,16 @@ const AITraining = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [vapiAssistants, setVapiAssistants] = useState<any[]>([]);
 
-  // Fetch assistants with more frequent refetching
+  // Fetch assistants with more frequent refetching, filtered by user ID
   const { data: assistants, isLoading, refetch } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
       console.log('Fetching assistants for user:', user.id);
       
-      // Try to get assistants from Supabase
+      // Try to get assistants from Supabase - filtered by the current user ID
       const supabaseAssistants = await webhookService.getAllAssistants(user.id);
-      console.log('Fetched Supabase assistants:', supabaseAssistants);
+      console.log('Fetched Supabase assistants for current user:', supabaseAssistants);
       
       // If we don't have any assistants in Supabase, try to get them from Vapi API
       if (!supabaseAssistants || supabaseAssistants.length === 0) {
@@ -58,9 +58,15 @@ const AITraining = () => {
         const vapiAssistantsList = await webhookService.getAssistantsFromVapiApi();
         console.log('Assistants from Vapi API:', vapiAssistantsList);
         
+        // Filter Vapi assistants by the current user
+        const userVapiAssistants = vapiAssistantsList.filter(assistant => 
+          assistant.metadata?.user_id === user.id
+        );
+        console.log('Filtered Vapi assistants for current user:', userVapiAssistants);
+        
         // If we got assistants from Vapi API, sync them with Supabase and return
-        if (vapiAssistantsList && vapiAssistantsList.length > 0) {
-          await webhookService.syncVapiAssistantsToSupabase(vapiAssistantsList);
+        if (userVapiAssistants && userVapiAssistants.length > 0) {
+          await webhookService.syncVapiAssistantsToSupabase(userVapiAssistants);
           // Fetch assistants from Supabase again after syncing
           return await webhookService.getAllAssistants(user.id);
         }
@@ -73,20 +79,29 @@ const AITraining = () => {
     staleTime: 1000, // Consider data stale sooner
   });
 
-  // Fetch assistants directly from Vapi API and sync to Supabase
+  // Fetch assistants directly from Vapi API, filter by current user, and sync to Supabase
   const fetchVapiAssistants = async () => {
     try {
+      if (!user?.id) return [];
+
       const vapiAssistantsList = await webhookService.getAssistantsFromVapiApi();
-      setVapiAssistants(vapiAssistantsList);
       
-      if (vapiAssistantsList && vapiAssistantsList.length > 0 && user?.id) {
-        // Sync Vapi assistants to Supabase
-        await webhookService.syncVapiAssistantsToSupabase(vapiAssistantsList);
+      // Filter by current user
+      const userVapiAssistants = vapiAssistantsList.filter(assistant => 
+        assistant.metadata?.user_id === user.id
+      );
+      console.log(`Filtered ${userVapiAssistants.length} assistants for user ${user.id} from Vapi API`);
+      
+      setVapiAssistants(userVapiAssistants);
+      
+      if (userVapiAssistants && userVapiAssistants.length > 0 && user?.id) {
+        // Sync filtered Vapi assistants to Supabase
+        await webhookService.syncVapiAssistantsToSupabase(userVapiAssistants);
         // Refetch assistants from Supabase to show updated list
         refetch();
       }
       
-      return vapiAssistantsList;
+      return userVapiAssistants;
     } catch (error) {
       console.error('Error fetching Vapi assistants:', error);
       return [];
@@ -95,16 +110,18 @@ const AITraining = () => {
 
   // Fetch Vapi assistants on component mount and set up polling
   useEffect(() => {
-    fetchVapiAssistants();
-    
-    // Set up interval to periodically refresh assistants
-    const intervalId = setInterval(() => {
-      refetch();
+    if (user?.id) {
       fetchVapiAssistants();
-    }, 10000);
-    
-    return () => clearInterval(intervalId);
-  }, [refetch]);
+      
+      // Set up interval to periodically refresh assistants
+      const intervalId = setInterval(() => {
+        refetch();
+        fetchVapiAssistants();
+      }, 10000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [refetch, user?.id]);
 
   // Load selected assistant from localStorage
   useEffect(() => {
@@ -291,7 +308,7 @@ const AITraining = () => {
             <CardHeader className="pb-2">
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>Assistentes</CardTitle>
+                  <CardTitle>Meus Assistentes</CardTitle>
                   <CardDescription>
                     {selectedAssistant 
                       ? `Assistente atual: ${selectedAssistant.name}`
@@ -366,7 +383,7 @@ const AITraining = () => {
                 </div>
               ) : (
                 <div className="text-center py-6 text-muted-foreground">
-                  Nenhum assistente encontrado. Crie seu primeiro assistente!
+                  {user ? 'Nenhum assistente encontrado. Crie seu primeiro assistente!' : 'Faça login para ver seus assistentes.'}
                 </div>
               )}
             </CardContent>

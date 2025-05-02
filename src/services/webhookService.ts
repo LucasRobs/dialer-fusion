@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -15,6 +14,10 @@ export interface VapiAssistant {
   model?: string;  
   voice?: string;  
   voice_id?: string;
+  metadata?: {
+    user_id?: string;
+    [key: string]: any;
+  };
 }
 
 // Type definition for assistant creation parameters
@@ -99,7 +102,7 @@ export const webhookService = {
       // Create assistant object with default values if necessary
       const assistantId = `local-${Date.now()}`;
       
-      const newAssistant: VapiAssistant = {
+      let newAssistant: VapiAssistant = {
         id: assistantId, 
         name: assistant.name,
         assistant_id: assistantId,
@@ -110,7 +113,11 @@ export const webhookService = {
         model: 'gpt-4o-turbo',
         voice: '33B4UnXyTNbgLmdEDh5P',
         voice_id: '33B4UnXyTNbgLmdEDh5P',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        metadata: {
+          user_id: assistant.userId,
+          created_at: new Date().toISOString()
+        }
       };
       
       // Try to get data from response if available
@@ -137,6 +144,21 @@ export const webhookService = {
           if (data && data.status) {
             newAssistant.status = data.status;
           }
+          if (data && data.metadata) {
+            newAssistant.metadata = {
+              ...newAssistant.metadata,
+              ...data.metadata
+            };
+          }
+          
+          // Make sure user_id is set in metadata
+          if (!newAssistant.metadata?.user_id) {
+            newAssistant.metadata = {
+              ...newAssistant.metadata,
+              user_id: assistant.userId
+            };
+          }
+          
         } else {
           console.log('Response not OK but proceeding with local assistant creation');
         }
@@ -181,7 +203,11 @@ export const webhookService = {
         model: 'gpt-4o-turbo',
         voice: '33B4UnXyTNbgLmdEDh5P',
         voice_id: '33B4UnXyTNbgLmdEDh5P',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        metadata: {
+          user_id: assistant.userId,
+          created_at: new Date().toISOString()
+        }
       };
       
       // Insert fallback into Supabase
@@ -423,7 +449,7 @@ export const webhookService = {
     }
   },
   
-  // Get assistants from Vapi API directly
+  // Get assistants from Vapi API directly and filter by user
   async getAssistantsFromVapiApi(): Promise<any[]> {
     try {
       const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
@@ -443,11 +469,7 @@ export const webhookService = {
       }
       
       const data = await response.json();
-      
-      // If we got assistants from Vapi API, let's sync them with our Supabase
-      if (Array.isArray(data) && data.length > 0) {
-        await this.syncVapiAssistantsToSupabase(data);
-      }
+      console.log(`Retrieved ${data.length} assistants from Vapi API`);
       
       return data;
     } catch (error) {
@@ -472,15 +494,23 @@ export const webhookService = {
         assistant_id: assistant.id,
         first_message: assistant.first_message || assistant.firstMessage || '',
         system_prompt: assistant.instructions || assistant.system_prompt || '',
+        user_id: assistant.metadata?.user_id || '',
         status: assistant.status || 'active',
         model: (assistant.model && assistant.model.model) || assistant.model || 'gpt-4o-turbo',
         voice: (assistant.voice && assistant.voice.voiceId) || assistant.voice || '33B4UnXyTNbgLmdEDh5P',
         voice_id: (assistant.voice && assistant.voice.voiceId) || assistant.voice_id || '33B4UnXyTNbgLmdEDh5P',
-        created_at: assistant.createdAt || new Date().toISOString()
+        created_at: assistant.createdAt || new Date().toISOString(),
+        metadata: assistant.metadata || { user_id: assistant.metadata?.user_id || '' }
       }));
       
       // For each assistant, check if it exists in Supabase by assistant_id
       for (const assistant of formattedAssistants) {
+        // Skip assistants without user_id
+        if (!assistant.user_id) {
+          console.log('Skipping assistant without user_id:', assistant.name);
+          continue;
+        }
+        
         const { data: existingAssistant, error: queryError } = await supabase
           .from('assistants')
           .select('*')
@@ -501,7 +531,9 @@ export const webhookService = {
               status: assistant.status,
               model: assistant.model,
               voice: assistant.voice,
-              voice_id: assistant.voice_id
+              voice_id: assistant.voice_id,
+              user_id: assistant.user_id,
+              metadata: assistant.metadata
             })
             .eq('id', existingAssistant.id);
           

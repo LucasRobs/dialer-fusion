@@ -5,6 +5,7 @@ import { Brain, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AIAssistant {
   id: string;
@@ -23,7 +24,14 @@ const AIAssistants: React.FC<AIAssistantsProps> = ({
   selectedAssistant, 
   isLoading 
 }) => {
-  const readyAssistants = assistants?.filter(asst => asst.status !== 'pending') || [];
+  const { user } = useAuth();
+  
+  // Filter assistants to only show those belonging to the current user
+  const userAssistants = user?.id 
+    ? assistants?.filter(asst => asst.user_id === user.id) || []
+    : [];
+  
+  const readyAssistants = userAssistants?.filter(asst => asst.status !== 'pending') || [];
   
   return (
     <div className="mb-8">
@@ -49,7 +57,7 @@ const AIAssistants: React.FC<AIAssistantsProps> = ({
               <div className="flex justify-between items-end">
                 <div>
                   <div className="text-3xl font-bold">{readyAssistants.length}</div>
-                  <p className="text-sm text-foreground/70">Total de Assistentes</p>
+                  <p className="text-sm text-foreground/70">Meus Assistentes</p>
                 </div>
                 <div className="text-right">
                   <div className="text-xl font-semibold text-secondary">
