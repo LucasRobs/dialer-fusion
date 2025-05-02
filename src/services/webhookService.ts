@@ -1,4 +1,6 @@
+
 import { VAPI_CONFIG } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 
 export type VapiAssistant = {
   id: string;
@@ -13,6 +15,19 @@ export type VapiAssistant = {
   voice_id: string;
   created_at: string;
   metadata: any;
+  published?: boolean;
+  updated_at?: string;
+};
+
+export type WebhookPayload = {
+  action: string;
+  assistant_id: string;
+  assistant_name: string;
+  timestamp: string;
+  user_id: string;
+  client_id?: number;
+  phone_number?: string;
+  additional_data?: any;
 };
 
 export const webhookService = {
@@ -40,6 +55,147 @@ export const webhookService = {
     }
   },
 
+  async getAllAssistants(userId?: string): Promise<VapiAssistant[]> {
+    try {
+      console.log('Fetching all assistants for user ID:', userId);
+      
+      // First try to get from Supabase if user id is provided
+      if (userId) {
+        let query = supabase
+          .from('assistants')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (userId) {
+          query = query.eq('user_id', userId);
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) {
+          console.error('Error fetching assistants from Supabase:', error);
+        } else if (data && data.length > 0) {
+          console.log(`Found ${data.length} assistants in Supabase`);
+          
+          // Format the data to match VapiAssistant type
+          return data.map(assistant => ({
+            ...assistant,
+            metadata: { user_id: assistant.user_id }
+          })) as VapiAssistant[];
+        }
+      }
+      
+      // If no data from Supabase, try the Vapi API
+      const vapiAssistants = await this.getAssistantsFromVapiApi();
+      
+      if (userId) {
+        // Filter by the user ID if provided
+        return vapiAssistants.filter(assist => 
+          assist.metadata?.user_id === userId
+        );
+      }
+      
+      return vapiAssistants;
+    } catch (error) {
+      console.error('Error in getAllAssistants:', error);
+      return [];
+    }
+  },
+  
+  async getLocalAssistants(userId?: string): Promise<VapiAssistant[]> {
+    try {
+      console.log('Fetching assistants from Supabase for user ID:', userId);
+      
+      let query = supabase
+        .from('assistants')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching assistants from Supabase:', error);
+        return [];
+      }
+      
+      if (!data || data.length === 0) {
+        return [];
+      }
+      
+      // Format the data to match VapiAssistant type
+      return data.map(assistant => ({
+        ...assistant,
+        metadata: { user_id: assistant.user_id }
+      })) as VapiAssistant[];
+    } catch (error) {
+      console.error('Error in getLocalAssistants:', error);
+      return [];
+    }
+  },
+
+  async syncVapiAssistantsToSupabase(assistants: any[]): Promise<boolean> {
+    try {
+      console.log('Syncing assistants to Supabase:', assistants.length);
+      
+      if (!assistants || assistants.length === 0) {
+        return true;
+      }
+      
+      for (const asst of assistants) {
+        if (!asst) continue;
+        
+        try {
+          // Format the assistant for Supabase
+          const formattedAssistant = {
+            id: `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            name: asst.name || 'Unnamed Assistant',
+            assistant_id: asst.id || asst.assistant_id,
+            first_message: asst.first_message || asst.firstMessage || '',
+            system_prompt: asst.instructions || asst.system_prompt || '',
+            user_id: asst.metadata?.user_id || '',
+            status: asst.status || 'active',
+            model: (asst.model && asst.model.model) || asst.model || 'gpt-4o-turbo',
+            voice: (asst.voice && asst.voice.voiceId) || asst.voice || '33B4UnXyTNbgLmdEDh5P',
+            voice_id: (asst.voice && asst.voice.voiceId) || asst.voice_id || '33B4UnXyTNbgLmdEDh5P',
+            created_at: asst.createdAt || new Date().toISOString(),
+          };
+          
+          // Check if it already exists
+          const { data: existing } = await supabase
+            .from('assistants')
+            .select('id')
+            .eq('assistant_id', formattedAssistant.assistant_id)
+            .maybeSingle();
+            
+          if (existing) {
+            console.log(`Assistant ${asst.name} already exists in Supabase, skipping`);
+            continue;
+          }
+          
+          // Insert into Supabase
+          const { error } = await supabase
+            .from('assistants')
+            .insert([formattedAssistant]);
+            
+          if (error) {
+            console.error('Error inserting assistant into Supabase:', error);
+          }
+        } catch (err) {
+          console.error('Error processing assistant for Supabase sync:', err);
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error in syncVapiAssistantsToSupabase:', error);
+      return false;
+    }
+  },
+
   async makeCall(assistantId: number, phoneNumber: string, clientId: number): Promise<any> {
     try {
       const response = await fetch('https://primary-production-31de.up.railway.app/webhook/makecall', {
@@ -64,6 +220,72 @@ export const webhookService = {
       return result;
     } catch (error) {
       console.error('Error making call:', error);
+      throw error;
+    }
+  },
+  
+  async triggerCallWebhook(payload: WebhookPayload): Promise<any> {
+    try {
+      console.log('Triggering call webhook with payload:', payload);
+      
+      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-Key': VAPI_CONFIG.API_KEY,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Call webhook error (${response.status}):`, errorText);
+        throw new Error(`Call webhook returned status ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Call webhook response:', result);
+      return result;
+    } catch (error) {
+      console.error('Error triggering call webhook:', error);
+      throw error;
+    }
+  },
+  
+  async sendFirstMessageToWebhook(assistantId: string, phoneNumber: string, clientId: number, message: string): Promise<any> {
+    try {
+      console.log('Sending first message to webhook');
+      
+      const payload = {
+        action: 'send_first_message',
+        assistant_id: assistantId,
+        phone_number: phoneNumber,
+        client_id: clientId,
+        message: message,
+        timestamp: new Date().toISOString(),
+        api_key: VAPI_CONFIG.API_KEY
+      };
+      
+      const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-Key': VAPI_CONFIG.API_KEY,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Send first message error (${response.status}):`, errorText);
+        throw new Error(`Send first message returned status ${response.status}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Send first message response:', result);
+      return result;
+    } catch (error) {
+      console.error('Error sending first message:', error);
       throw error;
     }
   },

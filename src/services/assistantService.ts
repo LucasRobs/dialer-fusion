@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -12,6 +13,7 @@ export interface Assistant {
   status?: 'pending' | 'ready' | 'failed';
   model?: string;
   voice?: string;
+  voice_id?: string;
 }
 
 // Default model and voice

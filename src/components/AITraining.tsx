@@ -238,11 +238,21 @@ const AITraining = () => {
     try {
       const storedAssistant = localStorage.getItem('selected_assistant');
       if (storedAssistant) {
-        setSelectedAssistant(JSON.parse(storedAssistant));
+        const parsed = JSON.parse(storedAssistant);
+        // Ensure metadata property exists
+        if (parsed && !parsed.metadata) {
+          parsed.metadata = { user_id: parsed.user_id };
+        }
+        setSelectedAssistant(parsed);
       } else if (assistants && assistants.length > 0) {
         // Select first assistant without filtering by status
-        setSelectedAssistant(assistants[0]);
-        localStorage.setItem('selected_assistant', JSON.stringify(assistants[0]));
+        const first = assistants[0];
+        // Ensure metadata property exists
+        if (first && !first.metadata) {
+          first.metadata = { user_id: first.user_id };
+        }
+        setSelectedAssistant(first);
+        localStorage.setItem('selected_assistant', JSON.stringify(first));
       }
     } catch (error) {
       // Silent error handling
@@ -306,37 +316,36 @@ const AITraining = () => {
             metadata: { user_id: user.id }
           };
           
-          console.log('Inserting assistant directly to Supabase:', assistantForDb);
-          
-          // Attempt to insert with retry logic
-          let insertSuccess = false;
-          let attempts = 0;
-          const maxAttempts = 3;
-          
-          while (!insertSuccess && attempts < maxAttempts) {
-            attempts++;
-            try {
-              const { error } = await supabase
-                .from('assistants')
-                .insert([assistantForDb]);
-                
-              if (error) {
-                console.error(`Supabase insert error (attempt ${attempts}):`, error);
-                // Wait a bit before retrying
-                await new Promise(resolve => setTimeout(resolve, 1000));
-              } else {
-                console.log('Assistant inserted successfully to Supabase');
-                insertSuccess = true;
-              }
-            } catch (insertErr) {
-              console.error(`Supabase insert exception (attempt ${attempts}):`, insertErr);
-              // Wait a bit before retrying
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+          // Check if assistant already exists by assistant_id
+          const { data: existingAsst } = await supabase
+            .from('assistants')
+            .select('id')
+            .eq('assistant_id', asst.id)
+            .maybeSingle();
+            
+          if (existingAsst) {
+            console.log(`Assistant ${asst.name} with ID ${asst.id} already exists, skipping`);
+            continue;
           }
           
-          if (!insertSuccess) {
-            console.error('Max attempts reached for Supabase insert');
+          // Insert with retry
+          let retries = 0;
+          const maxRetries = 3;
+          
+          while (retries < maxRetries) {
+            const { error: insertError } = await supabase
+              .from('assistants')
+              .insert([assistantForDb]);
+              
+            if (!insertError) {
+              console.log(`Successfully inserted assistant ${asst.name} into Supabase`);
+              break;
+            } else {
+              console.error(`Error inserting assistant (attempt ${retries + 1}):`, insertError);
+              retries++;
+              if (retries >= maxRetries) break;
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+            }
           }
         } catch (directInsertError) {
           console.error('Exception during direct insert to Supabase:', directInsertError);
@@ -385,6 +394,10 @@ const AITraining = () => {
   };
 
   const handleSelectAssistant = (assistant: VapiAssistant) => {
+    // Ensure metadata property exists
+    if (!assistant.metadata) {
+      assistant.metadata = { user_id: assistant.user_id };
+    }
     setSelectedAssistant(assistant);
     localStorage.setItem('selected_assistant', JSON.stringify(assistant));
     toast.success(`Assistente "${assistant.name}" selecionado como padrão`);
@@ -458,8 +471,13 @@ const AITraining = () => {
         if (selectedAssistant?.id === assistantToDelete.id) {
           const remainingAssistants = assistants?.filter(a => a.id !== assistantToDelete.id) || [];
           if (remainingAssistants.length > 0) {
-            setSelectedAssistant(remainingAssistants[0]);
-            localStorage.setItem('selected_assistant', JSON.stringify(remainingAssistants[0]));
+            // Ensure metadata property exists
+            const firstAssistant = remainingAssistants[0];
+            if (!firstAssistant.metadata) {
+              firstAssistant.metadata = { user_id: firstAssistant.user_id };
+            }
+            setSelectedAssistant(firstAssistant);
+            localStorage.setItem('selected_assistant', JSON.stringify(firstAssistant));
           } else {
             setSelectedAssistant(null);
             localStorage.removeItem('selected_assistant');
