@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,8 +21,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-import assistantService from '@/services/assistantService';
 
 const AITraining = () => {
   const { user } = useAuth();
@@ -387,50 +384,7 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
-      // Find the correct Vapi ID for the assistant
-      const vapiAssistantId = await assistantService.findVapiAssistantId(
-        assistantToDelete.id,
-        assistantToDelete.name,
-        user?.id
-      );
-      
-      if (!vapiAssistantId) {
-        toast.error('Não foi possível encontrar o ID do assistente na Vapi');
-        setIsDeleting(false);
-        return;
-      }
-      
-      // The webhook URL for deleting the assistant
-      const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
-      
-      // Create the payload in the exact format expected by n8n webhook
-      const payload = {
-        action: "delete_assistant",
-        assistant_id: vapiAssistantId,
-        additional_data: {
-          assistant_name: assistantToDelete.name,
-          user_id: user?.id,
-          timestamp: new Date().toISOString(),
-          supabase_id: assistantToDelete.id
-        }
-      };
-      
-      // Make sure the payload matches the expected webhook format
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      // Check for response
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Webhook error: ${response.status} ${errorText}`);
-      }
-      
-      // Continue with local deletion as before
+      // Call webhookService.deleteAssistant which now handles both webhook and Supabase deletion
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
       
       if (success) {
@@ -452,6 +406,7 @@ const AITraining = () => {
         }
       }
     } catch (error) {
+      console.error('Error in handleDeleteAssistant:', error);
       toast.error('Não foi possível excluir o assistente');
     } finally {
       setIsDeleting(false);

@@ -63,6 +63,7 @@ export interface WebhookPayload {
   account_id?: string;
   provider?: string;
   call_id?: string;
+  assistant_id?: string;
   call?: {
     model?: string | {
       provider?: string;
@@ -427,20 +428,85 @@ export const webhookService = {
   // Delete an assistant
   async deleteAssistant(assistantId: string): Promise<boolean> {
     try {
-      // Delete from local database
+      // First, get the assistant details so we can send to webhook
+      const { data: assistant, error: fetchError } = await supabase
+        .from('assistants')
+        .select('*')
+        .eq('id', assistantId)
+        .single();
+      
+      if (fetchError) {
+        console.error('Error fetching assistant details:', fetchError);
+        toast.error('Erro ao buscar detalhes do assistente.');
+        return false;
+      }
+      
+      if (!assistant) {
+        toast.error('Assistente não encontrado.');
+        return false;
+      }
+      
+      // Create webhook payload
+      const payload: WebhookPayload = {
+        action: "delete_assistant",
+        assistant_id: assistant.assistant_id,
+        additional_data: {
+          assistant_name: assistant.name,
+          user_id: assistant.user_id,
+          timestamp: new Date().toISOString(),
+          supabase_id: assistantId
+        }
+      };
+      
+      // Call the webhook first
+      console.log('Sending delete request to webhook:', payload);
+      const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
+      
+      // Set a timeout for the webhook call
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      try {
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          console.error('Webhook error status:', response.status);
+          const errorText = await response.text();
+          console.error('Webhook error response:', errorText);
+          // Continue with local deletion even if webhook fails
+        } else {
+          console.log('Webhook delete response:', await response.text());
+        }
+      } catch (webhookError) {
+        console.error('Webhook delete error:', webhookError);
+        // Continue with local deletion even if webhook call fails
+      }
+      
+      // Delete from local database regardless of webhook success
       const { error } = await supabase
         .from('assistants')
         .delete()
         .eq('id', assistantId);
       
       if (error) {
+        console.error('Error deleting from Supabase:', error);
         toast.error('Erro ao remover assistente.');
-        throw error;
+        return false;
       }
       
       toast.success('Assistente removido com sucesso!');
       return true;
     } catch (error) {
+      console.error('Exception in deleteAssistant:', error);
       toast.error('Não foi possível excluir o assistente.');
       return false;
     }
