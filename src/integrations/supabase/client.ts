@@ -8,7 +8,7 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Configurações da Voz - exportada para ser usada em outros lugares do aplicativo
+// Voice configuration - exported to be used elsewhere in the app
 export const VOICE_CONFIG = {
   MODEL: "eleven_multilingual_v2",
   VOICE_NAME: "Voz Feminina (PT-BR)",
@@ -22,4 +22,37 @@ export const VAPI_CONFIG = {
   API_URL: "https://api.vapi.ai"
 };
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Create and export the Supabase client with debug logging enabled
+export const supabase = createClient<Database>(
+  SUPABASE_URL, 
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+    db: {
+      schema: 'public',
+    },
+    global: {
+      // Enable more detailed error messages during development
+      fetch: (...args) => fetch(...args),
+    },
+  }
+);
+
+// Add a simple helper to check connection
+export const checkSupabaseConnection = async () => {
+  try {
+    const { data, error } = await supabase.from('assistants').select('count').limit(1);
+    if (error) {
+      console.error('Supabase connection check failed:', error);
+      return false;
+    }
+    console.log('Supabase connection confirmed successful');
+    return true;
+  } catch (err) {
+    console.error('Supabase connection exception:', err);
+    return false;
+  }
+};

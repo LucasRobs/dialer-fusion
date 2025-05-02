@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, checkSupabaseConnection } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -39,48 +39,91 @@ const AITraining = () => {
   const [vapiAssistants, setVapiAssistants] = useState<any[]>([]);
   const [isSyncingWithVapi, setIsSyncingWithVapi] = useState(false);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'failed'>('checking');
+
+  // Check Supabase connection on component mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      setConnectionStatus('checking');
+      const isConnected = await checkSupabaseConnection();
+      setConnectionStatus(isConnected ? 'connected' : 'failed');
+      
+      if (!isConnected) {
+        toast.error("Falha na conexão com o Supabase", {
+          description: "Não foi possível conectar ao banco de dados. Algumas funcionalidades podem não funcionar corretamente."
+        });
+      }
+    };
+    
+    checkConnection();
+  }, []);
 
   // Fetch assistants with more frequent refetching, filtered by user ID
   const { data: assistants, isLoading, refetch } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!user?.id) {
+        console.log('No user ID available, skipping assistant fetch');
+        return [];
+      }
+      
       console.log('Fetching assistants for user:', user.id);
       
       // Try to get assistants from Supabase - filtered by the current user ID
-      const supabaseAssistants = await webhookService.getAllAssistants(user.id);
-      console.log('Fetched Supabase assistants for current user:', supabaseAssistants);
-      
-      // If we don't have any assistants in Supabase or this is the first load,
-      // try to get them from Vapi API
-      if (!initialSyncDone || !supabaseAssistants || supabaseAssistants.length === 0) {
-        console.log('Fetching from Vapi API - initial sync or no assistants found in Supabase');
-        await fetchVapiAssistants(); // This will sync to Supabase
-        setInitialSyncDone(true);
+      try {
+        const { data: supabaseAssistants, error } = await supabase
+          .from('assistants')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+          
+        if (error) {
+          console.error('Error fetching assistants from Supabase:', error);
+          throw error;
+        }
         
-        // After syncing, fetch again from Supabase
-        const refreshedAssistants = await webhookService.getAllAssistants(user.id);
-        return refreshedAssistants;
+        console.log('Fetched Supabase assistants for current user:', supabaseAssistants || []);
+        
+        // If we don't have any assistants in Supabase or this is the first load,
+        // try to get them from Vapi API
+        if (!initialSyncDone || !supabaseAssistants || supabaseAssistants.length === 0) {
+          console.log('Fetching from Vapi API - initial sync or no assistants found in Supabase');
+          await fetchVapiAssistants(); // This will sync to Supabase
+          setInitialSyncDone(true);
+          
+          // After syncing, fetch again from Supabase
+          const { data: refreshedAssistants } = await supabase
+            .from('assistants')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+            
+          return refreshedAssistants || [];
+        }
+        
+        return supabaseAssistants || [];
+      } catch (error) {
+        console.error('Error in queryFn for assistants:', error);
+        toast.error("Erro ao carregar assistentes");
+        return [];
       }
-      
-      return supabaseAssistants;
     },
-    enabled: !!user?.id,
-    refetchInterval: 3000, // Refetch frequently to catch updates
-    staleTime: 1000, // Consider data stale sooner
+    enabled: !!user?.id && connectionStatus === 'connected',
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000, // Consider data stale sooner
   });
 
   // Fetch assistants directly from Vapi API, filter by current user, and sync to Supabase
-  const fetchVapiAssistants = async () => {
-    try {
-      if (!user?.id) {
-        console.log('No user ID available, skipping Vapi fetch');
-        return [];
-      }
+  const fetchVapiAssistants = useCallback(async () => {
+    if (!user?.id) {
+      console.log('No user ID available, skipping Vapi fetch');
+      return [];
+    }
 
-      setIsSyncingWithVapi(true);
-      console.log('Fetching assistants from Vapi API for user:', user.id);
-      
+    setIsSyncingWithVapi(true);
+    console.log('Fetching assistants from Vapi API for user:', user.id);
+    
+    try {
       const vapiAssistantsList = await webhookService.getAssistantsFromVapiApi();
       console.log('Raw assistants from Vapi API:', vapiAssistantsList);
       
@@ -98,10 +141,63 @@ const AITraining = () => {
       
       setVapiAssistants(userVapiAssistants);
       
-      if (userVapiAssistants && userVapiAssistants.length > 0 && user?.id) {
+      if (userVapiAssistants && userVapiAssistants.length > 0 && user.id) {
         console.log('Syncing filtered Vapi assistants to Supabase');
-        // Sync filtered Vapi assistants to Supabase
-        await webhookService.syncVapiAssistantsToSupabase(userVapiAssistants);
+        
+        // Direct insert to Supabase for immediate results
+        for (const asst of userVapiAssistants) {
+          try {
+            const formattedAssistant = {
+              id: `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              name: asst.name || 'Unnamed Assistant',
+              assistant_id: asst.id,
+              first_message: asst.first_message || asst.firstMessage || '',
+              system_prompt: asst.instructions || asst.system_prompt || '',
+              user_id: user.id,
+              status: asst.status || 'active',
+              model: (asst.model && asst.model.model) || asst.model || 'gpt-4o-turbo',
+              voice: (asst.voice && asst.voice.voiceId) || asst.voice || '33B4UnXyTNbgLmdEDh5P',
+              voice_id: (asst.voice && asst.voice.voiceId) || asst.voice_id || '33B4UnXyTNbgLmdEDh5P',
+              created_at: asst.createdAt || new Date().toISOString(),
+              metadata: asst.metadata || { user_id: user.id }
+            };
+            
+            // Check if assistant already exists by assistant_id
+            const { data: existingAsst } = await supabase
+              .from('assistants')
+              .select('id')
+              .eq('assistant_id', asst.id)
+              .maybeSingle();
+              
+            if (existingAsst) {
+              console.log(`Assistant ${asst.name} with ID ${asst.id} already exists, skipping`);
+              continue;
+            }
+            
+            // Insert with retry
+            let retries = 0;
+            const maxRetries = 3;
+            
+            while (retries < maxRetries) {
+              const { error: insertError } = await supabase
+                .from('assistants')
+                .insert([formattedAssistant]);
+                
+              if (!insertError) {
+                console.log(`Successfully inserted assistant ${asst.name} into Supabase`);
+                break;
+              } else {
+                console.error(`Error inserting assistant (attempt ${retries + 1}):`, insertError);
+                retries++;
+                if (retries >= maxRetries) break;
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+              }
+            }
+          } catch (error) {
+            console.error('Error processing assistant for sync:', error);
+          }
+        }
+        
         // Refetch assistants from Supabase to show updated list
         await refetch();
         console.log('Sync and refetch completed');
@@ -116,11 +212,11 @@ const AITraining = () => {
       setIsSyncingWithVapi(false);
       return [];
     }
-  };
+  }, [user, refetch]);
 
   // Fetch Vapi assistants on component mount and set up polling
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && connectionStatus === 'connected') {
       console.log('Component mounted, fetching Vapi assistants for user:', user.id);
       fetchVapiAssistants().then(() => {
         console.log('Initial Vapi fetch completed');
@@ -138,7 +234,7 @@ const AITraining = () => {
         clearInterval(intervalId);
       }
     }
-  }, [user?.id]);
+  }, [user?.id, connectionStatus, fetchVapiAssistants, refetch]);
 
   // Load selected assistant from localStorage
   useEffect(() => {
@@ -176,6 +272,10 @@ const AITraining = () => {
     try {
       // Create the assistant
       console.log('Creating assistant with params:', { name, firstMessage, systemPrompt, userId: user.id });
+      
+      // First show loading toast
+      toast.loading('Criando assistente...', { id: 'creating-assistant' });
+      
       const newAssistant = await webhookService.createAssistant({
         name,
         first_message: firstMessage,
@@ -185,9 +285,50 @@ const AITraining = () => {
       
       console.log('Assistant created successfully:', newAssistant);
       
+      // Dismiss the loading toast and show success
+      toast.dismiss('creating-assistant');
+      toast.success('Assistente criado com sucesso!');
+      
+      // Insert directly to Supabase to ensure immediate visibility
+      if (newAssistant) {
+        try {
+          // Format for direct insertion
+          const assistantForDb = {
+            id: newAssistant.id || `local-${Date.now()}`,
+            name: newAssistant.name,
+            assistant_id: newAssistant.assistant_id,
+            first_message: firstMessage,
+            system_prompt: systemPrompt,
+            user_id: user.id,
+            status: 'active',
+            model: 'gpt-4o-turbo',
+            voice: '33B4UnXyTNbgLmdEDh5P',
+            voice_id: '33B4UnXyTNbgLmdEDh5P',
+          };
+          
+          console.log('Inserting assistant directly to Supabase:', assistantForDb);
+          
+          const { error } = await supabase
+            .from('assistants')
+            .insert([assistantForDb]);
+            
+          if (error) {
+            console.error('Error inserting assistant directly to Supabase:', error);
+          } else {
+            console.log('Assistant inserted successfully directly to Supabase');
+          }
+        } catch (directInsertError) {
+          console.error('Exception during direct insert to Supabase:', directInsertError);
+        }
+      }
+      
       // Update the local assistants list immediately
-      if (assistants) {
-        queryClient.setQueryData(['assistants', user.id], [newAssistant, ...assistants]);
+      if (newAssistant) {
+        if (assistants) {
+          queryClient.setQueryData(['assistants', user.id], [newAssistant, ...assistants]);
+        } else {
+          queryClient.setQueryData(['assistants', user.id], [newAssistant]);
+        }
       }
       
       // Force immediate refetch to ensure the list is up-to-date
@@ -207,11 +348,11 @@ const AITraining = () => {
       setFirstMessage('');
       setSystemPrompt('');
       
-      // Show success toast
-      toast.success('Assistente criado com sucesso!');
-      
     } catch (error) {
       console.error('Error creating assistant:', error);
+      toast.dismiss('creating-assistant');
+      toast.error('Erro ao criar assistente');
+      
       if (error instanceof Error) {
         setError(error.message);
       } else {
@@ -323,6 +464,32 @@ const AITraining = () => {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Treinamento de IA</h1>
         <p className="text-foreground/70">Crie e gerencie seus assistentes virtuais.</p>
+        
+        {connectionStatus === 'checking' && (
+          <Alert className="mt-4 bg-yellow-50 border-yellow-200">
+            <AlertCircle className="h-4 w-4 text-yellow-600" />
+            <AlertDescription className="text-yellow-600">
+              Verificando conexão com o banco de dados...
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {connectionStatus === 'failed' && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Falha na conexão com o banco de dados. Algumas funcionalidades podem não funcionar corretamente.
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="ml-2"
+                onClick={() => window.location.reload()}
+              >
+                Tentar novamente
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
