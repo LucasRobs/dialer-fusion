@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
-import { supabase, checkSupabaseConnection } from '@/integrations/supabase/client';
+import { supabase, checkSupabaseConnection, VAPI_CONFIG } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -390,7 +390,11 @@ const AITraining = () => {
       // Show toast indicating deletion in progress
       toast.loading('Excluindo assistente...', { id: 'deleting-assistant' });
       
-      // Call webhookService.deleteAssistant - now with better error handling and API key inclusion
+      // Add VAPI API KEY to the assistant_id for webhook
+      const assistantIdWithApiKey = assistantToDelete.id + '|' + VAPI_CONFIG.API_KEY;
+      console.log('Sending to delete with combined ID:', assistantIdWithApiKey);
+      
+      // Call webhookService.deleteAssistant - now with API key included
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
       
       // Clear the loading toast

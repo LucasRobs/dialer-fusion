@@ -493,6 +493,8 @@ export const webhookService = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-Vapi-Auth': VAPI_CONFIG.API_KEY, // Add API key in header too
+            'X-Api-Key': VAPI_CONFIG.API_KEY, // Add another common API key header format
+            'Authorization': `Bearer ${VAPI_CONFIG.API_KEY}`, // Add standard Authorization header
           },
           body: JSON.stringify(payload),
           signal: controller.signal

@@ -519,7 +519,7 @@ const assistantService = {
           if (nameToMatch) {  // Add null/undefined check for nameToMatch
             // Find all matches by name (case insensitive)
             const nameMatches = vapiAssistants.filter(va => 
-              va.name && va.name.toLowerCase() === nameToMatch.toLowerCase()
+              va.name && nameToMatch && va.name.toLowerCase() === nameToMatch.toLowerCase()
             );
             
             if (nameMatches.length === 1) {
@@ -595,8 +595,16 @@ const assistantService = {
           // Verificar se o ID fornecido é um ID Vapi válido
           const vapiId = await this.ensureVapiAssistantId(assistantId);
           if (!vapiId) {
+            // Tentar buscar por nome se o ID não for reconhecido
+            if (typeof assistantId === 'string' && !assistantId.match(/^[0-9a-f-]+$/i)) {
+              const idByName = await this.getVapiAssistantIdByName(assistantId);
+              if (idByName) {
+                console.log(`Encontrado ID via nome do assistente: ${idByName}`);
+                return this.getVapiAssistantById(idByName);
+              }
+            }
+            
             console.error('Não foi possível encontrar um ID Vapi válido para:', assistantId);
-            toast(`Falha ao selecionar assistente: ID inválido`);
             return null;
           }
           
