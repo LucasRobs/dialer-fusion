@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,41 +55,6 @@ const AITraining = () => {
     
     checkConnection();
   }, []);
-
-  // Load selected assistant from localStorage
-  useEffect(() => {
-    try {
-      const storedAssistant = localStorage.getItem('selected_assistant');
-      if (storedAssistant) {
-        const parsed = JSON.parse(storedAssistant);
-        // Ensure metadata property exists
-        if (parsed) {
-          // Always ensure metadata exists
-          const assistantWithMetadata = {
-            ...parsed,
-            metadata: parsed.metadata || { user_id: parsed.user_id || user?.id || '' }
-          };
-          setSelectedAssistant(assistantWithMetadata as VapiAssistant);
-        }
-      } else if (assistants && assistants.length > 0) {
-        // Select first assistant without filtering by status
-        const first = assistants[0];
-        // Ensure metadata property exists
-        if (first) {
-          // Always ensure metadata exists
-          const assistantWithMetadata = {
-            ...first,
-            metadata: first.metadata || { user_id: first.user_id || user?.id || '' }
-          };
-          setSelectedAssistant(assistantWithMetadata as VapiAssistant);
-          localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
-        }
-      }
-    } catch (error) {
-      // Silent error handling
-      console.error('Error loading selected assistant from localStorage:', error);
-    }
-  }, [assistants, user]);
 
   // Fetch assistants with more frequent refetching, filtered by user ID
   const { data: assistants, isLoading, refetch } = useQuery({
@@ -155,6 +121,41 @@ const AITraining = () => {
     refetchInterval: 5000, // Refetch every 5 seconds
     staleTime: 2000, // Consider data stale sooner
   });
+
+  // Load selected assistant from localStorage
+  useEffect(() => {
+    try {
+      const storedAssistant = localStorage.getItem('selected_assistant');
+      if (storedAssistant) {
+        const parsed = JSON.parse(storedAssistant);
+        // Ensure metadata property exists
+        if (parsed) {
+          // Always ensure metadata exists
+          const assistantWithMetadata = {
+            ...parsed,
+            metadata: parsed.metadata || { user_id: parsed.user_id || user?.id || '' }
+          };
+          setSelectedAssistant(assistantWithMetadata as VapiAssistant);
+        }
+      } else if (assistants && assistants.length > 0) {
+        // Select first assistant without filtering by status
+        const first = assistants[0];
+        // Ensure metadata property exists
+        if (first) {
+          // Always ensure metadata exists
+          const assistantWithMetadata = {
+            ...first,
+            metadata: first.metadata || { user_id: first.user_id || user?.id || '' }
+          };
+          setSelectedAssistant(assistantWithMetadata as VapiAssistant);
+          localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
+        }
+      }
+    } catch (error) {
+      // Silent error handling
+      console.error('Error loading selected assistant from localStorage:', error);
+    }
+  }, [assistants, user]);
 
   // Fetch assistants directly from Vapi API, filter by current user, and sync to Supabase
   const fetchVapiAssistants = useCallback(async () => {
@@ -497,11 +498,12 @@ const AITraining = () => {
           if (remainingAssistants.length > 0) {
             // Ensure metadata property exists
             const firstAssistant = remainingAssistants[0];
-            if (firstAssistant && !firstAssistant.metadata) {
-              firstAssistant.metadata = { user_id: firstAssistant.user_id };
-            }
-            setSelectedAssistant(firstAssistant);
-            localStorage.setItem('selected_assistant', JSON.stringify(firstAssistant));
+            const assistantWithMetadata = {
+              ...firstAssistant,
+              metadata: firstAssistant.metadata || { user_id: firstAssistant.user_id || user?.id || '' }
+            };
+            setSelectedAssistant(assistantWithMetadata as VapiAssistant);
+            localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
           } else {
             setSelectedAssistant(null);
             localStorage.removeItem('selected_assistant');

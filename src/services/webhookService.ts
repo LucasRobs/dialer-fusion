@@ -1,3 +1,4 @@
+
 import { VAPI_CONFIG } from '@/integrations/supabase/client';
 import { supabase } from '@/lib/supabase';
 
@@ -13,7 +14,7 @@ export type VapiAssistant = {
   voice: string;
   voice_id: string;
   created_at: string;
-  metadata: any; // This is a required property
+  metadata: { user_id: string; [key: string]: any }; // Required property with at least user_id
   published?: boolean;
   updated_at?: string;
 };
@@ -26,7 +27,6 @@ export type WebhookPayload = {
   user_id?: string;
   client_id?: number;
   phone_number?: string;
-  // Adding additional properties that are being used in the application
   campaign_id?: any;
   client_name?: any;
   client_phone?: any;
@@ -38,6 +38,7 @@ export type WebhookPayload = {
     language: string;
   };
   additional_data?: any;
+  message?: string;
 };
 
 export const webhookService = {
@@ -58,7 +59,12 @@ export const webhookService = {
       }
 
       const assistants = await response.json();
-      return assistants;
+      
+      // Ensure all assistants have a metadata property with at least user_id
+      return assistants.map((assistant: any) => ({
+        ...assistant,
+        metadata: assistant.metadata || { user_id: assistant.user_id || '' }
+      }));
     } catch (error) {
       console.error('Error fetching assistants from Vapi API:', error);
       throw error;
@@ -90,7 +96,7 @@ export const webhookService = {
           // Format the data to match VapiAssistant type
           return data.map(assistant => ({
             ...assistant,
-            metadata: assistant.metadata || { user_id: assistant.user_id }
+            metadata: assistant.metadata || { user_id: assistant.user_id || userId || '' }
           })) as VapiAssistant[];
         }
       }
@@ -99,13 +105,20 @@ export const webhookService = {
       const vapiAssistants = await this.getAssistantsFromVapiApi();
       
       if (userId) {
-        // Filter by the user ID if provided
-        return vapiAssistants.filter(assist => 
-          assist.metadata?.user_id === userId
-        );
+        // Filter by the user ID if provided and ensure metadata exists
+        return vapiAssistants
+          .filter(assist => assist.metadata?.user_id === userId)
+          .map(assistant => ({
+            ...assistant,
+            metadata: assistant.metadata || { user_id: userId }
+          })) as VapiAssistant[];
       }
       
-      return vapiAssistants;
+      // Ensure all assistants have metadata
+      return vapiAssistants.map(assistant => ({
+        ...assistant,
+        metadata: assistant.metadata || { user_id: assistant.user_id || '' }
+      })) as VapiAssistant[];
     } catch (error) {
       console.error('Error in getAllAssistants:', error);
       return [];
@@ -281,7 +294,7 @@ export const webhookService = {
     try {
       console.log('Sending first message to webhook');
       
-      const payload = {
+      const payload: WebhookPayload = {
         action: 'send_first_message',
         assistant_id: assistantId,
         assistant_name: "", // Add a default empty string for assistant_name
@@ -290,7 +303,6 @@ export const webhookService = {
         message: message || "Olá, como posso ajudar?",
         timestamp: new Date().toISOString(),
         user_id: "", // Add a default empty string for user_id
-        api_key: VAPI_CONFIG.API_KEY
       };
       
       const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
@@ -299,7 +311,7 @@ export const webhookService = {
           'Content-Type': 'application/json',
           'X-Api-Key': VAPI_CONFIG.API_KEY,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({...payload, api_key: VAPI_CONFIG.API_KEY}),
       });
 
       if (!response.ok) {
