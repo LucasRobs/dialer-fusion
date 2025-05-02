@@ -1,5 +1,5 @@
-
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 // Type definition for assistant
 export interface VapiAssistant {
@@ -103,11 +103,28 @@ export const webhookService = {
       const data = await response.json();
       console.log("Response from webhook:", data);
       
-      if (!data.assistant_id || !data.name) {
-        throw new Error("Invalid assistant data returned from webhook");
+      // Enhanced validation of webhook response
+      if (!data) {
+        throw new Error("Empty response from webhook");
       }
       
-      // Return the created assistant
+      // Check for error field in response
+      if (data.error) {
+        throw new Error(`Webhook returned error: ${data.error}`);
+      }
+      
+      // Validate required fields exist
+      if (!data.assistant_id) {
+        console.error("Missing assistant_id in webhook response:", data);
+        throw new Error("Missing assistant_id in webhook response");
+      }
+      
+      if (!data.name) {
+        console.error("Missing name in webhook response:", data);
+        throw new Error("Missing name in webhook response");
+      }
+      
+      // Return the created assistant with fallback values for missing fields
       return {
         id: data.supabase_id || data.assistant_id, // Use Supabase ID if available, or fallback to Vapi assistant_id
         name: data.name,
@@ -117,11 +134,21 @@ export const webhookService = {
         user_id: assistant.userId,
         status: data.status || 'active',
         model: data.model || 'gpt-4o-turbo',  // Default model
-        voice: data.voice || '33B4UnXyTNbgLmdEDh5P'  // Default voice
+        voice: data.voice || '33B4UnXyTNbgLmdEDh5P',  // Default voice
+        voice_id: data.voice_id || '33B4UnXyTNbgLmdEDh5P' // Default voice ID
       };
     } catch (error) {
       console.error("Error creating assistant:", error);
-      throw new Error(`Failed to create assistant: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Provide more detailed error message based on the type of error
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Unknown error creating assistant';
+      
+      // Toast notification for user feedback
+      toast.error(`Failed to create assistant: ${errorMessage}`);
+      
+      throw new Error(`Failed to create assistant: ${errorMessage}`);
     }
   },
   
