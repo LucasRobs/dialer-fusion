@@ -11,6 +11,9 @@ export interface VapiAssistant {
   user_id?: string;
   created_at?: string;
   status?: string;
+  model?: string;  // Added model property
+  voice?: string;  // Added voice property
+  voice_id?: string; // Added voice_id property
 }
 
 // Type definition for assistant creation parameters
@@ -111,7 +114,9 @@ export const webhookService = {
         first_message: assistant.first_message,
         system_prompt: assistant.system_prompt,
         user_id: assistant.userId,
-        status: data.status || 'active'
+        status: data.status || 'active',
+        model: data.model || 'gpt-4o-turbo',  // Default model
+        voice: data.voice || '33B4UnXyTNbgLmdEDh5P'  // Default voice
       };
     } catch (error) {
       console.error("Error creating assistant:", error);
