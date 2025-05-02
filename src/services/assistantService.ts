@@ -834,4 +834,36 @@ const assistantService = {
           .single();
           
         if (data && data.assistant_id) {
-          console.log('Obtido ID da Vapi a partir do
+          console.log('Obtido ID da Vapi a partir do banco de dados:', data.assistant_id);
+          
+          // Verificar se o assistant_id é válido
+          const isVapiValid = await this.validateVapiAssistantId(data.assistant_id);
+          if (isVapiValid) {
+            console.log('ID da Vapi validado com sucesso:', data.assistant_id);
+            return data.assistant_id;
+          }
+        }
+      }
+      
+      // Se chegamos aqui, não conseguimos encontrar um ID válido
+      console.log('Não foi possível confirmar o ID Vapi:', assistantId);
+      
+      // Como último recurso, tentar buscar por nome se tivermos um assistente local
+      if (assistant && assistant.name) {
+        console.log(`Tentando buscar ID da Vapi pelo nome: ${assistant.name}`);
+        const idByName = await this.getVapiAssistantIdByName(assistant.name);
+        if (idByName) {
+          console.log(`Encontrado ID da Vapi pelo nome: ${idByName}`);
+          return idByName;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Erro ao verificar ID do assistente Vapi:', error);
+      return null;
+    }
+  },
+};
+
+export default assistantService;
