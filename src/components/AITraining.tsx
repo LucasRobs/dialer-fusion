@@ -379,6 +379,7 @@ const AITraining = () => {
     }
   };
 
+  // Handle assistant deletion with better error handling
   const handleDeleteAssistant = async () => {
     if (!assistantToDelete) return;
     
@@ -389,13 +390,15 @@ const AITraining = () => {
       // Show toast indicating deletion in progress
       toast.loading('Excluindo assistente...', { id: 'deleting-assistant' });
       
-      // Call webhookService.deleteAssistant which now handles both webhook and Supabase deletion
+      // Call webhookService.deleteAssistant - now with better error handling and API key inclusion
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
       
       // Clear the loading toast
       toast.dismiss('deleting-assistant');
       
       if (success) {
+        toast.success('Assistente excluído com sucesso!');
+        
         // Update the list of assistants
         await refetch();
         // Also refresh Vapi assistants
@@ -412,6 +415,8 @@ const AITraining = () => {
             localStorage.removeItem('selected_assistant');
           }
         }
+      } else {
+        toast.error('Não foi possível excluir o assistente completamente. Recarregue a página e tente novamente.');
       }
     } catch (error) {
       toast.dismiss('deleting-assistant');

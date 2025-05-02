@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -449,7 +450,14 @@ export const webhookService = {
       
       console.log('Found assistant to delete:', assistant);
       
-      // Create webhook payload - always include both IDs to ensure deletion works
+      // Verify if we actually have a Vapi ID from the assistant record
+      if (!assistant.assistant_id) {
+        console.error('Assistant has no Vapi assistant_id, trying to use alternative ID:', assistantId);
+      }
+      
+      // Create webhook payload with VAPI API KEY
+      const { VAPI_CONFIG } = await import('@/integrations/supabase/client');
+      
       const payload: WebhookPayload = {
         action: "delete_assistant",
         assistant_id: assistant.assistant_id || assistantId,
@@ -458,6 +466,7 @@ export const webhookService = {
           user_id: assistant.user_id || 'unknown',
           timestamp: new Date().toISOString(),
           supabase_id: assistantId,
+          vapi_api_key: VAPI_CONFIG.API_KEY, // Include the VAPI API key
           // Include all IDs we have to ensure deletion works
           all_possible_ids: {
             supabase_id: assistantId,
@@ -467,50 +476,80 @@ export const webhookService = {
         }
       };
       
-      // Call the webhook first
+      // Call the webhook with detailed logging
       console.log('Sending delete request to webhook with payload:', JSON.stringify(payload, null, 2));
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
       
       // Set a timeout for the webhook call
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout (increased from 10s)
       
       try {
+        toast.loading('Enviando solicitação para API externa...', { id: 'webhook-call' });
+        
         const response = await fetch(webhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Vapi-Auth': VAPI_CONFIG.API_KEY, // Add API key in header too
           },
           body: JSON.stringify(payload),
           signal: controller.signal
         });
         
         clearTimeout(timeoutId);
+        toast.dismiss('webhook-call');
+        
+        // Get response text first for logging
+        const responseText = await response.text();
+        console.log('Webhook raw response:', responseText);
+        
+        // Try to parse the response as JSON if possible
+        let responseData;
+        try {
+          responseData = JSON.parse(responseText);
+          console.log('Webhook response parsed:', responseData);
+        } catch (parseError) {
+          console.log('Response is not JSON:', responseText);
+        }
         
         if (!response.ok) {
           console.error('Webhook error status:', response.status);
-          const errorText = await response.text();
-          console.error('Webhook error response:', errorText);
+          console.error('Webhook error response:', responseText);
+          
           // Continue with local deletion even if webhook fails
           console.log('Continuing with Supabase deletion despite webhook error');
+          toast.error('Erro na API externa, continuando com exclusão local.');
         } else {
-          console.log('Webhook delete response:', await response.text());
+          console.log('Webhook delete response succeeded');
+          toast.success('Assistente excluído na API externa.');
         }
       } catch (webhookError) {
+        clearTimeout(timeoutId);
+        toast.dismiss('webhook-call');
+        
         console.error('Webhook delete error:', webhookError);
         if (webhookError.name === 'AbortError') {
           console.log('Webhook request timed out, continuing with Supabase deletion');
+          toast.error('Tempo esgotado na API externa, continuando com exclusão local.');
         } else {
           console.log('Webhook error, continuing with Supabase deletion');
+          toast.error('Erro na API externa, continuando com exclusão local.');
         }
       }
       
       // Delete from local database regardless of webhook success
       console.log('Deleting from Supabase with ID:', assistantId);
+      
+      toast.loading('Removendo assistente do banco de dados...', { id: 'supabase-delete' });
+      
       const { error } = await supabase
         .from('assistants')
         .delete()
         .eq('id', assistantId);
+      
+      toast.dismiss('supabase-delete');
       
       if (error) {
         console.error('Error deleting from Supabase:', error);
@@ -518,8 +557,43 @@ export const webhookService = {
         return false;
       }
       
-      toast.success('Assistente removido com sucesso!');
+      toast.success('Assistente removido com sucesso do banco de dados!');
       console.log('Assistant successfully deleted from Supabase');
+      
+      // Try direct deletion from Vapi API if webhook failed
+      if (assistant.assistant_id) {
+        try {
+          const { VAPI_CONFIG } = await import('@/integrations/supabase/client');
+          
+          console.log('Attempting direct Vapi API deletion for assistant ID:', assistant.assistant_id);
+          toast.loading('Tentando excluir diretamente da API Vapi...', { id: 'vapi-direct' });
+          
+          const directResponse = await fetch(`${VAPI_CONFIG.API_URL}/assistant/${assistant.assistant_id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${VAPI_CONFIG.API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          toast.dismiss('vapi-direct');
+          
+          const directResponseText = await directResponse.text();
+          console.log('Direct Vapi API delete response:', directResponseText);
+          
+          if (directResponse.ok) {
+            console.log('Direct Vapi API deletion successful');
+            toast.success('Assistente excluído diretamente da API Vapi.');
+          } else {
+            console.error('Direct Vapi API deletion failed:', directResponseText);
+            // Already deleted from Supabase, so we'll consider the operation successful
+          }
+        } catch (directApiError) {
+          toast.dismiss('vapi-direct');
+          console.error('Error in direct Vapi API deletion:', directApiError);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error('Exception in deleteAssistant:', error);
