@@ -1,4 +1,3 @@
-
 import { VAPI_CONFIG } from '@/integrations/supabase/client';
 import { supabase } from '@/lib/supabase';
 
@@ -14,7 +13,7 @@ export type VapiAssistant = {
   voice: string;
   voice_id: string;
   created_at: string;
-  metadata: any;
+  metadata: any; // Adding this required property
   published?: boolean;
   updated_at?: string;
 };
@@ -27,6 +26,16 @@ export type WebhookPayload = {
   user_id: string;
   client_id?: number;
   phone_number?: string;
+  // Adding additional properties that are being used in the application
+  campaign_id?: any;
+  client_name?: any;
+  client_phone?: any;
+  call_id?: string;
+  call?: {
+    model: string;
+    voice: string;
+    language: string;
+  };
   additional_data?: any;
 };
 
@@ -228,13 +237,23 @@ export const webhookService = {
     try {
       console.log('Triggering call webhook with payload:', payload);
       
+      // Ensure we have the required fields for WebhookPayload
+      const enhancedPayload = {
+        ...payload,
+        timestamp: payload.timestamp || new Date().toISOString(),
+        assistant_id: payload.assistant_id || "",
+        assistant_name: payload.assistant_name || "",
+        user_id: payload.user_id || "",
+        action: payload.action || "make_call"
+      };
+      
       const response = await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Api-Key': VAPI_CONFIG.API_KEY,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(enhancedPayload),
       });
 
       if (!response.ok) {
@@ -252,7 +271,7 @@ export const webhookService = {
     }
   },
   
-  async sendFirstMessageToWebhook(assistantId: string, phoneNumber: string, clientId: number, message: string): Promise<any> {
+  async sendFirstMessageToWebhook(assistantId: string, phoneNumber: string = "", clientId: number = 0, message: string = ""): Promise<any> {
     try {
       console.log('Sending first message to webhook');
       
@@ -261,7 +280,7 @@ export const webhookService = {
         assistant_id: assistantId,
         phone_number: phoneNumber,
         client_id: clientId,
-        message: message,
+        message: message || "Olá, como posso ajudar?",
         timestamp: new Date().toISOString(),
         api_key: VAPI_CONFIG.API_KEY
       };

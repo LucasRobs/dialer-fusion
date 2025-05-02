@@ -168,8 +168,7 @@ const AITraining = () => {
               
             if (existingAsst) {
               console.log(`Assistant ${asst.name} with ID ${asst.id} already exists, skipping`);
-              // Skip to next iteration - don't use continue here
-              // as we're inside a try-catch block, not a loop directly
+              // Using if block instead of continue statement
             } else {
               // Insert with retry
               let retries = 0;
@@ -302,7 +301,7 @@ const AITraining = () => {
       if (newAssistant) {
         try {
           // Format for direct insertion ensuring all required fields are present
-          const assistantForDb = {
+          const assistantForDb: VapiAssistant = {
             id: `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
             name: name,
             assistant_id: newAssistant.assistant_id || newAssistant.id,
@@ -354,6 +353,11 @@ const AITraining = () => {
       
       // Update the local assistants list immediately
       if (newAssistant) {
+        // Ensure newAssistant has the required metadata property
+        if (!newAssistant.metadata) {
+          newAssistant.metadata = { user_id: user.id };
+        }
+        
         if (assistants) {
           queryClient.setQueryData(['assistants', user.id], [newAssistant, ...assistants]);
         } else {

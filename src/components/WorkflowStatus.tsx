@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { toast } from 'sonner';
 import { Sparkles, Phone } from 'lucide-react';
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from 'react-router-dom';
-import { webhookService } from "@/services/webhookService";
+import { webhookService, WebhookPayload } from "@/services/webhookService";
 
 interface WorkflowStatusProps {
   clientId: number;
@@ -14,29 +14,11 @@ interface WorkflowStatusProps {
   onCallStarted: () => void;
 }
 
-// Define WebhookPayload interface locally to avoid import errors
-interface WebhookPayload {
-  action: string;
-  assistant_id: string;
-  assistant_name: string;
-  timestamp: string;
-  user_id: string;
-  client_id?: number;
-  phone_number?: string;
-  additional_data?: any;
-}
-
 const WorkflowStatus: React.FC<WorkflowStatusProps> = ({ clientId, phoneNumber, assistantId, onCallStarted }) => {
   const [isCalling, setIsCalling] = useState(false);
   const [callStatus, setCallStatus] = useState<string | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-    }
-  }, [user, navigate]);
 
   const handleStartCall = async () => {
     if (!user) {

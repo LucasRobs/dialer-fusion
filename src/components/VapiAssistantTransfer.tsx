@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -173,7 +172,12 @@ const VapiAssistantTransfer = () => {
     setFirstMessageSent(false);
     
     try {
-      const result = await webhookService.sendFirstMessageToWebhook(vapiAssistantId);
+      const result = await webhookService.sendFirstMessageToWebhook(
+        vapiAssistantId,
+        phoneNumber || "", // Adding a default empty string for phone number
+        clientId || 0,     // Adding a default 0 for client ID
+        "Olá, como posso ajudar você hoje?" // Adding a default first message
+      );
       
       if (result.success) {
         setFirstMessageSent(true);
