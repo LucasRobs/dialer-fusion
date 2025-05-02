@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://pblgifjpehuauriqnjbn.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBibGdpZmpwZWh1YXVyaXFuamJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM1Mjk2ODAsImV4cCI6MjA1OTEwNTY4MH0.NPzH-55PWMkinaVtkBiD7AcUGp6itJFK2w3LAKcybzQ";
+const SUPABASE_URL = "https://wwzlfjoiuoocbatfizac.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3emxmam9pdW9vY2JhdGZpemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzNTY5ODEsImV4cCI6MjA1ODkzMjk4MX0.D10AhJ4BeF4vWtH--RYM7WKwePOlZOhEX2tRF0hTfHU";
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
@@ -14,6 +14,12 @@ export const VOICE_CONFIG = {
   VOICE_NAME: "Voz Feminina (PT-BR)",
   VOICE_ID: "33B4UnXyTNbgLmdEDh5P",
   LANGUAGE: "pt-BR"
+};
+
+// Vapi API configuration - for direct API calls
+export const VAPI_CONFIG = {
+  API_KEY: "494da5a9-4a54-4155-bffb-d7206bd72afd",
+  API_URL: "https://api.vapi.ai"
 };
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);

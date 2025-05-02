@@ -1,5 +1,5 @@
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 // Type definition for assistant
@@ -97,6 +97,12 @@ export const webhookService = {
         body: JSON.stringify(payload),
       });
       
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Webhook error: ${response.status} ${errorText}`);
+        throw new Error(`Webhook error: ${response.status} ${errorText}`);
+      }
+      
       // Parse webhook response if possible
       let vapiResponse = null;
       let vapiAssistantId = null;
@@ -172,13 +178,26 @@ export const webhookService = {
       // Insert the assistant into Supabase with multiple retries
       let insertedAssistant = null;
       let retryCount = 0;
-      const maxRetries = 3;
+      const maxRetries = 5;
       
       while (retryCount < maxRetries) {
         try {
           const { data, error } = await supabase
             .from('assistants')
-            .insert([newAssistant])
+            .insert([{
+              id: newAssistant.id,
+              name: newAssistant.name,
+              assistant_id: newAssistant.assistant_id,
+              first_message: newAssistant.first_message,
+              system_prompt: newAssistant.system_prompt,
+              user_id: assistant.userId, // Explicitly set user_id from params
+              status: newAssistant.status,
+              model: newAssistant.model,
+              voice: newAssistant.voice,
+              voice_id: newAssistant.voice_id,
+              created_at: newAssistant.created_at,
+              metadata: newAssistant.metadata
+            }])
             .select()
             .single();
           
@@ -188,6 +207,7 @@ export const webhookService = {
             
             if (retryCount >= maxRetries) {
               console.error('Max retries reached for Supabase insert');
+              throw error;
             } else {
               // Wait before retrying (exponential backoff)
               await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
@@ -204,6 +224,7 @@ export const webhookService = {
           
           if (retryCount >= maxRetries) {
             console.error('Max retries reached for Supabase insert');
+            throw insertError;
           } else {
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
@@ -241,49 +262,38 @@ export const webhookService = {
         }
       };
       
-      // Insert fallback into Supabase with retry
-      let insertedFallback = null;
-      let retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries) {
-        try {
-          const { data, error } = await supabase
-            .from('assistants')
-            .insert([fallbackAssistant])
-            .select()
-            .single();
-            
-          if (error) {
-            console.error(`Fallback insert error (attempt ${retryCount + 1}):`, error);
-            retryCount++;
-            
-            if (retryCount >= maxRetries) {
-              console.error('Max retries reached for fallback insert');
-            } else {
-              // Wait before retrying
-              await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-              continue;
-            }
-          } else {
-            console.log('Fallback assistant inserted successfully:', data);
-            insertedFallback = data;
-            break;
-          }
-        } catch (innerError) {
-          console.error(`Fallback insert exception (attempt ${retryCount + 1}):`, innerError);
-          retryCount++;
+      // Try to insert the fallback into Supabase directly, bypassing the previous webhook path
+      try {
+        const { data, error } = await supabase
+          .from('assistants')
+          .insert([{
+            id: fallbackAssistant.id,
+            name: fallbackAssistant.name,
+            assistant_id: fallbackAssistant.assistant_id,
+            first_message: fallbackAssistant.first_message,
+            system_prompt: fallbackAssistant.system_prompt,
+            user_id: assistant.userId, // Explicitly set user_id from params
+            status: fallbackAssistant.status,
+            model: fallbackAssistant.model,
+            voice: fallbackAssistant.voice,
+            voice_id: fallbackAssistant.voice_id,
+            created_at: fallbackAssistant.created_at,
+            metadata: fallbackAssistant.metadata
+          }])
+          .select()
+          .single();
           
-          if (retryCount >= maxRetries) {
-            console.error('Max retries reached for fallback insert');
-          } else {
-            // Wait before retrying
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-          }
+        if (error) {
+          console.error('Error inserting fallback assistant directly:', error);
+        } else {
+          console.log('Fallback assistant inserted successfully:', data);
+          return data;
         }
+      } catch (directInsertError) {
+        console.error('Exception inserting fallback assistant directly:', directInsertError);
       }
       
-      return insertedFallback || fallbackAssistant;
+      return fallbackAssistant;
     }
   },
   
@@ -304,6 +314,39 @@ export const webhookService = {
       }
       
       console.log('Assistants found:', data?.length || 0);
+      
+      // If no assistants found in Supabase, try to get them from Vapi API
+      if (!data || data.length === 0) {
+        console.log('No assistants found in Supabase, trying to sync from Vapi API');
+        try {
+          const vapiAssistants = await this.getAssistantsFromVapiApi();
+          const userVapiAssistants = vapiAssistants.filter(a => 
+            a.metadata?.user_id === userId
+          );
+          
+          if (userVapiAssistants.length > 0) {
+            console.log('Found assistants in Vapi API, syncing to Supabase:', userVapiAssistants.length);
+            await this.syncVapiAssistantsToSupabase(userVapiAssistants);
+            
+            // Retry getting from Supabase after sync
+            const { data: syncedData, error: syncedError } = await supabase
+              .from('assistants')
+              .select('*')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false });
+              
+            if (syncedError) {
+              console.error('Error fetching synced assistants from Supabase:', syncedError);
+            } else {
+              console.log('Synced assistants retrieved:', syncedData?.length || 0);
+              return syncedData || [];
+            }
+          }
+        } catch (syncError) {
+          console.error('Error syncing assistants from Vapi API:', syncError);
+        }
+      }
+      
       return data || [];
     } catch (error) {
       console.error('Error in getAllAssistants:', error);
@@ -508,18 +551,19 @@ export const webhookService = {
   // Get assistants from Vapi API directly and filter by user
   async getAssistantsFromVapiApi(): Promise<any[]> {
     try {
-      const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
-      const VAPI_API_URL = "https://api.vapi.ai";
+      const { VAPI_CONFIG } = await import('@/integrations/supabase/client');
       
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
+      const response = await fetch(`${VAPI_CONFIG.API_URL}/assistant`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
+          'Authorization': `Bearer ${VAPI_CONFIG.API_KEY}`,
           'Content-Type': 'application/json',
         },
       });
       
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Vapi API error: ${response.status} ${errorText}`);
         toast.error('Não foi possível buscar assistentes da API.');
         return [];
       }
@@ -529,6 +573,7 @@ export const webhookService = {
       
       return data;
     } catch (error) {
+      console.error('Error fetching from Vapi API:', error);
       toast.error('Erro ao buscar assistentes da API.');
       return [];
     }
@@ -545,75 +590,74 @@ export const webhookService = {
       console.log('Syncing assistants from Vapi to Supabase:', vapiAssistants.length);
       
       // Convert Vapi assistants to our format
-      const formattedAssistants: VapiAssistant[] = vapiAssistants.map(assistant => ({
-        id: assistant.id || `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        name: assistant.name || 'Assistente sem nome',
-        assistant_id: assistant.id,
-        first_message: assistant.first_message || assistant.firstMessage || '',
-        system_prompt: assistant.instructions || assistant.system_prompt || '',
-        user_id: assistant.metadata?.user_id || '',
-        status: assistant.status || 'active',
-        model: (assistant.model && assistant.model.model) || assistant.model || 'gpt-4o-turbo',
-        voice: (assistant.voice && assistant.voice.voiceId) || assistant.voice || '33B4UnXyTNbgLmdEDh5P',
-        voice_id: (assistant.voice && assistant.voice.voiceId) || assistant.voice_id || '33B4UnXyTNbgLmdEDh5P',
-        created_at: assistant.createdAt || new Date().toISOString(),
-        metadata: assistant.metadata || { user_id: assistant.metadata?.user_id || '' }
-      }));
-      
-      console.log('Formatted assistants for Supabase sync:', formattedAssistants);
-      
-      // For each assistant, check if it exists in Supabase by assistant_id
-      for (const assistant of formattedAssistants) {
-        // Skip assistants without user_id
-        if (!assistant.user_id) {
-          console.log('Skipping assistant without user_id:', assistant.name);
-          continue;
-        }
-        
-        console.log('Processing assistant for sync:', assistant.name, 'with user_id:', assistant.user_id);
-        
-        const { data: existingAssistant, error: queryError } = await supabase
-          .from('assistants')
-          .select('*')
-          .eq('assistant_id', assistant.assistant_id)
-          .maybeSingle();
-        
-        if (queryError) {
-          console.error('Error checking if assistant exists:', queryError);
-          continue;
-        }
-        
-        if (existingAssistant) {
-          console.log('Updating existing assistant in Supabase:', existingAssistant.name);
-          // Update existing assistant
-          const { error: updateError } = await supabase
-            .from('assistants')
-            .update({
-              name: assistant.name,
-              status: assistant.status,
-              model: assistant.model,
-              voice: assistant.voice,
-              voice_id: assistant.voice_id,
-              user_id: assistant.user_id,
-              metadata: assistant.metadata
-            })
-            .eq('id', existingAssistant.id);
+      for (const assistant of vapiAssistants) {
+        try {
+          const userId = assistant.metadata?.user_id;
           
-          if (updateError) {
-            console.error('Error updating assistant:', updateError);
+          // Skip assistants without user_id
+          if (!userId) {
+            console.log('Skipping assistant without user_id:', assistant.name);
+            continue;
           }
-        } else {
-          console.log('Inserting new assistant into Supabase:', assistant.name);
-          // Insert new assistant
-          const { error: insertError } = await supabase
-            .from('assistants')
-            .insert([assistant]);
           
-          if (insertError) {
-            console.error('Error inserting assistant:', insertError);
+          console.log('Processing assistant for sync:', assistant.name, 'with user_id:', userId);
+          
+          // Check if the assistant already exists in Supabase by assistant_id
+          const { data: existingAssistant, error: queryError } = await supabase
+            .from('assistants')
+            .select('*')
+            .eq('assistant_id', assistant.id)
+            .maybeSingle();
+          
+          if (queryError) {
+            console.error('Error checking if assistant exists:', queryError);
+            continue;
+          }
+          
+          const formattedAssistant = {
+            name: assistant.name || 'Assistente sem nome',
+            assistant_id: assistant.id,
+            first_message: assistant.first_message || assistant.firstMessage || '',
+            system_prompt: assistant.instructions || assistant.system_prompt || '',
+            user_id: userId,
+            status: assistant.status || 'active',
+            model: (assistant.model && assistant.model.model) || assistant.model || 'gpt-4o-turbo',
+            voice: (assistant.voice && assistant.voice.voiceId) || assistant.voice || '33B4UnXyTNbgLmdEDh5P',
+            voice_id: (assistant.voice && assistant.voice.voiceId) || assistant.voice_id || '33B4UnXyTNbgLmdEDh5P',
+            created_at: assistant.createdAt || new Date().toISOString(),
+            metadata: assistant.metadata || { user_id: userId }
+          };
+          
+          if (existingAssistant) {
+            console.log('Updating existing assistant in Supabase:', existingAssistant.name);
+            // Update existing assistant
+            const { error: updateError } = await supabase
+              .from('assistants')
+              .update(formattedAssistant)
+              .eq('id', existingAssistant.id);
+            
+            if (updateError) {
+              console.error('Error updating assistant:', updateError);
+            }
           } else {
-            console.log('Successfully inserted assistant into Supabase');
+            console.log('Inserting new assistant into Supabase:', formattedAssistant.name);
+            // Insert new assistant with a generated ID
+            const { error: insertError } = await supabase
+              .from('assistants')
+              .insert([{
+                id: `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                ...formattedAssistant
+              }]);
+            
+            if (insertError) {
+              console.error('Error inserting assistant:', insertError);
+            } else {
+              console.log('Successfully inserted assistant into Supabase');
+            }
           }
+        } catch (assistantError) {
+          console.error('Error processing individual assistant:', assistantError);
+          // Continue with next assistant
         }
       }
       

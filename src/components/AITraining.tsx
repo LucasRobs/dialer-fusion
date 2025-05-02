@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { webhookService, VapiAssistant } from '@/services/webhookService'; 
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -25,9 +25,6 @@ import {
 
 import assistantService from '@/services/assistantService';
 
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
-const VAPI_API_URL = "https://api.vapi.ai";
-
 const AITraining = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -41,6 +38,7 @@ const AITraining = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [vapiAssistants, setVapiAssistants] = useState<any[]>([]);
   const [isSyncingWithVapi, setIsSyncingWithVapi] = useState(false);
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
 
   // Fetch assistants with more frequent refetching, filtered by user ID
   const { data: assistants, isLoading, refetch } = useQuery({
@@ -53,13 +51,16 @@ const AITraining = () => {
       const supabaseAssistants = await webhookService.getAllAssistants(user.id);
       console.log('Fetched Supabase assistants for current user:', supabaseAssistants);
       
-      // If we don't have any assistants in Supabase, try to get them from Vapi API
-      if (!supabaseAssistants || supabaseAssistants.length === 0) {
-        console.log('No assistants found in Supabase, fetching from Vapi API');
+      // If we don't have any assistants in Supabase or this is the first load,
+      // try to get them from Vapi API
+      if (!initialSyncDone || !supabaseAssistants || supabaseAssistants.length === 0) {
+        console.log('Fetching from Vapi API - initial sync or no assistants found in Supabase');
         await fetchVapiAssistants(); // This will sync to Supabase
+        setInitialSyncDone(true);
         
         // After syncing, fetch again from Supabase
-        return await webhookService.getAllAssistants(user.id);
+        const refreshedAssistants = await webhookService.getAllAssistants(user.id);
+        return refreshedAssistants;
       }
       
       return supabaseAssistants;
@@ -83,11 +84,17 @@ const AITraining = () => {
       const vapiAssistantsList = await webhookService.getAssistantsFromVapiApi();
       console.log('Raw assistants from Vapi API:', vapiAssistantsList);
       
+      if (!Array.isArray(vapiAssistantsList)) {
+        console.error('Expected array from Vapi API but got:', typeof vapiAssistantsList);
+        setIsSyncingWithVapi(false);
+        return [];
+      }
+      
       // Filter by current user
       const userVapiAssistants = vapiAssistantsList.filter(assistant => 
         assistant.metadata?.user_id === user.id
       );
-      console.log(`Filtered ${userVapiAssistants.length} assistants for user ${user.id} from Vapi API`);
+      console.log(`Filtered ${userVapiAssistants.length} assistants for user ${user.id} from ${vapiAssistantsList.length} total`);
       
       setVapiAssistants(userVapiAssistants);
       
@@ -115,13 +122,15 @@ const AITraining = () => {
   useEffect(() => {
     if (user?.id) {
       console.log('Component mounted, fetching Vapi assistants for user:', user.id);
-      fetchVapiAssistants();
+      fetchVapiAssistants().then(() => {
+        console.log('Initial Vapi fetch completed');
+        setInitialSyncDone(true);
+      });
       
       // Set up interval to periodically refresh assistants
       const intervalId = setInterval(() => {
         console.log('Running periodic refresh of assistants');
         refetch();
-        fetchVapiAssistants();
       }, 10000);
       
       return () => {
@@ -203,7 +212,11 @@ const AITraining = () => {
       
     } catch (error) {
       console.error('Error creating assistant:', error);
-      // Don't show error - webhook service now handles this with success message
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Erro desconhecido ao criar assistente');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -404,7 +417,16 @@ const AITraining = () => {
                 </div>
               ) : (
                 <div className="text-center py-6 text-muted-foreground">
-                  {user ? 'Nenhum assistente encontrado. Crie seu primeiro assistente!' : 'Faça login para ver seus assistentes.'}
+                  {user ? (
+                    initialSyncDone ? (
+                      'Nenhum assistente encontrado. Crie seu primeiro assistente!'
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                        <p>Sincronizando assistentes...</p>
+                      </div>
+                    )
+                  ) : 'Faça login para ver seus assistentes.'}
                 </div>
               )}
             </CardContent>
