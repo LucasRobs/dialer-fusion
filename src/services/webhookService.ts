@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -18,6 +19,22 @@ export interface VapiAssistant {
     user_id?: string;
     [key: string]: any;
   };
+}
+
+// Type definition to match Supabase schema requirements
+interface SupabaseAssistant {
+  id?: string;
+  name: string;
+  assistant_id: string;
+  first_message?: string;
+  system_prompt?: string;
+  user_id?: string;
+  created_at?: string;
+  status?: string;
+  model?: string;
+  voice?: string;
+  voice_id?: string;
+  published?: boolean;
 }
 
 // Type definition for assistant creation parameters
@@ -251,15 +268,26 @@ export const webhookService = {
       try {
         console.log(`Supabase insert attempt ${retryCount + 1} for assistant:`, assistant.name);
         
-        // Ensure user_id is set
-        const assistantToInsert = {
-          ...assistant,
-          user_id: userId
+        // Convert from VapiAssistant to SupabaseAssistant format
+        // Ensuring required fields are present and properly typed
+        const assistantToInsert: SupabaseAssistant = {
+          id: assistant.id,
+          name: assistant.name,
+          assistant_id: assistant.assistant_id || `local-${Date.now()}`, // Make sure assistant_id is never undefined
+          first_message: assistant.first_message,
+          system_prompt: assistant.system_prompt,
+          user_id: userId,
+          status: assistant.status,
+          model: assistant.model,
+          voice: assistant.voice,
+          voice_id: assistant.voice_id,
+          created_at: assistant.created_at,
+          published: false // Default value
         };
         
         const { data, error } = await supabase
           .from('assistants')
-          .insert([assistantToInsert])
+          .insert(assistantToInsert) // Insert a single properly formatted record
           .select()
           .single();
         
