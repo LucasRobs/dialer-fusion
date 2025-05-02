@@ -250,6 +250,7 @@ const AITraining = () => {
     }
   }, [assistants]);
 
+  // Handle creating a new assistant
   const handleCreateAssistant = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -289,11 +290,11 @@ const AITraining = () => {
       // Insert directly to Supabase to ensure immediate visibility
       if (newAssistant) {
         try {
-          // Format for direct insertion
+          // Format for direct insertion ensuring all required fields are present
           const assistantForDb = {
-            id: newAssistant.id || `local-${Date.now()}`,
-            name: newAssistant.name,
-            assistant_id: newAssistant.assistant_id,
+            id: `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            name: name,
+            assistant_id: newAssistant.assistant_id || newAssistant.id,
             first_message: firstMessage,
             system_prompt: systemPrompt,
             user_id: user.id,
@@ -301,18 +302,41 @@ const AITraining = () => {
             model: 'gpt-4o-turbo',
             voice: '33B4UnXyTNbgLmdEDh5P',
             voice_id: '33B4UnXyTNbgLmdEDh5P',
+            created_at: new Date().toISOString(),
+            metadata: { user_id: user.id }
           };
           
           console.log('Inserting assistant directly to Supabase:', assistantForDb);
           
-          const { error } = await supabase
-            .from('assistants')
-            .insert([assistantForDb]);
-            
-          if (error) {
-            console.error('Error inserting assistant directly to Supabase:', error);
-          } else {
-            console.log('Assistant inserted successfully directly to Supabase');
+          // Attempt to insert with retry logic
+          let insertSuccess = false;
+          let attempts = 0;
+          const maxAttempts = 3;
+          
+          while (!insertSuccess && attempts < maxAttempts) {
+            attempts++;
+            try {
+              const { error } = await supabase
+                .from('assistants')
+                .insert([assistantForDb]);
+                
+              if (error) {
+                console.error(`Supabase insert error (attempt ${attempts}):`, error);
+                // Wait a bit before retrying
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              } else {
+                console.log('Assistant inserted successfully to Supabase');
+                insertSuccess = true;
+              }
+            } catch (insertErr) {
+              console.error(`Supabase insert exception (attempt ${attempts}):`, insertErr);
+              // Wait a bit before retrying
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+          
+          if (!insertSuccess) {
+            console.error('Max attempts reached for Supabase insert');
           }
         } catch (directInsertError) {
           console.error('Exception during direct insert to Supabase:', directInsertError);
@@ -390,11 +414,7 @@ const AITraining = () => {
       // Show toast indicating deletion in progress
       toast.loading('Excluindo assistente...', { id: 'deleting-assistant' });
       
-      // Add VAPI API KEY to the assistant_id for webhook
-      const assistantIdWithApiKey = assistantToDelete.id + '|' + VAPI_CONFIG.API_KEY;
-      console.log('Sending to delete with combined ID:', assistantIdWithApiKey);
-      
-      // Call webhookService.deleteAssistant - now with API key included
+      // Add VAPI API KEY to the request body
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
       
       // Clear the loading toast
@@ -402,6 +422,32 @@ const AITraining = () => {
       
       if (success) {
         toast.success('Assistente excluído com sucesso!');
+        
+        // Also try to delete directly from Supabase
+        try {
+          if (assistantToDelete.assistant_id) {
+            const { error } = await supabase
+              .from('assistants')
+              .delete()
+              .eq('assistant_id', assistantToDelete.assistant_id);
+              
+            if (error) {
+              console.error('Error deleting from Supabase by assistant_id:', error);
+              
+              // Try by id as fallback
+              const { error: idError } = await supabase
+                .from('assistants')
+                .delete()
+                .eq('id', assistantToDelete.id);
+                
+              if (idError) {
+                console.error('Error deleting from Supabase by id:', idError);
+              }
+            }
+          }
+        } catch (supabaseError) {
+          console.error('Exception during Supabase delete:', supabaseError);
+        }
         
         // Update the list of assistants
         await refetch();

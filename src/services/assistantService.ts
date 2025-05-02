@@ -239,7 +239,14 @@ const assistantService = {
   
   async saveAssistant(assistant: Omit<Assistant, 'id' | 'created_at'>): Promise<Assistant | null> {
     try {
-      console.log('Salvando assistente:', assistant);
+      console.log('Saving assistant:', assistant);
+      
+      // Ensure we have all required fields and correct data types
+      if (!assistant.name) {
+        console.error('Assistant name is required');
+        toast('Erro ao salvar assistente: Nome é obrigatório');
+        return null;
+      }
       
       // Garantir que assistant_id seja definido
       if (!assistant.assistant_id) {
@@ -248,59 +255,98 @@ const assistantService = {
         return null;
       }
       
-      // Verificar se o ID é realmente da Vapi API
-      const vapiId = await this.ensureVapiAssistantId(assistant.assistant_id);
-      if (!vapiId) {
-        console.error('Não foi possível confirmar o ID do assistente na Vapi API');
-        toast('Falha ao salvar assistente: ID do assistente Vapi não confirmado');
-        return null;
-      }
+      // Generate a unique ID for the Supabase record if needed
+      const supabaseId = `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       
-      // Atualizar o assistant_id com o ID confirmado da Vapi
+      // Prepare the assistant object with all required fields in the correct format
       const assistantToSave = {
-        ...assistant,
-        assistant_id: vapiId
+        id: supabaseId,
+        name: assistant.name,
+        assistant_id: assistant.assistant_id,
+        first_message: assistant.first_message || "",
+        system_prompt: assistant.system_prompt || "",
+        user_id: assistant.user_id,
+        status: assistant.status || 'active',
+        model: assistant.model || 'gpt-4o-turbo',
+        voice: assistant.voice || '33B4UnXyTNbgLmdEDh5P',
+        voice_id: assistant.voice_id || '33B4UnXyTNbgLmdEDh5P',
+        created_at: new Date().toISOString()
       };
       
-      const { data, error } = await supabase
-        .from('assistants')
-        .insert(assistantToSave)
-        .select()
-        .single();
+      console.log('Prepared assistant for Supabase:', assistantToSave);
       
-      if (error) {
-        console.error('Erro ao salvar assistente:', error);
-        toast(`Falha ao salvar assistente: ${error.message}`, {
-          description: 'Verifique se todos os campos foram preenchidos corretamente'
-        });
-        return null;
+      // Try insertion with retries
+      let insertSuccess = false;
+      let savedData = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (!insertSuccess && attempts < maxAttempts) {
+        attempts++;
+        try {
+          const { data, error } = await supabase
+            .from('assistants')
+            .insert([assistantToSave])
+            .select()
+            .single();
+            
+          if (error) {
+            console.error(`Erro ao salvar assistente (tentativa ${attempts}):`, error);
+            
+            if (attempts >= maxAttempts) {
+              toast(`Falha ao salvar assistente: ${error.message}`, {
+                description: 'Verifique se todos os campos foram preenchidos corretamente'
+              });
+            }
+            
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } else {
+            console.log('Assistente salvo com sucesso:', data);
+            savedData = data;
+            insertSuccess = true;
+            
+            toast('Assistente salvo com sucesso', {
+              description: `O assistente "${data.name}" está pronto para uso`,
+            });
+          }
+        } catch (retryError) {
+          console.error(`Exceção ao salvar assistente (tentativa ${attempts}):`, retryError);
+          
+          if (attempts >= maxAttempts) {
+            toast('Falha ao salvar assistente após várias tentativas');
+          }
+          
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
       
-      console.log('Assistente salvo com sucesso:', data);
-      toast('Assistente salvo com sucesso', {
-        description: `O assistente "${data.name}" está pronto para uso`,
-      });
+      if (!insertSuccess) {
+        console.error('Número máximo de tentativas atingido ao salvar assistente');
+        return null;
+      }
       
       // After saving to our database, notify the user's Collowop webhook
       try {
         // Obter dados mais atualizados diretamente da Vapi API
-        const vapiAssistant = await this.getVapiAssistantById(vapiId);
+        const vapiAssistant = await this.getVapiAssistantById(assistant.assistant_id);
         
         const webhookData = {
           action: 'assistant_created',
-          assistant_id: vapiId, // Using the confirmed VAPI assistant_id
-          assistant_name: data.name,
+          assistant_id: assistant.assistant_id,
+          assistant_name: assistant.name,
           timestamp: new Date().toISOString(),
-          user_id: data.user_id,
+          user_id: assistant.user_id,
           additional_data: {
             is_ready: true,
-            system_prompt: data.system_prompt,
-            first_message: data.first_message,
-            supabase_id: data.id,
-            model: data.model || DEFAULT_MODEL,
-            voice: data.voice || DEFAULT_VOICE,
+            system_prompt: assistant.system_prompt,
+            first_message: assistant.first_message,
+            supabase_id: savedData ? savedData.id : supabaseId,
+            model: assistant.model || 'gpt-4o-turbo',
+            voice: assistant.voice || '33B4UnXyTNbgLmdEDh5P',
             vapi_status: vapiAssistant?.status || 'ready',
-            vapi_created_at: vapiAssistant?.created_at || data.created_at
+            vapi_created_at: vapiAssistant?.created_at || new Date().toISOString()
           }
         };
         
@@ -319,7 +365,7 @@ const assistantService = {
         // Continue even if the notification fails
       }
       
-      return data;
+      return savedData || assistantToSave;
     } catch (error) {
       console.error('Erro em saveAssistant:', error);
       toast('Falha ao salvar assistente');
