@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -116,10 +115,8 @@ export const webhookService = {
         throw new Error();
       }
       
-      toast.success('Assistente criado com sucesso!');
-      
-      // Return the created assistant with fallback values for missing fields
-      return {
+      // Create the assistant object
+      const newAssistant: VapiAssistant = {
         id: data.supabase_id || data.assistant_id, 
         name: data.name,
         assistant_id: data.assistant_id, 
@@ -129,10 +126,32 @@ export const webhookService = {
         status: data.status || 'active',
         model: data.model || 'gpt-4o-turbo', 
         voice: data.voice || '33B4UnXyTNbgLmdEDh5P',  
-        voice_id: data.voice_id || '33B4UnXyTNbgLmdEDh5P'
+        voice_id: data.voice_id || '33B4UnXyTNbgLmdEDh5P',
+        created_at: new Date().toISOString()
       };
+      
+      // Insert the assistant into Supabase to ensure it appears in the list immediately
+      const { data: insertedData, error: insertError } = await supabase
+        .from('assistants')
+        .insert([newAssistant])
+        .select()
+        .single();
+        
+      if (insertError) {
+        // If there's an error inserting, we'll still return the assistant but show a warning
+        toast.warning('O assistente foi criado, mas pode não aparecer na lista imediatamente.');
+        console.log('Erro ao inserir assistente no banco de dados local:', insertError);
+      } else if (insertedData) {
+        // Use the inserted data which will have the correct ID
+        newAssistant.id = insertedData.id;
+      }
+      
+      toast.success('Assistente criado com sucesso!');
+      
+      // Return the created assistant
+      return newAssistant;
     } catch (error) {
-      // Less detailed error message for users
+      toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
       throw new Error();
     }
   },

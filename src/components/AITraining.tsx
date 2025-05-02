@@ -54,7 +54,6 @@ const AITraining = () => {
   // Fetch assistants directly from Vapi API
   const fetchVapiAssistants = async () => {
     try {
-      console.log('Fetching assistants directly from Vapi API...');
       const response = await fetch(`${VAPI_API_URL}/assistant`, {
         method: 'GET',
         headers: {
@@ -68,11 +67,9 @@ const AITraining = () => {
       }
 
       const data = await response.json();
-      console.log('Assistants from Vapi API:', data);
       setVapiAssistants(data);
       return data;
     } catch (error) {
-      console.error('Error fetching assistants from Vapi API:', error);
       return [];
     }
   };
@@ -94,7 +91,7 @@ const AITraining = () => {
         localStorage.setItem('selected_assistant', JSON.stringify(assistants[0]));
       }
     } catch (error) {
-      console.error("Erro ao carregar assistente selecionado:", error);
+      // Silent error handling
     }
   }, [assistants]);
 
@@ -115,8 +112,7 @@ const AITraining = () => {
     setIsSubmitting(true);
     
     try {
-      console.log("Iniciando criação de assistente com dados:", { name, firstMessage, systemPrompt, userId: user.id });
-      
+      // Create the assistant
       const newAssistant = await webhookService.createAssistant({
         name,
         first_message: firstMessage,
@@ -124,10 +120,8 @@ const AITraining = () => {
         userId: user.id
       });
       
-      console.log("Assistente criado com sucesso:", newAssistant);
-      
-      // Refetch assistants and update selected assistant
-      await refetch();
+      // Immediately invalidate the assistants query to refetch the list
+      queryClient.invalidateQueries({ queryKey: ['assistants', user.id] });
       
       // Select the newly created assistant
       if (newAssistant) {
@@ -140,13 +134,8 @@ const AITraining = () => {
       setFirstMessage('');
       setSystemPrompt('');
       
-      // Success message
-      toast.success(`Assistente "${newAssistant.name}" criado com sucesso!`);
     } catch (error) {
-      console.error('Erro ao criar assistente:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar assistente';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      // Error is handled by webhookService with toast
     } finally {
       setIsSubmitting(false);
     }
@@ -165,7 +154,6 @@ const AITraining = () => {
       await fetchVapiAssistants();
       toast.success('Lista de assistentes atualizada');
     } catch (error) {
-      console.error('Erro ao atualizar lista de assistentes:', error);
       toast.error('Erro ao atualizar lista de assistentes');
     }
   };
@@ -175,9 +163,7 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
-      console.log(`Starting deletion process for assistant: ${assistantToDelete.id}, name: ${assistantToDelete.name}`);
-      
-      // Use the assistantService.findVapiAssistantId method for robust ID lookup
+      // Find the correct Vapi ID for the assistant
       const vapiAssistantId = await assistantService.findVapiAssistantId(
         assistantToDelete.id,
         assistantToDelete.name,
@@ -185,13 +171,10 @@ const AITraining = () => {
       );
       
       if (!vapiAssistantId) {
-        console.error(`❌ Could not find Vapi assistant ID for: ${assistantToDelete.id}`);
         toast.error('Não foi possível encontrar o ID do assistente na Vapi');
         setIsDeleting(false);
         return;
       }
-      
-      console.log(`✅ Found Vapi assistant ID: ${vapiAssistantId} for local assistant: ${assistantToDelete.id}`);
       
       // The webhook URL for deleting the assistant
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/deleteassistant';
@@ -208,9 +191,6 @@ const AITraining = () => {
         }
       };
       
-      // Log the exact payload we're sending
-      console.log("Sending webhook payload:", JSON.stringify(payload));
-      
       // Make sure the payload matches the expected webhook format
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -223,11 +203,8 @@ const AITraining = () => {
       // Check for response
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response from webhook:', response.status, errorText);
         throw new Error(`Webhook error: ${response.status} ${errorText}`);
       }
-      
-      console.log('Webhook delete request sent successfully');
       
       // Continue with local deletion as before
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
@@ -249,14 +226,9 @@ const AITraining = () => {
             localStorage.removeItem('selected_assistant');
           }
         }
-        
-        toast.success(`Assistente "${assistantToDelete.name}" excluído com sucesso`);
-      } else {
-        toast.error(`Falha ao excluir assistente "${assistantToDelete.name}"`);
       }
     } catch (error) {
-      console.error('Erro ao excluir assistente:', error);
-      toast.error(`Erro ao excluir assistente: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      toast.error('Não foi possível excluir o assistente');
     } finally {
       setIsDeleting(false);
       setAssistantToDelete(null);
