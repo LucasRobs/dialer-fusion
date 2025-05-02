@@ -1,16 +1,29 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { toast } from 'sonner';
 import { Sparkles, Phone } from 'lucide-react';
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from 'react-router-dom';
-import { webhookService, WebhookPayload } from "@/services/webhookService";
+import { webhookService } from "@/services/webhookService";
 
 interface WorkflowStatusProps {
   clientId: number;
   phoneNumber: string;
   assistantId: string;
   onCallStarted: () => void;
+}
+
+// Define WebhookPayload interface locally to avoid import errors
+interface WebhookPayload {
+  action: string;
+  assistant_id: string;
+  assistant_name: string;
+  timestamp: string;
+  user_id: string;
+  client_id?: number;
+  phone_number?: string;
+  additional_data?: any;
 }
 
 const WorkflowStatus: React.FC<WorkflowStatusProps> = ({ clientId, phoneNumber, assistantId, onCallStarted }) => {

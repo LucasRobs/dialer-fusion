@@ -168,26 +168,27 @@ const AITraining = () => {
               
             if (existingAsst) {
               console.log(`Assistant ${asst.name} with ID ${asst.id} already exists, skipping`);
-              continue;
-            }
-            
-            // Insert with retry
-            let retries = 0;
-            const maxRetries = 3;
-            
-            while (retries < maxRetries) {
-              const { error: insertError } = await supabase
-                .from('assistants')
-                .insert([formattedAssistant]);
-                
-              if (!insertError) {
-                console.log(`Successfully inserted assistant ${asst.name} into Supabase`);
-                break;
-              } else {
-                console.error(`Error inserting assistant (attempt ${retries + 1}):`, insertError);
-                retries++;
-                if (retries >= maxRetries) break;
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+              // Skip to next iteration - don't use continue here
+              // as we're inside a try-catch block, not a loop directly
+            } else {
+              // Insert with retry
+              let retries = 0;
+              const maxRetries = 3;
+              
+              while (retries < maxRetries) {
+                const { error: insertError } = await supabase
+                  .from('assistants')
+                  .insert([formattedAssistant]);
+                  
+                if (!insertError) {
+                  console.log(`Successfully inserted assistant ${asst.name} into Supabase`);
+                  break;
+                } else {
+                  console.error(`Error inserting assistant (attempt ${retries + 1}):`, insertError);
+                  retries++;
+                  if (retries >= maxRetries) break;
+                  await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+                }
               }
             }
           } catch (error) {
@@ -320,32 +321,31 @@ const AITraining = () => {
           const { data: existingAsst } = await supabase
             .from('assistants')
             .select('id')
-            .eq('assistant_id', asst.id)
+            .eq('assistant_id', newAssistant.id || newAssistant.assistant_id)
             .maybeSingle();
             
-          if (existingAsst) {
-            console.log(`Assistant ${asst.name} with ID ${asst.id} already exists, skipping`);
-            continue;
-          }
-          
-          // Insert with retry
-          let retries = 0;
-          const maxRetries = 3;
-          
-          while (retries < maxRetries) {
-            const { error: insertError } = await supabase
-              .from('assistants')
-              .insert([assistantForDb]);
-              
-            if (!insertError) {
-              console.log(`Successfully inserted assistant ${asst.name} into Supabase`);
-              break;
-            } else {
-              console.error(`Error inserting assistant (attempt ${retries + 1}):`, insertError);
-              retries++;
-              if (retries >= maxRetries) break;
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+          if (!existingAsst) {
+            // Insert with retry
+            let retries = 0;
+            const maxRetries = 3;
+            
+            while (retries < maxRetries) {
+              const { error: insertError } = await supabase
+                .from('assistants')
+                .insert([assistantForDb]);
+                
+              if (!insertError) {
+                console.log(`Successfully inserted assistant ${name} into Supabase`);
+                break;
+              } else {
+                console.error(`Error inserting assistant (attempt ${retries + 1}):`, insertError);
+                retries++;
+                if (retries >= maxRetries) break;
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+              }
             }
+          } else {
+            console.log(`Assistant ${name} already exists in Supabase, skipping direct insert`);
           }
         } catch (directInsertError) {
           console.error('Exception during direct insert to Supabase:', directInsertError);
@@ -369,6 +369,10 @@ const AITraining = () => {
       
       // Select the newly created assistant
       if (newAssistant) {
+        // Ensure newAssistant has metadata
+        if (!newAssistant.metadata) {
+          newAssistant.metadata = { user_id: user.id };
+        }
         setSelectedAssistant(newAssistant);
         localStorage.setItem('selected_assistant', JSON.stringify(newAssistant));
       }
@@ -473,7 +477,7 @@ const AITraining = () => {
           if (remainingAssistants.length > 0) {
             // Ensure metadata property exists
             const firstAssistant = remainingAssistants[0];
-            if (!firstAssistant.metadata) {
+            if (firstAssistant && !firstAssistant.metadata) {
               firstAssistant.metadata = { user_id: firstAssistant.user_id };
             }
             setSelectedAssistant(firstAssistant);
