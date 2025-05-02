@@ -516,31 +516,33 @@ const assistantService = {
           const nameToMatch = assistantName || (localAssistant ? localAssistant.name : '');
           console.log(`🔤 Attempting to match by name: "${nameToMatch}"`);
           
-          // Find all matches by name (case insensitive)
-          const nameMatches = vapiAssistants.filter(va => 
-            va.name.toLowerCase() === nameToMatch.toLowerCase()
-          );
-          
-          if (nameMatches.length === 1) {
-            console.log(`✅ Found single match by name: ${nameMatches[0].id}`);
-            return nameMatches[0].id;
-          } else if (nameMatches.length > 1) {
-            console.log(`⚠️ Found ${nameMatches.length} assistants with name "${nameToMatch}" - trying to narrow down`);
+          if (nameToMatch) {  // Add null/undefined check for nameToMatch
+            // Find all matches by name (case insensitive)
+            const nameMatches = vapiAssistants.filter(va => 
+              va.name && va.name.toLowerCase() === nameToMatch.toLowerCase()
+            );
             
-            // If multiple matches, try to find one with the matching user_id
-            if (userId || (localAssistant && localAssistant.user_id)) {
-              const userIdToMatch = userId || (localAssistant ? localAssistant.user_id : '');
-              const userMatch = nameMatches.find(va => va.metadata?.user_id === userIdToMatch);
+            if (nameMatches.length === 1) {
+              console.log(`✅ Found single match by name: ${nameMatches[0].id}`);
+              return nameMatches[0].id;
+            } else if (nameMatches.length > 1) {
+              console.log(`⚠️ Found ${nameMatches.length} assistants with name "${nameToMatch}" - trying to narrow down`);
               
-              if (userMatch) {
-                console.log(`✅ Narrowed down to single assistant by user_id among name matches: ${userMatch.id}`);
-                return userMatch.id;
+              // If multiple matches, try to find one with the matching user_id
+              if (userId || (localAssistant && localAssistant.user_id)) {
+                const userIdToMatch = userId || (localAssistant ? localAssistant.user_id : '');
+                const userMatch = nameMatches.find(va => va.metadata?.user_id === userIdToMatch);
+                
+                if (userMatch) {
+                  console.log(`✅ Narrowed down to single assistant by user_id among name matches: ${userMatch.id}`);
+                  return userMatch.id;
+                }
               }
+              
+              // If still no unique match, use the first one but log a warning
+              console.warn(`⚠️ Multiple assistants with name "${nameToMatch}" found. Using the first one: ${nameMatches[0].id}`);
+              return nameMatches[0].id;
             }
-            
-            // If still no unique match, use the first one but log a warning
-            console.warn(`⚠️ Multiple assistants with name "${nameToMatch}" found. Using the first one: ${nameMatches[0].id}`);
-            return nameMatches[0].id;
           }
         }
         
@@ -549,20 +551,24 @@ const assistantService = {
           const nameToMatch = assistantName || (localAssistant ? localAssistant.name : '');
           console.log(`🔍 Attempting partial name matching for: "${nameToMatch}"`);
           
-          // Find any assistant with a partially matching name
-          const partialMatch = vapiAssistants.find(va => 
-            va.name.toLowerCase().includes(nameToMatch.toLowerCase()) ||
-            nameToMatch.toLowerCase().includes(va.name.toLowerCase())
-          );
-          
-          if (partialMatch) {
-            console.log(`⚠️ Found partial name match: "${partialMatch.name}" (${partialMatch.id})`);
-            return partialMatch.id;
+          if (nameToMatch) {  // Add null/undefined check for nameToMatch
+            // Find any assistant with a partially matching name
+            const partialMatch = vapiAssistants.find(va => 
+              va.name && nameToMatch && (
+                va.name.toLowerCase().includes(nameToMatch.toLowerCase()) ||
+                nameToMatch.toLowerCase().includes(va.name.toLowerCase())
+              )
+            );
+            
+            if (partialMatch) {
+              console.log(`⚠️ Found partial name match: "${partialMatch.name}" (${partialMatch.id})`);
+              return partialMatch.id;
+            }
           }
         }
         
         // If we got here, we couldn't find a match
-        console.error(`❌ Could not find any matching Vapi assistant for ID: ${localAssistantId}`);
+        console.error(`❌ Could not find any matching Vapi assistant ID for ID: ${localAssistantId}`);
         return null;
       } catch (error) {
         console.error('❌ Error in findVapiAssistantId:', error);
@@ -828,50 +834,4 @@ const assistantService = {
           .single();
           
         if (data && data.assistant_id) {
-          console.log('Obtido ID da Vapi a partir do banco:', data.assistant_id);
-          
-          // Verificar se este ID é válido na Vapi
-          const vapiCheckResponse = await fetch(`https://api.vapi.ai/assistant/${data.assistant_id}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${VAPI_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          if (vapiCheckResponse.ok) {
-            return data.assistant_id;
-          }
-        }
-      }
-      
-      // Se ainda não encontrou, buscar todos os assistentes como último recurso
-      const allVapiAssistants = await this.getVapiAssistants();
-      const matchingAssistant = allVapiAssistants.find(a => 
-        a.id === assistantId || a.assistant_id === assistantId
-      );
-      
-      if (matchingAssistant) {
-        console.log('Encontrado assistente na lista completa da Vapi:', matchingAssistant.id);
-        return matchingAssistant.id;
-      }
-      
-      // Tentar buscar pelo nome se o ID não for encontrado
-      if (assistant && assistant.name) {
-        const idByName = await this.getVapiAssistantIdByName(assistant.name);
-        if (idByName) {
-          console.log('Encontrado ID via nome do assistente:', idByName);
-          return idByName;
-        }
-      }
-      
-      console.warn('Não foi possível encontrar um ID Vapi válido para:', assistantId);
-      return null;
-    } catch (error) {
-      console.error('Erro ao garantir ID da Vapi:', error);
-      return null; // Em caso de erro, retornar null para forçar tratamento adequado
-    }
-  }
-};
-
-export default assistantService;
+          console.log('Obtido ID da Vapi a partir do
