@@ -384,8 +384,16 @@ const AITraining = () => {
     
     setIsDeleting(true);
     try {
+      console.log('Deleting assistant:', assistantToDelete);
+      
+      // Show toast indicating deletion in progress
+      toast.loading('Excluindo assistente...', { id: 'deleting-assistant' });
+      
       // Call webhookService.deleteAssistant which now handles both webhook and Supabase deletion
       const success = await webhookService.deleteAssistant(assistantToDelete.id);
+      
+      // Clear the loading toast
+      toast.dismiss('deleting-assistant');
       
       if (success) {
         // Update the list of assistants
@@ -406,6 +414,7 @@ const AITraining = () => {
         }
       }
     } catch (error) {
+      toast.dismiss('deleting-assistant');
       console.error('Error in handleDeleteAssistant:', error);
       toast.error('Não foi possível excluir o assistente');
     } finally {
