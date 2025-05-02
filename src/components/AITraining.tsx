@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,14 +42,19 @@ const AITraining = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [vapiAssistants, setVapiAssistants] = useState<any[]>([]);
 
-  // Fetch assistants
+  // Fetch assistants with more frequent refetching
   const { data: assistants, isLoading, refetch } = useQuery({
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      return await webhookService.getAllAssistants(user.id);
+      console.log('Fetching assistants for user:', user.id);
+      const data = await webhookService.getAllAssistants(user.id);
+      console.log('Fetched assistants:', data);
+      return data;
     },
-    enabled: !!user?.id
+    enabled: !!user?.id,
+    refetchInterval: 5000, // Refetch every 5 seconds to catch updates
+    staleTime: 3000, // Consider data stale after 3 seconds
   });
 
   // Fetch assistants directly from Vapi API
@@ -70,6 +76,7 @@ const AITraining = () => {
       setVapiAssistants(data);
       return data;
     } catch (error) {
+      console.error('Error fetching Vapi assistants:', error);
       return [];
     }
   };
@@ -77,7 +84,14 @@ const AITraining = () => {
   // Fetch Vapi assistants on component mount
   useEffect(() => {
     fetchVapiAssistants();
-  }, []);
+    
+    // Set up interval to periodically refresh assistants
+    const intervalId = setInterval(() => {
+      refetch();
+    }, 10000);
+    
+    return () => clearInterval(intervalId);
+  }, [refetch]);
 
   // Load selected assistant from localStorage
   useEffect(() => {
@@ -92,6 +106,7 @@ const AITraining = () => {
       }
     } catch (error) {
       // Silent error handling
+      console.error('Error loading selected assistant from localStorage:', error);
     }
   }, [assistants]);
 
@@ -113,6 +128,7 @@ const AITraining = () => {
     
     try {
       // Create the assistant
+      console.log('Creating assistant with params:', { name, firstMessage, systemPrompt, userId: user.id });
       const newAssistant = await webhookService.createAssistant({
         name,
         first_message: firstMessage,
@@ -120,8 +136,13 @@ const AITraining = () => {
         userId: user.id
       });
       
+      console.log('Assistant created successfully:', newAssistant);
+      
       // Immediately invalidate the assistants query to refetch the list
       queryClient.invalidateQueries({ queryKey: ['assistants', user.id] });
+      
+      // Force immediate refetch
+      refetch();
       
       // Select the newly created assistant
       if (newAssistant) {
@@ -135,6 +156,7 @@ const AITraining = () => {
       setSystemPrompt('');
       
     } catch (error) {
+      console.error('Error creating assistant:', error);
       // Error is handled by webhookService with toast
     } finally {
       setIsSubmitting(false);
@@ -149,11 +171,13 @@ const AITraining = () => {
 
   const handleRefreshAssistants = async () => {
     try {
+      toast.info('Atualizando lista de assistentes...');
       await refetch();
       // Also refresh Vapi assistants directly
       await fetchVapiAssistants();
       toast.success('Lista de assistentes atualizada');
     } catch (error) {
+      console.error('Error refreshing assistants:', error);
       toast.error('Erro ao atualizar lista de assistentes');
     }
   };

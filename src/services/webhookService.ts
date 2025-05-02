@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -90,36 +91,43 @@ export const webhookService = {
       
       // Check for errors in response
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Webhook Error:', errorText);
         toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
-        throw new Error();
+        throw new Error('Webhook response not OK');
       }
       
       // Parse response to get created assistant data
       const data = await response.json();
+      console.log('Webhook response:', data);
       
       // Enhanced validation of webhook response
       if (!data) {
+        console.error('No data returned from webhook');
         toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
-        throw new Error();
+        throw new Error('No data returned from webhook');
       }
       
       // Check for error field in response
       if (data.error) {
+        console.error('Error in webhook response:', data.error);
         toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
-        throw new Error();
+        throw new Error('Error in webhook response');
       }
       
       // Validate required fields exist
-      if (!data.assistant_id || !data.name) {
+      const assistantId = data.assistant_id || data.id;
+      if (!assistantId || !data.name) {
+        console.error('Missing required fields in webhook response:', data);
         toast.error('Ocorreu um erro ao criar o assistente. Por favor, tente novamente.');
-        throw new Error();
+        throw new Error('Missing required fields in webhook response');
       }
       
       // Create the assistant object
       const newAssistant: VapiAssistant = {
-        id: data.supabase_id || data.assistant_id, 
+        id: data.supabase_id || assistantId, 
         name: data.name,
-        assistant_id: data.assistant_id, 
+        assistant_id: assistantId, 
         first_message: assistant.first_message,
         system_prompt: assistant.system_prompt,
         user_id: assistant.userId,
@@ -130,18 +138,35 @@ export const webhookService = {
         created_at: new Date().toISOString()
       };
       
+      console.log('New assistant object to insert:', newAssistant);
+      
       // Insert the assistant into Supabase to ensure it appears in the list immediately
       const { data: insertedData, error: insertError } = await supabase
         .from('assistants')
         .insert([newAssistant])
         .select()
         .single();
-        
+      
       if (insertError) {
-        // If there's an error inserting, we'll still return the assistant but show a warning
-        toast.warning('O assistente foi criado, mas pode não aparecer na lista imediatamente.');
-        console.log('Erro ao inserir assistente no banco de dados local:', insertError);
+        console.error('Error inserting assistant into Supabase:', insertError);
+        
+        // Try to update instead if insert fails (might be a duplicate)
+        const { data: updatedData, error: updateError } = await supabase
+          .from('assistants')
+          .update(newAssistant)
+          .eq('assistant_id', assistantId)
+          .select()
+          .single();
+        
+        if (updateError) {
+          console.error('Error updating assistant in Supabase:', updateError);
+          toast.warning('O assistente foi criado, mas pode não aparecer na lista imediatamente.');
+        } else if (updatedData) {
+          console.log('Assistant updated in Supabase:', updatedData);
+          newAssistant.id = updatedData.id;
+        }
       } else if (insertedData) {
+        console.log('Assistant inserted in Supabase:', insertedData);
         // Use the inserted data which will have the correct ID
         newAssistant.id = insertedData.id;
       }
@@ -151,14 +176,16 @@ export const webhookService = {
       // Return the created assistant
       return newAssistant;
     } catch (error) {
+      console.error('Error in createAssistant:', error);
       toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
-      throw new Error();
+      throw new Error('Failed to create assistant');
     }
   },
   
   // Get all assistants for a user
   async getAllAssistants(userId: string): Promise<VapiAssistant[]> {
     try {
+      console.log('Getting assistants for user:', userId);
       const { data, error } = await supabase
         .from('assistants')
         .select('*')
@@ -166,13 +193,15 @@ export const webhookService = {
         .order('created_at', { ascending: false });
       
       if (error) {
+        console.error('Error fetching assistants from Supabase:', error);
         toast.error('Não foi possível buscar os assistentes.');
-        throw error;
+        return [];
       }
       
+      console.log('Assistants found:', data?.length || 0);
       return data || [];
     } catch (error) {
-      toast.error('Problema ao carregar assistentes.');
+      console.error('Error in getAllAssistants:', error);
       return [];
     }
   },

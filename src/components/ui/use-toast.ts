@@ -7,3 +7,6 @@ export const useToast = useToastOriginal;
 
 // Export the sonner toast for direct use
 export const toast = sonnerToast;
+
+// Add useful aliases to match our user expectations
+sonnerToast.info = sonnerToast;
