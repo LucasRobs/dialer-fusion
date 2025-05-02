@@ -68,6 +68,10 @@ const VapiAssistantTransfer = () => {
   const [isSendingFirstMessage, setIsSendingFirstMessage] = useState(false);
   const [firstMessageSent, setFirstMessageSent] = useState(false);
   
+  // Add state for phone number and client ID
+  const [testPhoneNumber, setTestPhoneNumber] = useState('');
+  const [testClientId, setTestClientId] = useState(0);
+  
   const { toast } = useToast();
   
   const handleInputChange = (field: keyof VapiAssistantParams, value: string) => {
@@ -174,9 +178,9 @@ const VapiAssistantTransfer = () => {
     try {
       const result = await webhookService.sendFirstMessageToWebhook(
         vapiAssistantId,
-        phoneNumber || "", // Adding a default empty string for phone number
-        clientId || 0,     // Adding a default 0 for client ID
-        "Olá, como posso ajudar você hoje?" // Adding a default first message
+        testPhoneNumber || "", 
+        testClientId || 0,
+        "Olá, como posso ajudar você hoje?"
       );
       
       if (result.success) {

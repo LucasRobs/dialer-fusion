@@ -1,3 +1,4 @@
+
 import { VAPI_CONFIG } from '@/integrations/supabase/client';
 import { supabase } from '@/lib/supabase';
 
@@ -13,7 +14,7 @@ export type VapiAssistant = {
   voice: string;
   voice_id: string;
   created_at: string;
-  metadata: any; // Adding this required property
+  metadata: any; // This is a required property
   published?: boolean;
   updated_at?: string;
 };
@@ -31,6 +32,7 @@ export type WebhookPayload = {
   client_name?: any;
   client_phone?: any;
   call_id?: string;
+  account_id?: any; // Adding this field
   call?: {
     model: string;
     voice: string;
@@ -89,7 +91,7 @@ export const webhookService = {
           // Format the data to match VapiAssistant type
           return data.map(assistant => ({
             ...assistant,
-            metadata: { user_id: assistant.user_id }
+            metadata: assistant.metadata || { user_id: assistant.user_id }
           })) as VapiAssistant[];
         }
       }
@@ -135,10 +137,10 @@ export const webhookService = {
         return [];
       }
       
-      // Format the data to match VapiAssistant type
+      // Format the data to match VapiAssistant type, ensure metadata exists
       return data.map(assistant => ({
         ...assistant,
-        metadata: { user_id: assistant.user_id }
+        metadata: assistant.metadata || { user_id: assistant.user_id }
       })) as VapiAssistant[];
     } catch (error) {
       console.error('Error in getLocalAssistants:', error);
@@ -271,17 +273,24 @@ export const webhookService = {
     }
   },
   
-  async sendFirstMessageToWebhook(assistantId: string, phoneNumber: string = "", clientId: number = 0, message: string = ""): Promise<any> {
+  async sendFirstMessageToWebhook(
+    assistantId: string, 
+    phoneNumber: string = "", 
+    clientId: number = 0, 
+    message: string = ""
+  ): Promise<any> {
     try {
       console.log('Sending first message to webhook');
       
       const payload = {
         action: 'send_first_message',
         assistant_id: assistantId,
+        assistant_name: "", // Add a default empty string for assistant_name
         phone_number: phoneNumber,
         client_id: clientId,
         message: message || "Olá, como posso ajudar?",
         timestamp: new Date().toISOString(),
+        user_id: "", // Add a default empty string for user_id
         api_key: VAPI_CONFIG.API_KEY
       };
       

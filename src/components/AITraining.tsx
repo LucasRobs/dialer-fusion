@@ -168,7 +168,7 @@ const AITraining = () => {
               
             if (existingAsst) {
               console.log(`Assistant ${asst.name} with ID ${asst.id} already exists, skipping`);
-              // Using if block instead of continue statement
+              // Using if block instead of 'continue' to avoid syntax error
             } else {
               // Insert with retry
               let retries = 0;
@@ -240,19 +240,24 @@ const AITraining = () => {
       if (storedAssistant) {
         const parsed = JSON.parse(storedAssistant);
         // Ensure metadata property exists
-        if (parsed && !parsed.metadata) {
-          parsed.metadata = { user_id: parsed.user_id };
+        if (parsed) {
+          if (!parsed.metadata) {
+            parsed.metadata = { user_id: parsed.user_id };
+          }
+          setSelectedAssistant(parsed as VapiAssistant);
         }
-        setSelectedAssistant(parsed);
       } else if (assistants && assistants.length > 0) {
         // Select first assistant without filtering by status
         const first = assistants[0];
         // Ensure metadata property exists
-        if (first && !first.metadata) {
-          first.metadata = { user_id: first.user_id };
+        if (first) {
+          const assistantWithMetadata = {
+            ...first,
+            metadata: first.metadata || { user_id: first.user_id }
+          } as VapiAssistant;
+          setSelectedAssistant(assistantWithMetadata);
+          localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
         }
-        setSelectedAssistant(first);
-        localStorage.setItem('selected_assistant', JSON.stringify(first));
       }
     } catch (error) {
       // Silent error handling
@@ -320,7 +325,7 @@ const AITraining = () => {
           const { data: existingAsst } = await supabase
             .from('assistants')
             .select('id')
-            .eq('assistant_id', newAssistant.id || newAssistant.assistant_id)
+            .eq('assistant_id', newAssistant.assistant_id || newAssistant.id)
             .maybeSingle();
             
           if (!existingAsst) {
@@ -354,15 +359,20 @@ const AITraining = () => {
       // Update the local assistants list immediately
       if (newAssistant) {
         // Ensure newAssistant has the required metadata property
-        if (!newAssistant.metadata) {
-          newAssistant.metadata = { user_id: user.id };
-        }
+        const assistantWithMetadata = {
+          ...newAssistant,
+          metadata: newAssistant.metadata || { user_id: user.id }
+        } as VapiAssistant;
         
         if (assistants) {
-          queryClient.setQueryData(['assistants', user.id], [newAssistant, ...assistants]);
+          queryClient.setQueryData(['assistants', user.id], [assistantWithMetadata, ...assistants]);
         } else {
-          queryClient.setQueryData(['assistants', user.id], [newAssistant]);
+          queryClient.setQueryData(['assistants', user.id], [assistantWithMetadata]);
         }
+        
+        // Select the newly created assistant
+        setSelectedAssistant(assistantWithMetadata);
+        localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
       }
       
       // Force immediate refetch to ensure the list is up-to-date
@@ -370,16 +380,6 @@ const AITraining = () => {
       
       // Also fetch from Vapi to make sure everything is in sync
       await fetchVapiAssistants();
-      
-      // Select the newly created assistant
-      if (newAssistant) {
-        // Ensure newAssistant has metadata
-        if (!newAssistant.metadata) {
-          newAssistant.metadata = { user_id: user.id };
-        }
-        setSelectedAssistant(newAssistant);
-        localStorage.setItem('selected_assistant', JSON.stringify(newAssistant));
-      }
       
       // Reset form
       setName('');
@@ -403,12 +403,14 @@ const AITraining = () => {
 
   const handleSelectAssistant = (assistant: VapiAssistant) => {
     // Ensure metadata property exists
-    if (!assistant.metadata) {
-      assistant.metadata = { user_id: assistant.user_id };
-    }
-    setSelectedAssistant(assistant);
-    localStorage.setItem('selected_assistant', JSON.stringify(assistant));
-    toast.success(`Assistente "${assistant.name}" selecionado como padrão`);
+    const assistantWithMetadata = {
+      ...assistant,
+      metadata: assistant.metadata || { user_id: assistant.user_id }
+    } as VapiAssistant;
+    
+    setSelectedAssistant(assistantWithMetadata);
+    localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
+    toast.success(`Assistente "${assistantWithMetadata.name}" selecionado como padrão`);
   };
 
   const handleRefreshAssistants = async () => {
