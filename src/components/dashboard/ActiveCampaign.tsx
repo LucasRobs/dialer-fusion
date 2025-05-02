@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { PhoneOff, BarChart3 } from 'lucide-react';
@@ -164,7 +165,10 @@ const ActiveCampaign: React.FC<ActiveCampaignProps> = ({ campaign, onCampaignSto
       const result = await webhookService.triggerCallWebhook({
         action: 'stop_campaign',
         campaign_id: campaign.id,
-        user_id: user?.id,
+        user_id: user?.id || '',
+        timestamp: new Date().toISOString(),
+        assistant_id: finalVapiAssistantId || '',
+        assistant_name: campaign.assistantName || '',
         additional_data: {
           campaign_name: campaign.name,
           progress: campaign.progress,

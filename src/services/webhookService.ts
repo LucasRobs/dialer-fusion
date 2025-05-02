@@ -21,10 +21,10 @@ export type VapiAssistant = {
 
 export type WebhookPayload = {
   action: string;
-  assistant_id: string;
-  assistant_name: string;
-  timestamp: string;
-  user_id: string;
+  assistant_id?: string; // Made optional
+  assistant_name?: string; // Made optional
+  timestamp?: string; // Made optional
+  user_id?: string; // Made optional
   client_id?: number;
   phone_number?: string;
   // Adding additional properties that are being used in the application
@@ -32,7 +32,7 @@ export type WebhookPayload = {
   client_name?: any;
   client_phone?: any;
   call_id?: string;
-  account_id?: any; // Adding this field
+  account_id?: any;
   call?: {
     model: string;
     voice: string;

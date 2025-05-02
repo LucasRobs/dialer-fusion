@@ -241,10 +241,11 @@ const AITraining = () => {
         const parsed = JSON.parse(storedAssistant);
         // Ensure metadata property exists
         if (parsed) {
-          if (!parsed.metadata) {
-            parsed.metadata = { user_id: parsed.user_id };
-          }
-          setSelectedAssistant(parsed as VapiAssistant);
+          const assistantWithMetadata = {
+            ...parsed,
+            metadata: parsed.metadata || { user_id: parsed.user_id }
+          };
+          setSelectedAssistant(assistantWithMetadata as VapiAssistant);
         }
       } else if (assistants && assistants.length > 0) {
         // Select first assistant without filtering by status
@@ -254,8 +255,8 @@ const AITraining = () => {
           const assistantWithMetadata = {
             ...first,
             metadata: first.metadata || { user_id: first.user_id }
-          } as VapiAssistant;
-          setSelectedAssistant(assistantWithMetadata);
+          };
+          setSelectedAssistant(assistantWithMetadata as VapiAssistant);
           localStorage.setItem('selected_assistant', JSON.stringify(assistantWithMetadata));
         }
       }
@@ -328,7 +329,9 @@ const AITraining = () => {
             .eq('assistant_id', newAssistant.assistant_id || newAssistant.id)
             .maybeSingle();
             
-          if (!existingAsst) {
+          if (existingAsst) {
+            console.log(`Assistant ${name} with ID ${newAssistant.id} already exists, skipping`);
+          } else {
             // Insert with retry
             let retries = 0;
             const maxRetries = 3;
@@ -348,8 +351,6 @@ const AITraining = () => {
                 await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
               }
             }
-          } else {
-            console.log(`Assistant ${name} already exists in Supabase, skipping direct insert`);
           }
         } catch (directInsertError) {
           console.error('Exception during direct insert to Supabase:', directInsertError);
@@ -401,8 +402,8 @@ const AITraining = () => {
     }
   };
 
-  const handleSelectAssistant = (assistant: VapiAssistant) => {
-    // Ensure metadata property exists
+  const handleSelectAssistant = (assistant: any) => {
+    // Ensure metadata property exists for type safety
     const assistantWithMetadata = {
       ...assistant,
       metadata: assistant.metadata || { user_id: assistant.user_id }
