@@ -11,6 +11,7 @@ interface AIAssistant {
   id: string;
   name: string;
   status: string;
+  user_id?: string; // Added user_id property with optional flag
 }
 
 interface AIAssistantsProps {
