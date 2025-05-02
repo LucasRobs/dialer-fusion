@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -95,65 +96,73 @@ export const webhookService = {
       // Always show success toast regardless of response status
       toast.success('Assistente criado com sucesso!');
       
-      // Check for errors in response but don't show error to user
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Webhook warning (handled):', errorText);
-        
-        // Create a local placeholder assistant that will be visible to user
-        const placeholderAssistant: VapiAssistant = {
-          id: `local-${Date.now()}`,
-          name: assistant.name,
-          assistant_id: `pending-${Date.now()}`,
-          first_message: assistant.first_message,
-          system_prompt: assistant.system_prompt,
-          user_id: assistant.userId,
-          status: 'active',
-          model: 'gpt-4o-turbo',
-          voice: '33B4UnXyTNbgLmdEDh5P',
-          voice_id: '33B4UnXyTNbgLmdEDh5P',
-          created_at: new Date().toISOString()
-        };
-        
-        // Insert placeholder into Supabase
-        console.log('Inserting placeholder assistant:', placeholderAssistant);
-        
-        await supabase
-          .from('assistants')
-          .insert([placeholderAssistant]);
-        
-        return placeholderAssistant;
-      }
-      
-      // Parse response
-      const data = await response.json();
-      console.log('Webhook response:', data);
-      
       // Create assistant object with default values if necessary
-      const assistantId = data.assistant_id || data.id || `local-${Date.now()}`;
+      const assistantId = `local-${Date.now()}`;
       
       const newAssistant: VapiAssistant = {
-        id: data.supabase_id || assistantId, 
+        id: assistantId, 
         name: assistant.name,
-        assistant_id: assistantId, 
+        assistant_id: assistantId,
         first_message: assistant.first_message,
         system_prompt: assistant.system_prompt,
         user_id: assistant.userId,
-        status: data.status || 'active',
-        model: data.model || 'gpt-4o-turbo', 
-        voice: data.voice || '33B4UnXyTNbgLmdEDh5P',  
-        voice_id: data.voice_id || '33B4UnXyTNbgLmdEDh5P',
+        status: 'active',
+        model: 'gpt-4o-turbo',
+        voice: '33B4UnXyTNbgLmdEDh5P',
+        voice_id: '33B4UnXyTNbgLmdEDh5P',
         created_at: new Date().toISOString()
       };
+      
+      // Try to get data from response if available
+      try {
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Webhook response:', data);
+          
+          if (data && data.assistant_id) {
+            newAssistant.assistant_id = data.assistant_id;
+          }
+          if (data && data.id) {
+            newAssistant.id = data.supabase_id || data.id;
+          }
+          if (data && data.model) {
+            newAssistant.model = data.model;
+          }
+          if (data && data.voice) {
+            newAssistant.voice = data.voice;
+          }
+          if (data && data.voice_id) {
+            newAssistant.voice_id = data.voice_id;
+          }
+          if (data && data.status) {
+            newAssistant.status = data.status;
+          }
+        } else {
+          console.log('Response not OK but proceeding with local assistant creation');
+        }
+      } catch (parseError) {
+        console.error('Error parsing webhook response:', parseError);
+        // Continue with default assistant
+      }
       
       console.log('New assistant object to insert:', newAssistant);
       
       // Always insert to Supabase to ensure it appears in the list
-      await supabase
+      const { data: insertedAssistant, error: insertError } = await supabase
         .from('assistants')
-        .insert([newAssistant]);
+        .insert([newAssistant])
+        .select()
+        .single();
       
-      return newAssistant;
+      if (insertError) {
+        console.error('Error inserting assistant to Supabase:', insertError);
+        // Return the assistant object we created regardless of insert error
+        return newAssistant;
+      }
+      
+      console.log('Inserted assistant:', insertedAssistant);
+      // Return the Supabase response if available (it will include the generated ID)
+      return insertedAssistant || newAssistant;
     } catch (error) {
       console.error('Error in createAssistant:', error);
       
@@ -177,14 +186,22 @@ export const webhookService = {
       
       // Insert fallback into Supabase
       try {
-        await supabase
+        const { data: insertedFallback, error } = await supabase
           .from('assistants')
-          .insert([fallbackAssistant]);
+          .insert([fallbackAssistant])
+          .select()
+          .single();
+          
+        if (error) {
+          console.error('Error inserting fallback assistant:', error);
+          return fallbackAssistant;
+        }
+        
+        return insertedFallback || fallbackAssistant;
       } catch (innerError) {
         console.error('Error inserting fallback assistant:', innerError);
+        return fallbackAssistant;
       }
-      
-      return fallbackAssistant;
     }
   },
   
@@ -426,10 +443,86 @@ export const webhookService = {
       }
       
       const data = await response.json();
+      
+      // If we got assistants from Vapi API, let's sync them with our Supabase
+      if (Array.isArray(data) && data.length > 0) {
+        await this.syncVapiAssistantsToSupabase(data);
+      }
+      
       return data;
     } catch (error) {
       toast.error('Erro ao buscar assistentes da API.');
       return [];
+    }
+  },
+  
+  // Sync assistants from Vapi API to Supabase
+  async syncVapiAssistantsToSupabase(vapiAssistants: any[]): Promise<void> {
+    try {
+      if (!Array.isArray(vapiAssistants) || vapiAssistants.length === 0) {
+        return;
+      }
+      
+      console.log('Syncing assistants from Vapi to Supabase:', vapiAssistants.length);
+      
+      // Convert Vapi assistants to our format
+      const formattedAssistants: VapiAssistant[] = vapiAssistants.map(assistant => ({
+        id: assistant.id || `vapi-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        name: assistant.name || 'Assistente sem nome',
+        assistant_id: assistant.id,
+        first_message: assistant.first_message || assistant.firstMessage || '',
+        system_prompt: assistant.instructions || assistant.system_prompt || '',
+        status: assistant.status || 'active',
+        model: (assistant.model && assistant.model.model) || assistant.model || 'gpt-4o-turbo',
+        voice: (assistant.voice && assistant.voice.voiceId) || assistant.voice || '33B4UnXyTNbgLmdEDh5P',
+        voice_id: (assistant.voice && assistant.voice.voiceId) || assistant.voice_id || '33B4UnXyTNbgLmdEDh5P',
+        created_at: assistant.createdAt || new Date().toISOString()
+      }));
+      
+      // For each assistant, check if it exists in Supabase by assistant_id
+      for (const assistant of formattedAssistants) {
+        const { data: existingAssistant, error: queryError } = await supabase
+          .from('assistants')
+          .select('*')
+          .eq('assistant_id', assistant.assistant_id)
+          .maybeSingle();
+        
+        if (queryError) {
+          console.error('Error checking if assistant exists:', queryError);
+          continue;
+        }
+        
+        if (existingAssistant) {
+          // Update existing assistant
+          const { error: updateError } = await supabase
+            .from('assistants')
+            .update({
+              name: assistant.name,
+              status: assistant.status,
+              model: assistant.model,
+              voice: assistant.voice,
+              voice_id: assistant.voice_id
+            })
+            .eq('id', existingAssistant.id);
+          
+          if (updateError) {
+            console.error('Error updating assistant:', updateError);
+          }
+        } else {
+          // Insert new assistant
+          const { error: insertError } = await supabase
+            .from('assistants')
+            .insert([assistant]);
+          
+          if (insertError) {
+            console.error('Error inserting assistant:', insertError);
+          }
+        }
+      }
+      
+      console.log('Sync completed');
+    } catch (error) {
+      console.error('Error syncing assistants:', error);
     }
   }
 };

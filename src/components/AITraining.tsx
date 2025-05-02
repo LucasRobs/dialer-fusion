@@ -28,7 +28,6 @@ import assistantService from '@/services/assistantService';
 const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
 const VAPI_API_URL = "https://api.vapi.ai";
 
-
 const AITraining = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -48,46 +47,60 @@ const AITraining = () => {
     queryFn: async () => {
       if (!user?.id) return [];
       console.log('Fetching assistants for user:', user.id);
-      const data = await webhookService.getAllAssistants(user.id);
-      console.log('Fetched assistants:', data);
-      return data;
+      
+      // Try to get assistants from Supabase
+      const supabaseAssistants = await webhookService.getAllAssistants(user.id);
+      console.log('Fetched Supabase assistants:', supabaseAssistants);
+      
+      // If we don't have any assistants in Supabase, try to get them from Vapi API
+      if (!supabaseAssistants || supabaseAssistants.length === 0) {
+        console.log('No assistants found in Supabase, fetching from Vapi API');
+        const vapiAssistantsList = await webhookService.getAssistantsFromVapiApi();
+        console.log('Assistants from Vapi API:', vapiAssistantsList);
+        
+        // If we got assistants from Vapi API, sync them with Supabase and return
+        if (vapiAssistantsList && vapiAssistantsList.length > 0) {
+          await webhookService.syncVapiAssistantsToSupabase(vapiAssistantsList);
+          // Fetch assistants from Supabase again after syncing
+          return await webhookService.getAllAssistants(user.id);
+        }
+      }
+      
+      return supabaseAssistants;
     },
     enabled: !!user?.id,
     refetchInterval: 3000, // Refetch even more frequently to catch updates
     staleTime: 1000, // Consider data stale sooner
   });
 
-  // Fetch assistants directly from Vapi API
+  // Fetch assistants directly from Vapi API and sync to Supabase
   const fetchVapiAssistants = async () => {
     try {
-      const response = await fetch(`${VAPI_API_URL}/assistant`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${VAPI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error fetching Vapi assistants: ${response.status}`);
+      const vapiAssistantsList = await webhookService.getAssistantsFromVapiApi();
+      setVapiAssistants(vapiAssistantsList);
+      
+      if (vapiAssistantsList && vapiAssistantsList.length > 0 && user?.id) {
+        // Sync Vapi assistants to Supabase
+        await webhookService.syncVapiAssistantsToSupabase(vapiAssistantsList);
+        // Refetch assistants from Supabase to show updated list
+        refetch();
       }
-
-      const data = await response.json();
-      setVapiAssistants(data);
-      return data;
+      
+      return vapiAssistantsList;
     } catch (error) {
       console.error('Error fetching Vapi assistants:', error);
       return [];
     }
   };
 
-  // Fetch Vapi assistants on component mount
+  // Fetch Vapi assistants on component mount and set up polling
   useEffect(() => {
     fetchVapiAssistants();
     
     // Set up interval to periodically refresh assistants
     const intervalId = setInterval(() => {
       refetch();
+      fetchVapiAssistants();
     }, 10000);
     
     return () => clearInterval(intervalId);
@@ -143,10 +156,7 @@ const AITraining = () => {
         queryClient.setQueryData(['assistants', user.id], [newAssistant, ...assistants]);
       }
       
-      // Immediately invalidate the assistants query to refetch the list
-      queryClient.invalidateQueries({ queryKey: ['assistants', user.id] });
-      
-      // Force immediate refetch
+      // Force immediate refetch to ensure the list is up-to-date
       refetch();
       
       // Select the newly created assistant
