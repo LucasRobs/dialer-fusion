@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -11,9 +12,9 @@ export interface VapiAssistant {
   user_id?: string;
   created_at?: string;
   status?: string;
-  model?: string;  // Added model property
-  voice?: string;  // Added voice property
-  voice_id?: string; // Added voice_id property
+  model?: string;  
+  voice?: string;  
+  voice_id?: string;
 }
 
 // Type definition for assistant creation parameters
@@ -41,15 +42,15 @@ export interface WebhookPayload {
   user_id?: string;
   account_id?: string;
   provider?: string;
-  call_id?: string;  // Added call_id property
+  call_id?: string;
   call?: {
-    model?: string | {   // Updated to allow string or object
+    model?: string | {
       provider?: string;
       model?: string;
       temperature?: number;
       systemPrompt?: string;
     };
-    voice?: string | {   // Updated to allow string or object
+    voice?: string | {
       provider?: string;
       model?: string;
       voiceId?: string;
@@ -65,8 +66,6 @@ export interface WebhookPayload {
 export const webhookService = {
   // Create an assistant
   async createAssistant(assistant: AssistantCreationParams): Promise<VapiAssistant> {
-    console.log("Creating assistant with data:", assistant);
-    
     try {
       // Set up the webhook call to create assistant
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/createassistant';
@@ -81,8 +80,6 @@ export const webhookService = {
         timestamp: new Date().toISOString()
       };
       
-      console.log("Sending webhook payload:", JSON.stringify(payload));
-      
       // Send request to webhook
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -94,68 +91,54 @@ export const webhookService = {
       
       // Check for errors in response
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from webhook:', response.status, errorText);
-        throw new Error(`Webhook error: ${response.status} ${errorText}`);
+        toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
+        throw new Error();
       }
       
       // Parse response to get created assistant data
       const data = await response.json();
-      console.log("Response from webhook:", data);
       
       // Enhanced validation of webhook response
       if (!data) {
-        throw new Error("Empty response from webhook");
+        toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
+        throw new Error();
       }
       
       // Check for error field in response
       if (data.error) {
-        throw new Error(`Webhook returned error: ${data.error}`);
+        toast.error('Não foi possível criar o assistente. Por favor, tente novamente.');
+        throw new Error();
       }
       
       // Validate required fields exist
-      if (!data.assistant_id) {
-        console.error("Missing assistant_id in webhook response:", data);
-        throw new Error("Missing assistant_id in webhook response");
+      if (!data.assistant_id || !data.name) {
+        toast.error('Ocorreu um erro ao criar o assistente. Por favor, tente novamente.');
+        throw new Error();
       }
       
-      if (!data.name) {
-        console.error("Missing name in webhook response:", data);
-        throw new Error("Missing name in webhook response");
-      }
+      toast.success('Assistente criado com sucesso!');
       
       // Return the created assistant with fallback values for missing fields
       return {
-        id: data.supabase_id || data.assistant_id, // Use Supabase ID if available, or fallback to Vapi assistant_id
+        id: data.supabase_id || data.assistant_id, 
         name: data.name,
-        assistant_id: data.assistant_id, // The Vapi assistant ID 
+        assistant_id: data.assistant_id, 
         first_message: assistant.first_message,
         system_prompt: assistant.system_prompt,
         user_id: assistant.userId,
         status: data.status || 'active',
-        model: data.model || 'gpt-4o-turbo',  // Default model
-        voice: data.voice || '33B4UnXyTNbgLmdEDh5P',  // Default voice
-        voice_id: data.voice_id || '33B4UnXyTNbgLmdEDh5P' // Default voice ID
+        model: data.model || 'gpt-4o-turbo', 
+        voice: data.voice || '33B4UnXyTNbgLmdEDh5P',  
+        voice_id: data.voice_id || '33B4UnXyTNbgLmdEDh5P'
       };
     } catch (error) {
-      console.error("Error creating assistant:", error);
-      
-      // Provide more detailed error message based on the type of error
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Unknown error creating assistant';
-      
-      // Toast notification for user feedback
-      toast.error(`Failed to create assistant: ${errorMessage}`);
-      
-      throw new Error(`Failed to create assistant: ${errorMessage}`);
+      // Less detailed error message for users
+      throw new Error();
     }
   },
   
   // Get all assistants for a user
   async getAllAssistants(userId: string): Promise<VapiAssistant[]> {
-    console.log("Getting assistants for user:", userId);
-    
     try {
       const { data, error } = await supabase
         .from('assistants')
@@ -164,14 +147,14 @@ export const webhookService = {
         .order('created_at', { ascending: false });
       
       if (error) {
+        toast.error('Não foi possível buscar os assistentes.');
         throw error;
       }
       
-      console.log(`Found ${data?.length || 0} assistants for user ${userId}`);
       return data || [];
     } catch (error) {
-      console.error("Error getting assistants:", error);
-      throw new Error(`Failed to get assistants: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error('Problema ao carregar assistentes.');
+      return [];
     }
   },
   
@@ -182,8 +165,6 @@ export const webhookService = {
   
   // Delete an assistant
   async deleteAssistant(assistantId: string): Promise<boolean> {
-    console.log("Deleting assistant with ID:", assistantId);
-    
     try {
       // Delete from local database
       const { error } = await supabase
@@ -192,21 +173,20 @@ export const webhookService = {
         .eq('id', assistantId);
       
       if (error) {
+        toast.error('Erro ao remover assistente.');
         throw error;
       }
       
-      console.log(`Successfully deleted assistant ${assistantId} from database`);
+      toast.success('Assistente removido com sucesso!');
       return true;
     } catch (error) {
-      console.error("Error deleting assistant:", error);
-      throw new Error(`Failed to delete assistant: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error('Não foi possível excluir o assistente.');
+      return false;
     }
   },
   
   // Make a call with a specific assistant
   async makeCall(assistantId: number | string, phoneNumber: string, clientId: number): Promise<{ success: boolean, message: string }> {
-    console.log(`Making call with assistant ${assistantId} to ${phoneNumber}`);
-    
     try {
       // Set up the webhook call to make a call
       const webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/collowop';
@@ -219,8 +199,6 @@ export const webhookService = {
         timestamp: new Date().toISOString()
       };
       
-      console.log("Sending webhook payload for call:", JSON.stringify(payload));
-      
       // Send request to webhook
       const response = await fetch(webhookUrl, {
         method: 'POST',
@@ -232,38 +210,32 @@ export const webhookService = {
       
       // Check for errors in response
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from webhook:', response.status, errorText);
-        throw new Error(`Webhook error: ${response.status} ${errorText}`);
+        toast.error('Não foi possível iniciar a chamada.');
+        return { 
+          success: false, 
+          message: 'Não foi possível iniciar a chamada.' 
+        };
       }
       
       // Parse response
       const data = await response.json();
-      console.log("Response from webhook for call:", data);
+      toast.success('Chamada iniciada com sucesso!');
       
       return { 
         success: true, 
-        message: 'Call initiated successfully' 
+        message: 'Chamada iniciada com sucesso!' 
       };
     } catch (error) {
-      console.error("Error making call:", error);
+      toast.error('Erro ao iniciar a chamada.');
       return { 
         success: false, 
-        message: error instanceof Error ? error.message : 'Failed to initiate call' 
+        message: 'Erro ao iniciar a chamada.' 
       };
     }
   },
   
   // Trigger a generic webhook call
   async triggerCallWebhook(payload: WebhookPayload): Promise<{ success: boolean, message: string }> {
-    console.log("Triggering webhook with payload:", JSON.stringify({
-      ...payload,
-      additional_data: {
-        ...payload.additional_data,
-        api_key: payload.additional_data?.api_key ? "***REDACTED***" : undefined
-      }
-    }));
-    
     try {
       // Determine which webhook URL to use based on action
       let webhookUrl = 'https://primary-production-31de.up.railway.app/webhook/collowop';
@@ -285,32 +257,32 @@ export const webhookService = {
       
       // Check for errors in response
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from webhook:', response.status, errorText);
-        throw new Error(`Webhook error: ${response.status} ${errorText}`);
+        toast.error('A operação não pôde ser concluída.');
+        return { 
+          success: false, 
+          message: 'A operação não pôde ser concluída.' 
+        };
       }
       
       // Parse response
       const data = await response.json();
-      console.log("Response from webhook:", data);
+      toast.success('Operação realizada com sucesso!');
       
       return { 
         success: true, 
-        message: 'Webhook triggered successfully' 
+        message: 'Operação realizada com sucesso!' 
       };
     } catch (error) {
-      console.error("Error triggering webhook:", error);
+      toast.error('Erro ao executar operação.');
       return { 
         success: false, 
-        message: error instanceof Error ? error.message : 'Failed to trigger webhook' 
+        message: 'Erro ao executar operação.' 
       };
     }
   },
   
   // Send first message to webhook
   async sendFirstMessageToWebhook(assistantId: string): Promise<{ success: boolean, message: string }> {
-    console.log("Sending first message to webhook for assistant:", assistantId);
-    
     try {
       // Get the assistant from Supabase to get the first message
       const { data, error } = await supabase
@@ -320,11 +292,19 @@ export const webhookService = {
         .single();
         
       if (error) {
-        throw new Error(`Failed to get assistant: ${error.message}`);
+        toast.error('Erro ao enviar mensagem inicial.');
+        return { 
+          success: false, 
+          message: 'Erro ao enviar mensagem inicial.' 
+        };
       }
       
       if (!data || !data.first_message) {
-        throw new Error(`Assistant not found or no first message available`);
+        toast.error('Mensagem inicial não encontrada.');
+        return { 
+          success: false, 
+          message: 'Mensagem inicial não encontrada.' 
+        };
       }
       
       const payload = {
@@ -348,32 +328,32 @@ export const webhookService = {
       
       // Check for errors in response
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from webhook:', response.status, errorText);
-        throw new Error(`Webhook error: ${response.status} ${errorText}`);
+        toast.error('Erro ao enviar mensagem inicial.');
+        return { 
+          success: false, 
+          message: 'Erro ao enviar mensagem inicial.' 
+        };
       }
       
       // Parse response
       const data2 = await response.json();
-      console.log("Response from webhook for first message:", data2);
+      toast.success('Mensagem inicial enviada com sucesso!');
       
       return { 
         success: true, 
-        message: 'First message sent successfully' 
+        message: 'Mensagem inicial enviada com sucesso!' 
       };
     } catch (error) {
-      console.error("Error sending first message:", error);
+      toast.error('Erro ao enviar mensagem inicial.');
       return { 
         success: false, 
-        message: error instanceof Error ? error.message : 'Failed to send first message' 
+        message: 'Erro ao enviar mensagem inicial.' 
       };
     }
   },
   
   // Get assistants from Vapi API directly
   async getAssistantsFromVapiApi(): Promise<any[]> {
-    console.log("Fetching assistants directly from Vapi API");
-    
     try {
       const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
       const VAPI_API_URL = "https://api.vapi.ai";
@@ -387,14 +367,14 @@ export const webhookService = {
       });
       
       if (!response.ok) {
-        throw new Error(`Error fetching Vapi assistants: ${response.status}`);
+        toast.error('Não foi possível buscar assistentes da API.');
+        return [];
       }
       
       const data = await response.json();
-      console.log('Assistants from Vapi API:', data);
       return data;
     } catch (error) {
-      console.error('Error fetching assistants from Vapi API:', error);
+      toast.error('Erro ao buscar assistentes da API.');
       return [];
     }
   }
