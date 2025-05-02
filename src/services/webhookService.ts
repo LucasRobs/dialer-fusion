@@ -41,14 +41,15 @@ export interface WebhookPayload {
   user_id?: string;
   account_id?: string;
   provider?: string;
+  call_id?: string;  // Added call_id property
   call?: {
-    model?: {
+    model?: string | {   // Updated to allow string or object
       provider?: string;
       model?: string;
       temperature?: number;
       systemPrompt?: string;
     };
-    voice?: {
+    voice?: string | {   // Updated to allow string or object
       provider?: string;
       model?: string;
       voiceId?: string;
