@@ -131,7 +131,7 @@ const VapiAssistantTransfer = () => {
     try {
       const result = await webhookService.sendFirstMessageToWebhook(
         selectedAssistantId,
-        selectedPhoneNumber || "",
+        selectedPhoneNumber,
         selectedClientId || 0,
         firstMessage || "Olá, como posso ajudar?"
       );

@@ -1,4 +1,3 @@
-
 import { VAPI_CONFIG } from '@/integrations/supabase/client';
 import { supabase } from '@/lib/supabase';
 
@@ -21,10 +20,10 @@ export type VapiAssistant = {
 
 export type WebhookPayload = {
   action: string;
-  assistant_id?: string; // Made optional
-  assistant_name?: string; // Made optional
-  timestamp?: string; // Made optional
-  user_id?: string; // Made optional
+  assistant_id?: string;
+  assistant_name?: string;
+  timestamp?: string;
+  user_id?: string;
   client_id?: number;
   phone_number?: string;
   // Adding additional properties that are being used in the application
