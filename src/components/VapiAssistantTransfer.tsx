@@ -29,7 +29,14 @@ const VapiAssistantTransfer = () => {
     queryKey: ['assistants', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      return webhookService.getAllAssistants(user.id);
+      
+      const fetchedAssistants = await webhookService.getAllAssistants(user.id);
+      
+      // Ensure all assistants have a metadata property
+      return fetchedAssistants.map(assistant => ({
+        ...assistant,
+        metadata: assistant.metadata || { user_id: assistant.user_id || user.id }
+      }));
     },
     enabled: !!user?.id,
   });

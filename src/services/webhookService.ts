@@ -1,4 +1,3 @@
-
 import { VAPI_CONFIG } from '@/integrations/supabase/client';
 import { supabase } from '@/lib/supabase';
 
