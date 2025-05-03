@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -131,13 +130,17 @@ const AITraining = () => {
   });
 
   // Filter assistants by type
-  const individualAssistants = assistants?.filter(assistant => 
-    assistant.metadata?.assistant_type === 'individual' || !assistant.metadata?.assistant_type
-  ) || [];
+  const individualAssistants = assistants?.filter(assistant => {
+    // Ensure metadata exists and check assistant_type
+    const metadata = assistant.metadata || {};
+    return metadata.assistant_type === 'individual' || !metadata.assistant_type;
+  }) || [];
   
-  const campaignAssistants = assistants?.filter(assistant => 
-    assistant.metadata?.assistant_type === 'campaign'
-  ) || [];
+  const campaignAssistants = assistants?.filter(assistant => {
+    // Ensure metadata exists and check assistant_type
+    const metadata = assistant.metadata || {};
+    return metadata.assistant_type === 'campaign';
+  }) || [];
 
   // Load selected assistant from localStorage
   useEffect(() => {
