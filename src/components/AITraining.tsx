@@ -38,7 +38,6 @@ const AITraining = () => {
   const [isSyncingWithVapi, setIsSyncingWithVapi] = useState(false);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'failed'>('checking');
-  const [assistantType, setAssistantType] = useState<'individual' | 'campaign'>('individual');
 
   // Check Supabase connection on component mount
   useEffect(() => {
@@ -328,15 +327,15 @@ const AITraining = () => {
     
     try {
       // Create the assistant
-      console.log('Creating assistant with params:', { name, firstMessage, systemPrompt, userId: user.id, assistantType });
+      console.log('Creating assistant with params:', { name, firstMessage, systemPrompt, userId: user.id });
       
       // First show loading toast
       toast.loading('Criando assistente...', { id: 'creating-assistant' });
       
-      // Create metadata with type
+      // Create metadata with default type of individual
       const metadata = {
         user_id: user.id,
-        assistant_type: assistantType,
+        assistant_type: 'individual',
         created_at: new Date().toISOString()
       };
       
@@ -755,42 +754,6 @@ const AITraining = () => {
             )}
             <form onSubmit={handleCreateAssistant}>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="assistantType" className="text-sm font-medium">
-                    Tipo de Assistente
-                  </label>
-                  <div className="flex gap-4">
-                    <div className="flex items-center">
-                      <input 
-                        type="radio" 
-                        id="individual" 
-                        name="assistantType" 
-                        value="individual"
-                        checked={assistantType === 'individual'}
-                        onChange={() => setAssistantType('individual')}
-                        className="mr-2"
-                      />
-                      <label htmlFor="individual" className="flex items-center text-sm">
-                        <Phone className="mr-1 h-4 w-4" /> Atendimento Individual
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input 
-                        type="radio" 
-                        id="campaign" 
-                        name="assistantType" 
-                        value="campaign"
-                        checked={assistantType === 'campaign'}
-                        onChange={() => setAssistantType('campaign')}
-                        className="mr-2"
-                      />
-                      <label htmlFor="campaign" className="flex items-center text-sm">
-                        <Users className="mr-1 h-4 w-4" /> Campanhas
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                
                 <div className="space-y-2">
                   <label htmlFor="name" className="text-sm font-medium">
                     Nome do Assistente
