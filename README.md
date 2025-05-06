@@ -1,69 +1,71 @@
-# Welcome to your Lovable project
+# Dialer Fusion
 
-## Project info
+Dialer Fusion é uma plataforma de comunicação inteligente com assistentes de IA para gerenciar chamadas telefônicas.
 
-**URL**: https://lovable.dev/projects/fe4eb581-83b6-467d-905d-54c156eebd24
+## Configuração
 
-## How can I edit this code?
+### Pré-requisitos
 
-There are several ways of editing your application.
+- Node.js 18 ou superior
+- npm ou yarn
+- Conta no Supabase
 
-**Use Lovable**
+### Instalação
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/fe4eb581-83b6-467d-905d-54c156eebd24) and start prompting.
+1. Clone o repositório:
+\`\`\`bash
+git clone https://github.com/seu-usuario/dialer-fusion.git
+cd dialer-fusion
+\`\`\`
 
-Changes made via Lovable will be committed automatically to this repo.
+2. Instale as dependências:
+\`\`\`bash
+npm install
+# ou
+yarn install
+\`\`\`
 
-**Use your preferred IDE**
+3. Configure as variáveis de ambiente:
+   - Crie um arquivo `.env.local` na raiz do projeto com as seguintes variáveis:
+\`\`\`
+NEXT_PUBLIC_SUPABASE_URL=https://wwzlfjoiuoocbatfizac.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3emxmam9pdW9vY2JhdGZpemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzNTY5ODEsImV4cCI6MjA1ODkzMjk4MX0.D10AhJ4BeF4vWtH--RYM7WKwePOlZOhEX2tRF0hTfHU
+\`\`\`
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+4. Configure o banco de dados:
+   - Execute o script SQL `schema.sql` no seu projeto Supabase para criar as tabelas necessárias.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+5. Inicie o servidor de desenvolvimento:
+\`\`\`bash
 npm run dev
-```
+# ou
+yarn dev
+\`\`\`
 
-**Edit a file directly in GitHub**
+6. Acesse o aplicativo em [http://localhost:3000](http://localhost:3000)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Funcionalidades
 
-**Use GitHub Codespaces**
+- **Autenticação**: Login e registro de usuários
+- **Assistentes**: Criação e gerenciamento de assistentes de IA
+- **Chamadas**: Gerenciamento de chamadas telefônicas
+- **Dashboard**: Visão geral das estatísticas
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Tecnologias
 
-## What technologies are used for this project?
-
-This project is built with .
-
-- Vite
+- Next.js
 - TypeScript
-- React
-- shadcn-ui
 - Tailwind CSS
+- Supabase (Autenticação e Banco de Dados)
+- shadcn/ui (Componentes de UI)
 
-## How can I deploy this project?
+## Estrutura do Projeto
 
-Simply open [Lovable](https://lovable.dev/projects/fe4eb581-83b6-467d-905d-54c156eebd24) and click on Share -> Publish.
+- `/app`: Páginas e rotas do aplicativo (Next.js App Router)
+- `/components`: Componentes React reutilizáveis
+- `/lib`: Utilitários e configurações
+- `/public`: Arquivos estáticos
 
-## I want to use a custom domain - is that possible?
+## Licença
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+MIT
