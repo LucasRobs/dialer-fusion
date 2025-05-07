@@ -240,14 +240,12 @@ const assistantService = {
   async saveAssistant(assistant: Omit<Assistant, 'id' | 'created_at'>): Promise<Assistant | null> {
     try {
       console.log('Salvando assistente:', assistant);
-      
       // Garantir que assistant_id seja definido
       if (!assistant.assistant_id) {
         console.error('assistant_id é obrigatório para salvar um assistente');
         toast('Falha ao salvar assistente: ID do assistente Vapi é obrigatório');
         return null;
       }
-      
       // Verificar se o ID é realmente da Vapi API
       const vapiId = await this.ensureVapiAssistantId(assistant.assistant_id);
       if (!vapiId) {
@@ -255,19 +253,16 @@ const assistantService = {
         toast('Falha ao salvar assistente: ID do assistente Vapi não confirmado');
         return null;
       }
-      
       // Atualizar o assistant_id com o ID confirmado da Vapi
       const assistantToSave = {
         ...assistant,
         assistant_id: vapiId
       };
-      
       const { data, error } = await supabase
         .from('assistants')
         .insert(assistantToSave)
         .select()
         .single();
-      
       if (error) {
         console.error('Erro ao salvar assistente:', error);
         toast(`Falha ao salvar assistente: ${error.message}`, {
@@ -275,50 +270,36 @@ const assistantService = {
         });
         return null;
       }
-      
       console.log('Assistente salvo com sucesso:', data);
       toast('Assistente salvo com sucesso', {
         description: `O assistente "${data.name}" está pronto para uso`,
       });
-      
-      // After saving to our database, notify the user's Collowop webhook
+      // Notificar o webhook SEMPRE com o ID real da Vapi
       try {
-        // Obter dados mais atualizados diretamente da Vapi API
-        const vapiAssistant = await this.getVapiAssistantById(vapiId);
-        
-        const webhookData = {
-          action: 'assistant_created',
-          assistant_id: vapiId, // Using the confirmed VAPI assistant_id
-          assistant_name: data.name,
-          timestamp: new Date().toISOString(),
-          user_id: data.user_id,
-          additional_data: {
-            is_ready: true,
-            system_prompt: data.system_prompt,
-            first_message: data.first_message,
-            supabase_id: data.id,
-            model: data.model || DEFAULT_MODEL,
-            voice: data.voice || DEFAULT_VOICE,
-            vapi_status: vapiAssistant?.status || 'ready',
-            vapi_created_at: vapiAssistant?.created_at || data.created_at
-          }
-        };
-        
-        console.log('Enviando dados para webhook do Collowop:', webhookData);
-        
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookData),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'assistant_created',
+            assistant_id: vapiId,
+            timestamp: new Date().toISOString(),
+            user_id: data.user_id,
+            additional_data: {
+              is_ready: true,
+              system_prompt: data.system_prompt,
+              first_message: data.first_message,
+              supabase_id: data.id,
+              model: data.model || DEFAULT_MODEL,
+              voice: data.voice || DEFAULT_VOICE,
+              vapi_status: 'ready',
+              vapi_created_at: data.created_at
+            }
+          }),
         });
-        console.log('Successfully notified Collowop webhook about new assistant');
+        console.log('Webhook chamado com o ID real da Vapi (saveAssistant)');
       } catch (webhookError) {
-        console.error('Error notifying Collowop webhook:', webhookError);
-        // Continue even if the notification fails
+        console.error('Erro ao notificar webhook (saveAssistant):', webhookError);
       }
-      
       return data;
     } catch (error) {
       console.error('Erro em saveAssistant:', error);
@@ -330,7 +311,6 @@ const assistantService = {
   async updateAssistant(assistantId: string, updates: Partial<Assistant>): Promise<Assistant | null> {
     try {
       console.log(`Atualizando assistente ${assistantId}:`, updates);
-      
       // Se o update contém assistant_id, verificar se é um ID válido da Vapi
       if (updates.assistant_id) {
         const vapiId = await this.ensureVapiAssistantId(updates.assistant_id);
@@ -339,57 +319,44 @@ const assistantService = {
           updates.assistant_id = vapiId;
         }
       }
-      
       const { data, error } = await supabase
         .from('assistants')
         .update(updates)
-        .eq('id', assistantId) // Using Supabase ID for updates
+        .eq('id', assistantId)
         .select()
         .single();
-      
       if (error) {
         console.error('Erro ao atualizar assistente:', error);
         toast(`Falha ao atualizar assistente: ${error.message}`);
         return null;
       }
-      
       console.log('Assistente atualizado com sucesso:', data);
       toast('Assistente atualizado com sucesso');
-      
-      // Notificar webhook sobre a atualização
+      // Notificar o webhook SEMPRE com o ID real da Vapi
       try {
-        // Obter dados mais atualizados diretamente da Vapi API
-        const vapiId = data.assistant_id;
-        const vapiAssistant = await this.getVapiAssistantById(vapiId);
-        
+        const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'assistant_updated',
-            assistant_id: vapiId, // Using the VAPI assistant_id
-            assistant_name: data.name,
+            assistant_id: vapiId,
             timestamp: new Date().toISOString(),
             user_id: data.user_id,
             additional_data: {
               is_ready: true,
-              system_prompt: data.system_prompt,
-              first_message: data.first_message,
               supabase_id: data.id,
               model: data.model || DEFAULT_MODEL,
               voice: data.voice || DEFAULT_VOICE,
-              vapi_status: vapiAssistant?.status || 'ready',
+              vapi_status: 'ready',
               updated_fields: Object.keys(updates)
             }
           }),
         });
-        console.log('Successfully notified Collowop webhook about updated assistant');
+        console.log('Webhook chamado com o ID real da Vapi (updateAssistant)');
       } catch (webhookError) {
-        console.error('Error notifying Collowop webhook about update:', webhookError);
+        console.error('Erro ao notificar webhook (updateAssistant):', webhookError);
       }
-      
       return data;
     } catch (error) {
       console.error('Erro em updateAssistant:', error);
@@ -573,17 +540,14 @@ const assistantService = {
   async selectAssistant(assistantId: string): Promise<Assistant | null> {
     try {
       console.log(`Selecionando assistente ${assistantId}`);
-      
       // Primeiro tenta buscar no banco de dados local
       const { data, error } = await supabase
         .from('assistants')
         .select('*')
-        .eq('id', assistantId) // Using Supabase ID for selection
+        .eq('id', assistantId)
         .single();
-      
       if (error) {
         console.log('Assistente não encontrado no banco local, buscando na API Vapi');
-        
         // Se não encontrou no banco local, tenta buscar da API Vapi
         try {
           // Verificar se o ID fornecido é um ID Vapi válido
@@ -593,34 +557,26 @@ const assistantService = {
             toast(`Falha ao selecionar assistente: ID inválido`);
             return null;
           }
-          
           // Buscar assistente usando o ID válido da Vapi
           const vapiAssistant = await this.getVapiAssistantById(vapiId);
-          
           if (vapiAssistant) {
             console.log('Assistente encontrado diretamente na API Vapi:', vapiAssistant);
             toast(`Assistente "${vapiAssistant.name}" selecionado com sucesso`);
-            
             // Log IDs specifically for clarity
             console.log('Assistente IDs (da API Vapi):', {
               id: vapiAssistant.id,
               assistant_id: vapiAssistant.assistant_id
             });
-            
             // Save to localStorage
             localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant));
-            
-            // Notificar webhook sobre a seleção
+            // Notificar webhook SEMPRE com o ID real da Vapi
             try {
               await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   action: 'assistant_selected',
                   assistant_id: vapiId,
-                  assistant_name: vapiAssistant.name,
                   timestamp: new Date().toISOString(),
                   user_id: vapiAssistant.user_id,
                   additional_data: {
@@ -631,14 +587,12 @@ const assistantService = {
                   }
                 }),
               });
-              console.log('Successfully notified Collowop webhook about selected assistant');
+              console.log('Webhook chamado com o ID real da Vapi (selectAssistant)');
             } catch (webhookError) {
-              console.error('Error notifying Collowop webhook about selection:', webhookError);
+              console.error('Erro ao notificar webhook (selectAssistant):', webhookError);
             }
-            
             return vapiAssistant;
           }
-          
           console.error('Assistente não encontrado na API Vapi');
           toast(`Falha ao selecionar assistente: Não encontrado na API Vapi`);
           return null;
@@ -648,16 +602,13 @@ const assistantService = {
           return null;
         }
       }
-      
       console.log('Assistente selecionado do banco local:', data);
       toast(`Assistente "${data.name}" selecionado com sucesso`);
-      
       // Log IDs specifically for clarity
       console.log('Assistente IDs:', {
         supabaseId: data.id,
         vapiId: data.assistant_id
       });
-      
       // Verificar se o ID da Vapi está correto
       const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
       if (vapiId && vapiId !== data.assistant_id) {
@@ -666,21 +617,16 @@ const assistantService = {
         this.updateAssistant(data.id, { assistant_id: vapiId });
         data.assistant_id = vapiId;
       }
-      
       // Save to localStorage for compatibility with existing code
       localStorage.setItem('selected_assistant', JSON.stringify(data));
-      
-      // Notificar webhook sobre a seleção
+      // Notificar webhook SEMPRE com o ID real da Vapi
       try {
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'assistant_selected',
-            assistant_id: data.assistant_id, // Using the VAPI assistant_id
-            assistant_name: data.name,
+            assistant_id: vapiId,
             timestamp: new Date().toISOString(),
             user_id: data.user_id,
             additional_data: {
@@ -692,11 +638,10 @@ const assistantService = {
             }
           }),
         });
-        console.log('Successfully notified Collowop webhook about selected assistant');
+        console.log('Webhook chamado com o ID real da Vapi (selectAssistant)');
       } catch (webhookError) {
-        console.error('Error notifying Collowop webhook about selection:', webhookError);
+        console.error('Erro ao notificar webhook (selectAssistant):', webhookError);
       }
-      
       return data;
     } catch (error) {
       console.error('Erro em selectAssistant:', error);
