@@ -276,28 +276,32 @@ const assistantService = {
       });
       // Notificar o webhook SEMPRE com o ID real da Vapi
       try {
-        const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
-        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'assistant_created',
-            assistant_id: vapiId,
-            timestamp: new Date().toISOString(),
-            user_id: data.user_id,
-            additional_data: {
-              is_ready: true,
-              system_prompt: data.system_prompt,
-              first_message: data.first_message,
-              supabase_id: data.id,
-              model: data.model || DEFAULT_MODEL,
-              voice: data.voice || DEFAULT_VOICE,
-              vapi_status: 'ready',
-              vapi_created_at: data.created_at
-            }
-          }),
-        });
-        console.log('Webhook chamado com o ID real da Vapi (saveAssistant)');
+        const vapiId = data.assistant_id;
+        if (!vapiId) {
+          console.error('assistant_id não encontrado para envio ao webhook!');
+        } else {
+          await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'assistant_created',
+              assistant_id: vapiId,
+              timestamp: new Date().toISOString(),
+              user_id: data.user_id,
+              additional_data: {
+                is_ready: true,
+                system_prompt: data.system_prompt,
+                first_message: data.first_message,
+                supabase_id: data.id,
+                model: data.model || DEFAULT_MODEL,
+                voice: data.voice || DEFAULT_VOICE,
+                vapi_status: 'ready',
+                vapi_created_at: data.created_at
+              }
+            }),
+          });
+          console.log('Webhook chamado com o ID real da Vapi (saveAssistant)');
+        }
       } catch (webhookError) {
         console.error('Erro ao notificar webhook (saveAssistant):', webhookError);
       }
@@ -335,26 +339,30 @@ const assistantService = {
       toast('Assistente atualizado com sucesso');
       // Notificar o webhook SEMPRE com o ID real da Vapi
       try {
-        const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
-        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'assistant_updated',
-            assistant_id: vapiId,
-            timestamp: new Date().toISOString(),
-            user_id: data.user_id,
-            additional_data: {
-              is_ready: true,
-              supabase_id: data.id,
-              model: data.model || DEFAULT_MODEL,
-              voice: data.voice || DEFAULT_VOICE,
-              vapi_status: 'ready',
-              updated_fields: Object.keys(updates)
-            }
-          }),
-        });
-        console.log('Webhook chamado com o ID real da Vapi (updateAssistant)');
+        const vapiId = data.assistant_id;
+        if (!vapiId) {
+          console.error('assistant_id não encontrado para envio ao webhook!');
+        } else {
+          await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'assistant_updated',
+              assistant_id: vapiId,
+              timestamp: new Date().toISOString(),
+              user_id: data.user_id,
+              additional_data: {
+                is_ready: true,
+                supabase_id: data.id,
+                model: data.model || DEFAULT_MODEL,
+                voice: data.voice || DEFAULT_VOICE,
+                vapi_status: 'ready',
+                updated_fields: Object.keys(updates)
+              }
+            }),
+          });
+          console.log('Webhook chamado com o ID real da Vapi (updateAssistant)');
+        }
       } catch (webhookError) {
         console.error('Erro ao notificar webhook (updateAssistant):', webhookError);
       }
@@ -572,24 +580,28 @@ const assistantService = {
             localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant));
             // Notificar webhook SEMPRE com o ID real da Vapi
             try {
-              const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
-              await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'assistant_selected',
-                  assistant_id: vapiId,
-                  timestamp: new Date().toISOString(),
-                  user_id: vapiAssistant.user_id,
-                  additional_data: {
-                    is_ready: true,
-                    model: vapiAssistant.model || DEFAULT_MODEL,
-                    voice: vapiAssistant.voice || DEFAULT_VOICE,
-                    source: 'vapi_api'
-                  }
-                }),
-              });
-              console.log('Webhook chamado com o ID real da Vapi (selectAssistant)');
+              const vapiId = data.assistant_id;
+              if (!vapiId) {
+                console.error('assistant_id não encontrado para envio ao webhook!');
+              } else {
+                await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'assistant_selected',
+                    assistant_id: vapiId,
+                    timestamp: new Date().toISOString(),
+                    user_id: vapiAssistant.user_id,
+                    additional_data: {
+                      is_ready: true,
+                      model: vapiAssistant.model || DEFAULT_MODEL,
+                      voice: vapiAssistant.voice || DEFAULT_VOICE,
+                      source: 'vapi_api'
+                    }
+                  }),
+                });
+                console.log('Webhook chamado com o ID real da Vapi (selectAssistant)');
+              }
             } catch (webhookError) {
               console.error('Erro ao notificar webhook (selectAssistant):', webhookError);
             }
@@ -623,25 +635,29 @@ const assistantService = {
       localStorage.setItem('selected_assistant', JSON.stringify(data));
       // Notificar webhook SEMPRE com o ID real da Vapi
       try {
-        const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
-        await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'assistant_selected',
-            assistant_id: vapiId,
-            timestamp: new Date().toISOString(),
-            user_id: data.user_id,
-            additional_data: {
-              is_ready: true,
-              supabase_id: data.id,
-              model: data.model || DEFAULT_MODEL,
-              voice: data.voice || DEFAULT_VOICE,
-              source: 'supabase'
-            }
-          }),
-        });
-        console.log('Webhook chamado com o ID real da Vapi (selectAssistant)');
+        const vapiId = data.assistant_id;
+        if (!vapiId) {
+          console.error('assistant_id não encontrado para envio ao webhook!');
+        } else {
+          await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'assistant_selected',
+              assistant_id: vapiId,
+              timestamp: new Date().toISOString(),
+              user_id: data.user_id,
+              additional_data: {
+                is_ready: true,
+                supabase_id: data.id,
+                model: data.model || DEFAULT_MODEL,
+                voice: data.voice || DEFAULT_VOICE,
+                source: 'supabase'
+              }
+            }),
+          });
+          console.log('Webhook chamado com o ID real da Vapi (selectAssistant)');
+        }
       } catch (webhookError) {
         console.error('Erro ao notificar webhook (selectAssistant):', webhookError);
       }
