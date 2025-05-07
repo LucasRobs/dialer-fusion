@@ -276,6 +276,7 @@ const assistantService = {
       });
       // Notificar o webhook SEMPRE com o ID real da Vapi
       try {
+        const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -334,7 +335,7 @@ const assistantService = {
       toast('Assistente atualizado com sucesso');
       // Notificar o webhook SEMPRE com o ID real da Vapi
       try {
-        const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
+        const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -571,6 +572,7 @@ const assistantService = {
             localStorage.setItem('selected_assistant', JSON.stringify(vapiAssistant));
             // Notificar webhook SEMPRE com o ID real da Vapi
             try {
+              const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
               await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -610,7 +612,7 @@ const assistantService = {
         vapiId: data.assistant_id
       });
       // Verificar se o ID da Vapi está correto
-      const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
+      const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
       if (vapiId && vapiId !== data.assistant_id) {
         console.log(`ID da Vapi atualizado de ${data.assistant_id} para ${vapiId}`);
         // Atualizar o ID no banco de dados silenciosamente
@@ -621,6 +623,7 @@ const assistantService = {
       localStorage.setItem('selected_assistant', JSON.stringify(data));
       // Notificar webhook SEMPRE com o ID real da Vapi
       try {
+        const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
         await fetch('https://primary-production-31de.up.railway.app/webhook/collowop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -688,7 +691,7 @@ const assistantService = {
       console.log('First message do assistente:', data.first_message || 'NÃO ENCONTRADA');
       
       // Verificar se o ID da Vapi está correto
-      const vapiId = await this.ensureVapiAssistantId(data.assistant_id);
+      const vapiId = await this.ensureVapiAssistantId(data.assistant_id || data.id);
       if (vapiId && vapiId !== data.assistant_id) {
         console.log(`ID da Vapi atualizado de ${data.assistant_id} para ${vapiId}`);
         // Atualizar o ID no banco de dados silenciosamente
