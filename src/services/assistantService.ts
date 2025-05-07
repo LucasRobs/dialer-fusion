@@ -19,7 +19,7 @@ const DEFAULT_MODEL = "gpt-4o-turbo";
 const DEFAULT_VOICE = "eleven_labs_gemma";
 
 // Vapi API Key
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
+const VAPI_API_KEY = "fa59de39-766b-437d-9d9d-2191e00e6e21";
 
 const assistantService = {
   async getAllAssistants(userId?: string): Promise<Assistant[]> {

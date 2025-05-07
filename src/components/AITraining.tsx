@@ -24,7 +24,7 @@ import {
 
 import assistantService from '@/services/assistantService';
 
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
+const VAPI_API_KEY = "fa59de39-766b-437d-9d9d-2191e00e6e21";
 const VAPI_API_URL = "https://api.vapi.ai";
 
 
