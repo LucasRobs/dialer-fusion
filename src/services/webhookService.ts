@@ -66,7 +66,7 @@ export interface VapiAssistant {
 }
 
 
-const VAPI_API_KEY = "494da5a9-4a54-4155-bffb-d7206bd72afd";
+const VAPI_API_KEY = "837a33b4-f896-43e5-8f7b-2e6f8e921dbc";
 const VAPI_API_URL = "https://api.vapi.ai";
 const WEBHOOK_BASE_URL = 'https://primary-production-31de.up.railway.app/webhook';
 const WEBHOOK_COLLOWOP_URL = 'https://primary-production-31de.up.railway.app/webhook/collowop';
